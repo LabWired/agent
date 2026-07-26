@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# LabWired agent — a branded entrypoint over opencode (MIT) wired to the LabWired
+# MCP server, skills, and a local/on-prem model. No source fork: this is a thin
+# wrapper that points opencode at the bundled LabWired configuration.
+set -euo pipefail
+
+# Sensible defaults for a local Ollama running Qwen2.5-Coder. Override any of these.
+export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-http://127.0.0.1:11434/v1}"
+export LABWIRED_MODEL_KEY="${LABWIRED_MODEL_KEY:-local}"   # Ollama ignores it; kept for OpenAI-compat SDKs
+export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"    # empty = compile/serial-verify need a builder
+export LABWIRED_CLI="${LABWIRED_CLI:-labwired}"
+
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "labwired: 'opencode' not found on PATH. Run ./install.sh first (installs opencode + the labwired CLI)." >&2
+  exit 127
+fi
+if ! command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
+  echo "labwired: warning — '$LABWIRED_CLI' (LabWired simulator) not found on PATH; run/verify will fail." >&2
+  echo "         install it:  curl -fsSL https://labwired.com/install.sh | sh" >&2
+fi
+
+# Config, AGENTS.md, and skills are installed into opencode's standard discovery
+# locations (~/.config/opencode/) by install.sh; opencode auto-loads them. This
+# wrapper only supplies branded env defaults and launches opencode.
+exec opencode "$@"

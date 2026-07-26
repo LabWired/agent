@@ -1,0 +1,37 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "labwired": {
+      "type": "local",
+      "command": ["npx", "-y", "@labwired/mcp"],
+      "enabled": true,
+      "environment": {
+        "LABWIRED_CLI": "labwired",
+        "LABWIRED_BUILDER_URL": "{env:LABWIRED_BUILDER_URL}"
+      }
+    }
+  },
+  "provider": {
+    "labwired-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LabWired (local)",
+      "options": {
+        "baseURL": "{env:LABWIRED_MODEL_URL}",
+        "apiKey": "{env:LABWIRED_MODEL_KEY}"
+      },
+      "models": {
+        "qwen2.5-coder": { "name": "Qwen2.5-Coder" }
+      }
+    }
+  },
+  "model": "labwired-local/qwen2.5-coder",
+  "autoupdate": false,
+  "share": "disabled",
+  "agent": {
+    "labwired": {
+      "description": "LabWired firmware agent — proposes firmware, proves it with the deterministic hardware oracle.",
+      "mode": "primary"
+    }
+  },
+  "default_agent": "labwired"
+}
