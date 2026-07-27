@@ -1,0 +1,5 @@
+{
+  "board": "stm32l476",
+  "parts": [{ "id": "mcu", "type": "nucleo-l476rg" }],
+  "wires": []
+}

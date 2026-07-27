@@ -1,25 +1,149 @@
 #!/usr/bin/env bash
-# LabWired agent — a branded entrypoint over opencode (MIT) wired to the LabWired
-# MCP server, skills, and a local/on-prem model. No source fork: this is a thin
-# wrapper that points opencode at the bundled LabWired configuration.
+# LabWired agent — branded OpenCode harness (no fork).
+# Wires opencode to @labwired/mcp, skills, and a local/on-prem model.
 set -euo pipefail
 
-# Sensible defaults for a local Ollama running Qwen2.5-Coder. Override any of these.
 export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-http://127.0.0.1:11434/v1}"
-export LABWIRED_MODEL_KEY="${LABWIRED_MODEL_KEY:-local}"   # Ollama ignores it; kept for OpenAI-compat SDKs
-export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"    # empty = compile/serial-verify need a builder
-export LABWIRED_CLI="${LABWIRED_CLI:-labwired}"
+export LABWIRED_MODEL_KEY="${LABWIRED_MODEL_KEY:-local}"
+export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"
+# Simulator / oracle CLI the MCP shells out to (NOT this launcher).
+export LABWIRED_CLI="${LABWIRED_CLI:-labwired-cli}"
 
-if ! command -v opencode >/dev/null 2>&1; then
-  echo "labwired: 'opencode' not found on PATH. Run ./install.sh first (installs opencode + the labwired CLI)." >&2
-  exit 127
-fi
-if ! command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
-  echo "labwired: warning — '$LABWIRED_CLI' (LabWired simulator) not found on PATH; run/verify will fail." >&2
-  echo "         install it:  curl -fsSL https://labwired.com/install.sh | sh" >&2
+# Pinned OpenCode version (npm package opencode-ai). Bump deliberately.
+OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
+
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ ! -d "$SRC/skills" ]]; then
+  # Installed copy: only bin/labwired is on PATH; repo root may be elsewhere.
+  SRC="$(cd "$(dirname "$0")" && pwd)"
 fi
 
-# Config, AGENTS.md, and skills are installed into opencode's standard discovery
-# locations (~/.config/opencode/) by install.sh; opencode auto-loads them. This
-# wrapper only supplies branded env defaults and launches opencode.
-exec opencode "$@"
+say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
+fail() { printf 'labwired: %s\n' "$1" >&2; exit 1; }
+
+parse_opencode_version() {
+  # shellcheck disable=SC2001
+  echo "$1" | sed -n 's/.*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1
+}
+
+cmd_version() {
+  echo "LabWired agent (OpenCode harness)"
+  echo "opencode pin: ${OPENCODE_PIN}"
+  if command -v opencode >/dev/null 2>&1; then
+    local raw ver
+    raw="$(opencode --version 2>&1 || true)"
+    ver="$(parse_opencode_version "$raw")"
+    echo "opencode installed: ${ver:-$raw}"
+  else
+    echo "opencode installed: (not found)"
+  fi
+}
+
+cmd_doctor() {
+  local ok=0
+  local raw ver
+
+  if command -v opencode >/dev/null 2>&1; then
+    say "ok  opencode-binary: $(command -v opencode)"
+    raw="$(opencode --version 2>&1 || true)"
+    ver="$(parse_opencode_version "$raw")"
+    if [[ "$ver" == "$OPENCODE_PIN" ]]; then
+      say "ok  opencode-pin: $ver matches $OPENCODE_PIN"
+    else
+      printf '\033[31mFAIL\033[0m opencode-pin: got %s, need exact pin %s\n' "${ver:-$raw}" "$OPENCODE_PIN"
+      ok=1
+    fi
+  else
+    printf '\033[31mFAIL\033[0m opencode-binary: not on PATH — run ./install.sh (installs opencode-ai@%s)\n' "$OPENCODE_PIN"
+    ok=1
+  fi
+
+  if command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
+    say "ok  labwired-sim: $LABWIRED_CLI → $(command -v "$LABWIRED_CLI")"
+  else
+    printf '\033[31mFAIL\033[0m labwired-sim: %s not on PATH (MCP run/verify need the simulator)\n' "$LABWIRED_CLI"
+    printf '     install: curl -fsSL https://labwired.com/install.sh | sh\n'
+    printf '     or:      export LABWIRED_CLI=/path/to/labwired-simulator\n'
+    ok=1
+  fi
+
+  if command -v npx >/dev/null 2>&1; then
+    say "ok  npx: present (MCP uses npx -y @labwired/mcp)"
+  else
+    printf '\033[31mFAIL\033[0m npx: not found (Node/npm required for @labwired/mcp)\n'
+    ok=1
+  fi
+
+  local cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  if [[ -f "$cfg/opencode.json" ]]; then
+    say "ok  config: $cfg/opencode.json"
+  else
+    printf '\033[33mwarn\033[0m config: missing %s/opencode.json — run ./install.sh\n' "$cfg"
+    ok=1
+  fi
+
+  local skill
+  for skill in verify-firmware diagnose-firmware inspect-evidence firmware-verification; do
+    if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
+      say "ok  skill: $skill"
+    else
+      printf '\033[33mwarn\033[0m skill: missing %s/skills/%s — run ./install.sh\n' "$cfg" "$skill"
+      ok=1
+    fi
+  done
+
+  if [[ $ok -eq 0 ]]; then
+    say "LabWired OpenCode harness ready."
+    return 0
+  fi
+  printf '\nLabWired OpenCode harness not ready.\n'
+  return 1
+}
+
+cmd_help() {
+  cat <<EOF
+LabWired agent — OpenCode harness for the deterministic firmware oracle.
+
+Usage:
+  labwired              Launch OpenCode with LabWired MCP + skills
+  labwired doctor       Preflight OpenCode pin, simulator, MCP, skills
+  labwired version      Print harness and OpenCode pin
+  labwired help         This help
+
+Env:
+  LABWIRED_MODEL_URL    OpenAI-compatible model base URL (default Ollama)
+  LABWIRED_MODEL_KEY    API key for that endpoint
+  LABWIRED_BUILDER_URL  Builder for compile + serial/register/gpio verify
+  LABWIRED_CLI          Simulator binary name/path (default: labwired-cli)
+  OPENCODE_PIN          Expected opencode-ai version (default: ${OPENCODE_PIN})
+  OPENCODE_CONFIG_DIR   Config root (default: ~/.config/opencode)
+
+This is a distribution layer only — no OpenCode fork.
+Oracle contracts live in the LabWired platform; this repo only wires the agent.
+EOF
+}
+
+case "${1:-}" in
+  doctor)  shift; cmd_doctor "$@" ;;
+  version|--version|-V) cmd_version ;;
+  help|--help|-h) cmd_help ;;
+  "")
+    if ! command -v opencode >/dev/null 2>&1; then
+      fail "'opencode' not found on PATH. Run ./install.sh first (pins opencode-ai@${OPENCODE_PIN})."
+    fi
+    if ! command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
+      echo "labwired: warning — simulator '$LABWIRED_CLI' not on PATH; run/verify will fail." >&2
+      echo "         install: curl -fsSL https://labwired.com/install.sh | sh" >&2
+      echo "         or set LABWIRED_CLI to the simulator binary." >&2
+    fi
+    # Config/skills live under ~/.config/opencode from install.sh
+    exec opencode "$@"
+    ;;
+  *)
+    # Pass through to opencode (e.g. labwired mcp list)
+    if ! command -v opencode >/dev/null 2>&1; then
+      fail "'opencode' not found on PATH. Run ./install.sh first."
+    fi
+    exec opencode "$@"
+    ;;
+esac

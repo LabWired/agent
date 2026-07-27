@@ -1,87 +1,104 @@
 # LabWired agent
 
-A batteries-included **firmware agent**: [opencode](https://opencode.ai) (MIT) wired to LabWired's
-deterministic **hardware oracle** — the MCP server, the skills, and a **local / on-prem model**.
+**OpenCode harness** for LabWired’s deterministic firmware oracle.
 
-Every AI can write firmware now. LabWired is the layer that **proves it runs** — the same binary in
-sim, on the bench, and in CI, byte-exact. This agent proposes firmware and then proves it with the
-oracle. It never claims firmware works on its own say-so.
+This repository is the product surface for “agent + verification,” not the platform monorepo.
 
-> **No fork, no new agent.** This is a thin distribution layer over stock opencode: a bundled config
-> that registers the `@labwired/mcp` server, points the model at a local endpoint, and ships the
-> `firmware-verification` skill. The IP is the oracle and the skills — the harness stays upstream.
+| Repo | Role |
+|------|------|
+| **[LabWired/agent](https://github.com/LabWired/agent)** (this repo) | Thin OpenCode distribution: launcher, config, skills, install |
+| **[LabWired/skills](https://github.com/LabWired/skills)** | Shared skill sources (vendored here for offline install) |
+| **w1ne/labwired** (platform monorepo) | MCP server, builder, board-config, Studio — **not** the agent shell |
+
+> **No OpenCode fork.** Stock [OpenCode](https://opencode.ai) (MIT) + bundled config that registers `@labwired/mcp`, skills, and a local/on-prem model. The IP is the oracle and the claim rules; the harness stays upstream.
 
 ## Install
 
 ```bash
 git clone https://github.com/LabWired/agent && cd agent
 ./install.sh
+labwired doctor
 ```
 
-It installs opencode, drops the LabWired config + skills into `~/.config/opencode/`, and adds a
-branded `labwired` launcher. You also need the LabWired simulator CLI on PATH:
+`install.sh` installs **pinned** `opencode-ai@1.18.7` (exact pin — bump deliberately), copies config + skills into `~/.config/opencode/`, and installs the `labwired` launcher to `~/.local/bin`.
+
+You also need the **simulator** binary for MCP `run` / `verify` (separate from this launcher):
 
 ```bash
 curl -fsSL https://labwired.com/install.sh | sh
+# If the simulator binary is named `labwired`, point the harness at it:
+export LABWIRED_CLI=labwired
 ```
+
+Default env for the MCP child is `LABWIRED_CLI=labwired-cli` so this agent launcher does not shadow the simulator when both land on PATH as `labwired`.
 
 ## Run
 
 ```bash
-# 1. a local model — default expects Ollama + Qwen2.5-Coder
+# 1. local model (default: Ollama + Qwen2.5-Coder)
 ollama pull qwen2.5-coder && ollama serve
 
-# 2. launch
+# 2. launch OpenCode with LabWired harness
 labwired
 ```
 
-Verify the wiring: `opencode mcp list` should show the `labwired` server and the `labwired_*` tools.
-Ask it to build something and it will drive `labwired_verify` — and refuse to call it "working" until
-the oracle returns `proven: true`.
+Commands:
+
+| Command | Purpose |
+|---------|---------|
+| `labwired` | Start OpenCode |
+| `labwired doctor` | Preflight pin, simulator, config, skills |
+| `labwired version` | Print harness + OpenCode pin |
+| `labwired help` | Usage |
+
+`opencode mcp list` should show the `labwired` server and `labwired_*` tools.
+
+## Skills (Gate 1)
+
+| Skill | Job |
+|-------|-----|
+| `verify-firmware` | Mandatory-oracle model verification |
+| `diagnose-firmware` | Fail first, patch, re-verify |
+| `inspect-evidence` | Explain `evidence_ref` / status (read-only) |
+| `firmware-verification` | Full verification procedure |
+
+**Claim vocabulary (fail-closed):**
+
+- **model-verified** only when `labwired_verify.status === "model_verified"`
+- **failed** / **inconclusive** / **unsupported** as typed by the oracle
+- Never upgrade `proven: true` to hardware confirmation
 
 ## Configuration (env)
 
 | Var | Default | Purpose |
 |---|---|---|
-| `LABWIRED_MODEL_URL` | `http://127.0.0.1:11434/v1` | OpenAI-compatible model endpoint (Ollama / vLLM / llama.cpp / NIM) |
-| `LABWIRED_MODEL_KEY` | `local` | API key for the endpoint (Ollama ignores it) |
-| `LABWIRED_BUILDER_URL` | *(empty)* | LabWired builder for source→ELF compile + serial/register/gpio verify |
-| `LABWIRED_CLI` | `labwired` | Path to the local simulator binary |
+| `LABWIRED_MODEL_URL` | `http://127.0.0.1:11434/v1` | OpenAI-compatible model endpoint |
+| `LABWIRED_MODEL_KEY` | `local` | API key (Ollama ignores it) |
+| `LABWIRED_BUILDER_URL` | *(empty)* | Builder for source→ELF + some verify paths |
+| `LABWIRED_CLI` | `labwired-cli` | Simulator binary the MCP shells out to |
+| `OPENCODE_PIN` | `1.18.7` | Expected OpenCode version for `doctor` |
 
-Model default is **Qwen2.5-Coder**; point `LABWIRED_MODEL_URL` at any OpenAI-compatible server to
-change it (vLLM for on-prem throughput, a frontier cloud endpoint for the highest-quality Pro path).
-
-## What runs offline vs. what needs a builder
-
-The local `labwired` CLI + `@labwired/mcp` run **fully offline**: `describe`, `list`, `validate`,
-`run`, `inspect`, `fuzz`, and **display-oracle** `verify` — against a precompiled `firmware_ref`.
-
-**Source→ELF compile** and **serial/register/gpio-oracle verify** route to a LabWired **builder**.
-For the full loop offline (ITAR / air-gapped), self-host the builder in your vault and set
-`LABWIRED_BUILDER_URL`. Without it, compile/serial-verify report a clean "no builder configured" error
-— never a silent internet call, and never an unverifiable pass.
-
-## Air-gapped / ITAR profile
-
-Use [`config/opencode.airgap.json`](./config/opencode.airgap.json): it restricts providers to the
-local model (`enabled_providers`), disables autoupdate and sharing, and expects in-vault
-`LABWIRED_MODEL_URL` / `LABWIRED_BUILDER_URL`. Place it at a **managed** path so users can't override
-it — `/etc/opencode/opencode.json` (Linux) or `/Library/Application Support/opencode/opencode.json`
-(macOS). The oracle needs **no AI in the vault**; only the model endpoint is swapped for on-prem weights.
-
-## What's in here
+## Layout
 
 ```
-config/opencode.json          default profile (local or cloud model)
-config/opencode.airgap.json   locked on-prem / ITAR profile
-config/AGENTS.md              the agent's standing rule: propose / prove, never self-report success
-bin/labwired                  branded launcher over opencode
-skills/firmware-verification  the oracle-gate skill (vendored; also at github.com/LabWired/skills)
-install.sh
+bin/labwired                 branded launcher + doctor/version
+config/opencode.json         default profile
+config/opencode.airgap.json  on-prem / ITAR profile
+config/AGENTS.md             standing claim rules
+skills/                      Gate 1 skills (OpenCode discovery)
+fixtures/gate1/              red→green oracle demo sources
+install.sh                   pin OpenCode + install config/skills/launcher
 ```
 
-## Credits & license
+## Air-gapped / ITAR
 
-Built on [opencode](https://github.com/anomalyco/opencode) (MIT) — not affiliated with or endorsed by
-the opencode project. This distribution layer is MIT-licensed; see [LICENSE](./LICENSE). opencode
-retains its own license.
+Use `config/opencode.airgap.json` at a **managed** path (`/etc/opencode/opencode.json` or macOS Application Support). Restricts providers to the local model; set in-vault `LABWIRED_MODEL_URL` / `LABWIRED_BUILDER_URL`. The oracle needs **no AI** in the vault.
+
+## What is intentionally not here
+
+- Platform MCP/builder implementation (monorepo)
+- Studio / Playground UI
+- Hardware confirmation gateway
+- Enterprise Helm / SSO
+
+Those are separate products and gates. This repo is **only** the OpenCode harness.
