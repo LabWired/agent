@@ -3,6 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=lib/resolve-sim.sh
 source "$ROOT/lib/resolve-sim.sh"
+# shellcheck source=lib/resolve-mcp.sh
+source "$ROOT/lib/resolve-mcp.sh"
 
 fail=0
 assert_eq() {
@@ -115,3 +117,84 @@ if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi
 echo "resolve-sim tests passed"
+
+# --- MCP resolve -------------------------------------------------------------
+
+# vendor path under agent root
+mkdir -p "$FIX/mcp/vendor"
+echo 'console.log(1)' >"$FIX/mcp/vendor/index.js"
+got="$(
+  (
+    export LABWIRED_PROFILE=airgap
+    unset LABWIRED_MCP_ENTRY || true
+    unset LABWIRED_MCP_ALLOW_NPX || true
+    labwired_resolve_mcp_command_json "$FIX"
+  )
+)"
+if echo "$got" | grep -q '"node"'; then
+  echo "ok   mcp vendor"
+else
+  echo "FAIL mcp vendor: got='$got'"
+  fail=1
+fi
+
+# airgap without vendor fails (no npx fallback)
+rm -rf "$FIX/mcp"
+if (
+  export LABWIRED_PROFILE=airgap
+  unset LABWIRED_MCP_ENTRY || true
+  unset LABWIRED_MCP_ALLOW_NPX || true
+  labwired_resolve_mcp_command_json "$FIX" 2>/dev/null
+); then
+  echo "FAIL airgap should fail without vendor"
+  fail=1
+else
+  echo "ok   airgap refuses npx"
+fi
+
+# online default allows npx
+got="$(
+  (
+    export LABWIRED_PROFILE=online
+    unset LABWIRED_MCP_ENTRY || true
+    unset LABWIRED_MCP_ALLOW_NPX || true
+    labwired_resolve_mcp_command_json "$FIX"
+  )
+)"
+assert_eq "online default npx" "$got" '["npx","-y","@labwired/mcp"]'
+
+# LABWIRED_MCP_ALLOW_NPX forces npx even under airgap
+got="$(
+  (
+    export LABWIRED_PROFILE=airgap
+    export LABWIRED_MCP_ALLOW_NPX=1
+    unset LABWIRED_MCP_ENTRY || true
+    labwired_resolve_mcp_command_json "$FIX"
+  )
+)"
+assert_eq "ALLOW_NPX forces npx under airgap" "$got" '["npx","-y","@labwired/mcp"]'
+
+# LABWIRED_MCP_ENTRY wins
+ENTRY_JS="$FIX/custom-entry.js"
+echo 'console.log(2)' >"$ENTRY_JS"
+got="$(
+  (
+    export LABWIRED_PROFILE=airgap
+    export LABWIRED_MCP_ENTRY="$ENTRY_JS"
+    unset LABWIRED_MCP_ALLOW_NPX || true
+    labwired_resolve_mcp_command_json "$FIX"
+  )
+)"
+if echo "$got" | grep -q '"node"' && echo "$got" | grep -q 'custom-entry.js'; then
+  echo "ok   LABWIRED_MCP_ENTRY"
+else
+  echo "FAIL LABWIRED_MCP_ENTRY: got='$got'"
+  fail=1
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "harness tests FAILED"
+  exit 1
+fi
+echo "resolve-mcp tests passed"
+echo "all harness tests passed"
