@@ -7,19 +7,33 @@ export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-http://127.0.0.1:11434/v1}"
 export LABWIRED_MODEL_KEY="${LABWIRED_MODEL_KEY:-local}"
 export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"
 # Simulator / oracle CLI the MCP shells out to (NOT this launcher).
-export LABWIRED_CLI="${LABWIRED_CLI:-labwired-cli}"
+# Resolved only when a real binary exists — never invent "labwired-cli".
 
 # Pinned OpenCode version (npm package opencode-ai). Bump deliberately.
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
-SRC="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ ! -d "$SRC/skills" ]]; then
-  # Installed copy: only bin/labwired is on PATH; repo root may be elsewhere.
-  SRC="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ ! -f "$ROOT/lib/resolve-sim.sh" ]]; then
+  # Installed copy: only bin/labwired may be on PATH; libs sit next to it.
+  ROOT="$(cd "$(dirname "$0")" && pwd)"
 fi
+# shellcheck source=lib/resolve-sim.sh
+source "$ROOT/lib/resolve-sim.sh"
 
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 fail() { printf 'labwired: %s\n' "$1" >&2; exit 1; }
+
+# Resolve simulator if present; export LABWIRED_CLI only when found.
+# Returns 0 if sim resolved, 1 otherwise.
+labwired_export_sim() {
+  local sim=""
+  if sim="$(labwired_resolve_sim "$0")"; then
+    export LABWIRED_CLI="$sim"
+    return 0
+  fi
+  unset LABWIRED_CLI
+  return 1
+}
 
 parse_opencode_version() {
   # shellcheck disable=SC2001
@@ -41,7 +55,7 @@ cmd_version() {
 
 cmd_doctor() {
   local ok=0
-  local raw ver
+  local raw ver sim
 
   if command -v opencode >/dev/null 2>&1; then
     say "ok  opencode-binary: $(command -v opencode)"
@@ -58,12 +72,16 @@ cmd_doctor() {
     ok=1
   fi
 
-  if command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
-    say "ok  labwired-sim: $LABWIRED_CLI → $(command -v "$LABWIRED_CLI")"
+  if sim="$(labwired_resolve_sim "$0")"; then
+    export LABWIRED_CLI="$sim"
+    say "ok  labwired-sim: $sim"
   else
-    printf '\033[31mFAIL\033[0m labwired-sim: %s not on PATH (MCP run/verify need the simulator)\n' "$LABWIRED_CLI"
+    unset LABWIRED_CLI
+    printf '\033[31mFAIL\033[0m labwired-sim: no simulator found on PATH\n'
     printf '     install: curl -fsSL https://labwired.com/install.sh | sh\n'
     printf '     or:      export LABWIRED_CLI=/path/to/labwired-simulator\n'
+    printf '     or:      export LABWIRED_SIM=/path/to/labwired-simulator\n'
+    printf '     note:    this agent launcher is never used as the simulator\n'
     ok=1
   fi
 
@@ -114,9 +132,14 @@ Env:
   LABWIRED_MODEL_URL    OpenAI-compatible model base URL (default Ollama)
   LABWIRED_MODEL_KEY    API key for that endpoint
   LABWIRED_BUILDER_URL  Builder for compile + serial/register/gpio verify
-  LABWIRED_CLI          Simulator binary name/path (default: labwired-cli)
+  LABWIRED_CLI          Simulator binary name/path (resolved if set and exists)
+  LABWIRED_SIM          Alternate simulator env (same rules as LABWIRED_CLI)
   OPENCODE_PIN          Expected opencode-ai version (default: ${OPENCODE_PIN})
   OPENCODE_CONFIG_DIR   Config root (default: ~/.config/opencode)
+
+Simulator resolution (first match): LABWIRED_CLI, LABWIRED_SIM, labwired
+(if not this agent), labwired-sim, labwired-cli — only names that exist.
+Never defaults to a fictional binary.
 
 This is a distribution layer only — no OpenCode fork.
 Oracle contracts live in the LabWired platform; this repo only wires the agent.
@@ -131,10 +154,12 @@ case "${1:-}" in
     if ! command -v opencode >/dev/null 2>&1; then
       fail "'opencode' not found on PATH. Run ./install.sh first (pins opencode-ai@${OPENCODE_PIN})."
     fi
-    if ! command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
-      echo "labwired: warning — simulator '$LABWIRED_CLI' not on PATH; run/verify will fail." >&2
+    if labwired_export_sim; then
+      : # LABWIRED_CLI exported for MCP child
+    else
+      echo "labwired: warning — no simulator found; run/verify will fail." >&2
       echo "         install: curl -fsSL https://labwired.com/install.sh | sh" >&2
-      echo "         or set LABWIRED_CLI to the simulator binary." >&2
+      echo "         or set LABWIRED_CLI / LABWIRED_SIM to the simulator binary." >&2
     fi
     # Config/skills live under ~/.config/opencode from install.sh
     exec opencode "$@"
@@ -144,6 +169,7 @@ case "${1:-}" in
     if ! command -v opencode >/dev/null 2>&1; then
       fail "'opencode' not found on PATH. Run ./install.sh first."
     fi
+    labwired_export_sim || true
     exec opencode "$@"
     ;;
 esac
