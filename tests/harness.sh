@@ -215,4 +215,43 @@ if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi
 echo "skill inventory tests passed"
+
+# --- assert-status -----------------------------------------------------------
+# shellcheck source=lib/assert-status.sh
+source "$ROOT/lib/assert-status.sh"
+
+if echo '{"status":"model_verified","proven":true}' | labwired_assert_status model_verified >/dev/null; then
+  echo "ok   assert-status model_verified accepts"
+else
+  echo "FAIL assert-status model_verified should accept"
+  fail=1
+fi
+
+if echo '{"status":"failed","proven":false}' | labwired_assert_status model_verified >/dev/null 2>&1; then
+  echo "FAIL assert-status failed should reject model_verified"
+  fail=1
+else
+  echo "ok   assert-status failed rejects model_verified"
+fi
+
+if echo '{"status":"unsupported"}' | labwired_assert_status unsupported >/dev/null; then
+  echo "ok   assert-status unsupported accepts unsupported"
+else
+  echo "FAIL assert-status unsupported should accept"
+  fail=1
+fi
+
+# Nested MCP-style content string carrying a status JSON blob
+if echo '{"content":"{\"status\":\"model_verified\"}"}' | labwired_assert_status model_verified >/dev/null; then
+  echo "ok   assert-status nested content status string"
+else
+  echo "FAIL assert-status nested content status string"
+  fail=1
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "harness tests FAILED"
+  exit 1
+fi
+echo "assert-status tests passed"
 echo "all harness tests passed"

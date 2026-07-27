@@ -126,6 +126,10 @@ Usage:
   labwired              Launch OpenCode with LabWired MCP + skills
   labwired doctor       Preflight OpenCode pin, simulator, MCP, skills
   labwired version      Print harness and OpenCode pin
+  labwired assert-status <expected> [file]
+                        Hard claim gate: read verify JSON from file or stdin;
+                        exit 0 if status matches expected, 1 mismatch, 2 missing.
+                        expected: model_verified|failed|inconclusive|unsupported
   labwired help         This help
 
 Env:
@@ -146,10 +150,29 @@ Oracle contracts live in the LabWired platform; this repo only wires the agent.
 EOF
 }
 
+cmd_assert_status() {
+  local expected="${1:-}"
+  local file="${2:-}"
+  if [[ -z "$expected" ]]; then
+    fail "usage: labwired assert-status <expected> [file]"
+  fi
+  # shellcheck source=lib/assert-status.sh
+  source "$ROOT/lib/assert-status.sh"
+  if [[ -n "$file" && "$file" != "-" ]]; then
+    labwired_assert_status "$expected" <"$file"
+  else
+    labwired_assert_status "$expected"
+  fi
+}
+
 case "${1:-}" in
   doctor)  shift; cmd_doctor "$@" ;;
   version|--version|-V) cmd_version ;;
   help|--help|-h) cmd_help ;;
+  assert-status)
+    shift
+    cmd_assert_status "$@"
+    ;;
   "")
     if ! command -v opencode >/dev/null 2>&1; then
       fail "'opencode' not found on PATH. Run ./install.sh first (pins opencode-ai@${OPENCODE_PIN})."
