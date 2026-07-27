@@ -17,8 +17,7 @@
     "skill": {
       "verify-firmware": "allow",
       "diagnose-firmware": "allow",
-      "inspect-evidence": "allow",
-      "firmware-verification": "allow"
+      "inspect-evidence": "allow"
     }
   },
   "provider": {

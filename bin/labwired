@@ -101,7 +101,7 @@ cmd_doctor() {
   fi
 
   local skill
-  for skill in verify-firmware diagnose-firmware inspect-evidence firmware-verification; do
+  for skill in verify-firmware diagnose-firmware inspect-evidence; do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     else

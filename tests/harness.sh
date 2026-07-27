@@ -197,4 +197,22 @@ if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi
 echo "resolve-mcp tests passed"
+
+# --- skill inventory ---------------------------------------------------------
+
+want=$'diagnose-firmware\ninspect-evidence\nverify-firmware'
+got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
+assert_eq "skill inventory" "$got" "$want"
+if [[ -d "$ROOT/skills/firmware-verification" ]]; then
+  echo "FAIL duplicate skill: firmware-verification must not exist"
+  fail=1
+else
+  echo "ok   no firmware-verification skill"
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "harness tests FAILED"
+  exit 1
+fi
+echo "skill inventory tests passed"
 echo "all harness tests passed"

@@ -28,6 +28,18 @@ to a hardware claim.
 
 When `gaps` is non-empty, show the blocking gap. Do not weaken the oracle to force a pass.
 
+## Claim gate (non-negotiable)
+
+After every `labwired_verify` tool result:
+
+1. Read `status` (not only `proven`).
+2. You may say the firmware is model-verified **only** if `status` is exactly `model_verified`.
+3. Otherwise report failed / inconclusive / unsupported with `gaps`.
+4. For human or CI checks of a saved payload:
+   `labwired assert-status model_verified < verify.json`
+
+Never claim hardware-confirmed from this harness.
+
 ## Skills
 
 Load and follow:
@@ -35,7 +47,6 @@ Load and follow:
 - `verify-firmware` — mandatory-oracle model verification
 - `diagnose-firmware` — capture failure **before** edit; re-verify after
 - `inspect-evidence` — explain `evidence_ref` / status (read-only)
-- `firmware-verification` — full verification procedure (same claim rules)
 
 ## Tools
 
