@@ -1,0 +1,13 @@
+name: harness
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: harness tests
+        run: bash tests/harness.sh
+      - name: demo (unit)
+        run: ./demo.sh

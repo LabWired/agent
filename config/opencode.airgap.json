@@ -5,11 +5,19 @@
       "type": "local",
       "command": ["npx", "-y", "@labwired/mcp"],
       "enabled": true,
+      "timeout": 120000,
       "environment": {
-        "LABWIRED_CLI": "labwired",
+        "LABWIRED_CLI": "{env:LABWIRED_CLI}",
         "LABWIRED_BUILDER_URL": "{env:LABWIRED_BUILDER_URL}",
         "LABWIRED_API": "http://127.0.0.1:0"
       }
+    }
+  },
+  "permission": {
+    "skill": {
+      "verify-firmware": "allow",
+      "diagnose-firmware": "allow",
+      "inspect-evidence": "allow"
     }
   },
   "provider": {
@@ -31,7 +39,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired firmware agent (on-prem) — proposes firmware, proves it with the deterministic hardware oracle.",
+      "description": "LabWired firmware agent (on-prem) — proposes firmware; model-verifies with the deterministic oracle harness.",
       "mode": "primary"
     }
   },
