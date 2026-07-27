@@ -10,6 +10,8 @@ OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
 # shellcheck source=lib/resolve-mcp.sh
 source "$SRC/lib/resolve-mcp.sh"
+# shellcheck source=lib/resolve-sim.sh
+source "$SRC/lib/resolve-sim.sh"
 
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$1" >&2; }
@@ -121,16 +123,32 @@ case ":$PATH:" in
   *) warn "$BIN_DIR is not on PATH — add:  export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
 
+# Resolved paths summary (sim may still be missing — doctor will say so)
+RESOLVED_SIM=""
+if RESOLVED_SIM="$(labwired_resolve_sim "$BIN_DIR/labwired" 2>/dev/null)"; then
+  :
+else
+  RESOLVED_SIM="(not found — set LABWIRED_CLI or install simulator)"
+fi
+
 cat <<EOF
 
 $(say "done")
+Resolved:
+  profile:  $PROFILE
+  MCP:      $MCP_JSON
+  sim:      $RESOLVED_SIM
+  launcher: $BIN_DIR/labwired
+  config:   $CFG_DIR/opencode.json
+
 Next:
   1. labwired doctor
-  2. Start a local model (default Ollama + Qwen2.5-Coder):
+  2. ./demo.sh          # offline unit smoke (this repo)
+  3. Start a local model (default Ollama + Qwen2.5-Coder):
        ollama pull qwen2.5-coder && ollama serve
      …or:  export LABWIRED_MODEL_URL=http://<host>:<port>/v1
-  3. (optional full loop) export LABWIRED_BUILDER_URL=http://<builder>:<port>
-  4. Launch:   labwired
+  4. (optional full loop) export LABWIRED_BUILDER_URL=http://<builder>:<port>
+  5. Launch:   labwired
      Check:    opencode mcp list   (expect server 'labwired' + labwired_* tools)
 
 Air-gapped / ITAR:
