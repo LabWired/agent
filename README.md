@@ -4,7 +4,7 @@
   <img src="branding/logo.svg" alt="LabWired" width="32" height="32" />
 </p>
 
-Write firmware. Run it on a virtual board. Only green when it matches.
+Write firmware. Run it on a virtual board.
 
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 

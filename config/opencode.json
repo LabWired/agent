@@ -41,7 +41,7 @@
   "agent": {
     "labwired": {
       "name": "LabWired Agent",
-      "description": "Write firmware and run it on a virtual board. Green only when behavior matches.",
+      "description": "Write firmware and run it on a virtual board.",
       "mode": "primary",
       "color": "#0056b3"
     }
