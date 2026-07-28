@@ -42,7 +42,12 @@ parse_opencode_version() {
 }
 
 cmd_version() {
+  local agent_ver="0.1.0"
+  if [[ -f "$ROOT/VERSION" ]]; then
+    agent_ver="$(tr -d '[:space:]' <"$ROOT/VERSION")"
+  fi
   echo "LabWired Firmware Agent — the easiest way to write firmware"
+  echo "agent version: ${agent_ver}"
   echo "opencode pin: ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver

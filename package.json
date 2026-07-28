@@ -1,0 +1,49 @@
+{
+  "name": "@labwired/agent",
+  "version": "0.1.0",
+  "description": "LabWired Firmware Agent — the easiest way to write firmware",
+  "license": "MIT",
+  "homepage": "https://labwired.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LabWired/agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LabWired/agent/issues"
+  },
+  "keywords": [
+    "labwired",
+    "firmware",
+    "embedded",
+    "agent",
+    "mcp",
+    "opencode"
+  ],
+  "bin": {
+    "labwired-agent-install": "scripts/npm-install.js"
+  },
+  "files": [
+    "scripts/npm-install.js",
+    "scripts/agent-install.sh",
+    "bin",
+    "config",
+    "skills",
+    "lib",
+    "branding",
+    "install.sh",
+    "demo.sh",
+    "VERSION",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "postinstall": "node scripts/npm-install.js --postinstall || true",
+    "test": "bash tests/harness.sh"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

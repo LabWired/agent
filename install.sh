@@ -134,26 +134,22 @@ fi
 
 cat <<EOF
 
-$(say "done")
-Resolved:
-  profile:  $PROFILE
-  MCP:      $MCP_JSON
-  sim:      $RESOLVED_SIM
+$(say "done — LabWired Firmware Agent installed")
   launcher: $BIN_DIR/labwired
   config:   $CFG_DIR/opencode.json
+  sim:      $RESOLVED_SIM
+  profile:  $PROFILE
 
 Next:
-  1. labwired doctor
-  2. ./demo.sh          # offline unit smoke (this repo)
-  3. Start a local model (default Ollama + Qwen2.5-Coder):
-       ollama pull qwen2.5-coder && ollama serve
-     …or:  export LABWIRED_MODEL_URL=http://<host>:<port>/v1
-  4. (optional full loop) export LABWIRED_BUILDER_URL=http://<builder>:<port>
-  5. Launch:   labwired
-     Check:    opencode mcp list   (expect server 'labwired' + labwired_* tools)
+  labwired doctor
+  labwired              # start the agent
 
-Air-gapped / ITAR:
-  ./install.sh --airgap
-  Requires LABWIRED_MCP_ENTRY or mcp/vendor/index.js (see mcp/README.md).
-  Point LABWIRED_MODEL_URL / LABWIRED_BUILDER_URL at in-vault services.
+Optional:
+  ollama pull qwen2.5-coder && ollama serve
+  curl -fsSL https://labwired.com/install.sh | sh   # simulator for full checks
+
+Prefer Claude or Codex?
+  claude mcp add labwired --transport http https://api.labwired.com/mcp
+
+Pro workbench: https://labwired.com/pro.html
 EOF

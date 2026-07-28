@@ -5,55 +5,81 @@
 </p>
 
 An AI agent that writes firmware and checks it on a virtual board before you
-touch hardware. Install free. Works offline with a local model, or plug Claude /
-Codex into the same tools.
+touch hardware. Free. Open source. Works with a local model, or with Claude /
+Codex.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![OpenCode](https://img.shields.io/badge/based%20on-OpenCode-black)](https://opencode.ai)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+[![Install](https://img.shields.io/badge/install-curl%20%7C%20sh-black)](#install)
 
 ## Install
+
+**One command** (recommended):
+
+```bash
+curl -fsSL https://labwired.com/agent-install.sh | sh
+labwired doctor
+labwired
+```
+
+npm:
+
+```bash
+npm i -g @labwired/agent
+labwired doctor
+labwired
+```
+
+From git:
 
 ```bash
 git clone https://github.com/LabWired/agent && cd agent
 ./install.sh
-labwired doctor
-./demo.sh
 labwired
 ```
 
-That’s it. The installer sets up the agent and skills. For full simulation, also
-install the LabWired simulator (or set `LABWIRED_CLI` to your sim binary):
-
-```bash
-curl -fsSL https://labwired.com/install.sh | sh
-```
-
-Already using Claude or Codex? Skip this repo and connect MCP instead:
+Already on Claude or Codex? Skip the agent shell and connect LabWired:
 
 ```bash
 claude mcp add labwired --transport http https://api.labwired.com/mcp
 codex mcp add labwired --url https://api.labwired.com/mcp
 ```
 
+Simulator (for full on-device-style checks on the twin):
+
+```bash
+curl -fsSL https://labwired.com/install.sh | sh
+```
+
 ## What it does
 
 1. You describe the board and the job  
 2. The agent writes firmware  
-3. It runs the firmware on a digital twin of the chip  
-4. You only get a green check when the behavior actually matches  
+3. It runs that firmware on a digital twin of the chip  
+4. You get a green result only when the behavior matches  
 
-No “looks fine in the source” passes. Compile success alone is not enough.
+No “looks fine in the source” passes.
 
-## Skills included
+## Product line
+
+| Product | What you get |
+|---------|----------------|
+| **Firmware Agent** (this) | Free CLI agent + skills + twin check |
+| **[Pro](https://labwired.com/pro.html)** | Private projects, priority builds, editor workbench |
+| **Enterprise** | Air-gap, on-prem model, vault | Talk to us on the site |
+
+Packaging plan: [docs/PRODUCT.md](docs/PRODUCT.md).
+
+## Skills
 
 | Skill | What it’s for |
 |-------|----------------|
-| `verify-firmware` | Run the check; only report what the sim says |
+| `verify-firmware` | Run the check; report only what the twin says |
 | `diagnose-firmware` | Fail first, fix, check again |
 | `inspect-evidence` | Explain a result without inventing details |
 | `board-bringup` | Pick a board and wire a valid setup |
 | `scaffold-firmware` | Minimal blink or serial “hello” |
-| `report-evidence` | Write a clear report for you or CI |
+| `report-evidence` | Clear report for you or CI |
 
 ## Commands
 
@@ -62,44 +88,35 @@ No “looks fine in the source” passes. Compile success alone is not enough.
 | `labwired` | Start the agent |
 | `labwired doctor` | Check install |
 | `labwired version` | Version info |
-| `./demo.sh` | Smoke test |
-
-Optional local model (default path):
+| `./demo.sh` | Offline smoke + Gate 1 demo |
 
 ```bash
-ollama pull qwen2.5-coder && ollama serve
+ollama pull qwen2.5-coder && ollama serve   # optional local model
 labwired
 ```
 
-## Air-gapped install
+## Air-gapped
 
 ```bash
-./install.sh --airgap
+curl -fsSL https://labwired.com/agent-install.sh | sh -s -- --airgap
+# or: ./install.sh --airgap
 ```
 
-See [mcp/README.md](mcp/README.md) for vendoring the MCP server with no network.
+See [mcp/README.md](mcp/README.md).
 
-## How verification works (for CI)
+## Demo
 
-After a check, status is one of: `model_verified`, `failed`, `inconclusive`,
-`unsupported`. Only `model_verified` means the twin saw the expected behavior.
+Red → green check story: [fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md).
 
 ```bash
-labwired assert-status model_verified < verify.json
+./demo.sh
 ```
-
-Demo red→green fixture: [fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md).
 
 ## Links
 
-- Product site: [labwired.com](https://labwired.com)
-- Pro workbench: [labwired.com/pro.html](https://labwired.com/pro.html)
-- Browser Playground: [app.labwired.com](https://app.labwired.com/)
-- Simulator & platform: [github.com/w1ne/labwired](https://github.com/w1ne/labwired)
+- Site: [labwired.com](https://labwired.com)  
+- Pro: [labwired.com/pro.html](https://labwired.com/pro.html)  
+- Playground: [app.labwired.com](https://app.labwired.com/)  
+- Changelog: [CHANGELOG.md](CHANGELOG.md)  
 
-## Not in this repo
-
-The big platform (builder, Studio, enterprise deploy) lives in the main LabWired
-monorepo. This repo is the open agent you install and run.
-
-MIT — see [LICENSE](LICENSE).
+MIT — [LICENSE](LICENSE).
