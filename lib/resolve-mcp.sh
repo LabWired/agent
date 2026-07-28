@@ -28,6 +28,22 @@ labwired_resolve_mcp_command_json() {
     return 0
   fi
 
+  # Prefer a local monorepo build over broken npm file: deps (product install on
+  # a LabWired machine with packages/mcp checked out).
+  local home="${HOME:-/tmp}"
+  local cand
+  for cand in \
+    "${LABWIRED_MONOREPO:-}/packages/mcp/dist/index.js" \
+    "$home/Projects/labwired/packages/mcp/dist/index.js" \
+    "$home/Projects/labwired-emit-ts/packages/mcp/dist/index.js"
+  do
+    if [[ -n "$cand" && -f "$cand" ]]; then
+      entry="$(cd "$(dirname "$cand")" && pwd -P)/$(basename "$cand")"
+      printf '["node","%s"]\n' "$entry"
+      return 0
+    fi
+  done
+
   if [[ "${LABWIRED_MCP_ALLOW_NPX:-}" == "1" || "${LABWIRED_MCP_ALLOW_NPX:-}" == "true" ]]; then
     printf '["npx","-y","@labwired/mcp"]\n'
     return 0

@@ -32,7 +32,7 @@
         "apiKey": "{env:LABWIRED_MODEL_KEY}"
       },
       "models": {
-        "qwen2.5-coder": { "name": "Qwen2.5-Coder" }
+        "qwen2.5-coder": { "name": "LabWired · Qwen2.5-Coder" }
       }
     }
   },
@@ -42,8 +42,10 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired Firmware Agent (on-prem) — the easiest way to write firmware. Writes firmware and checks it on a virtual board.",
-      "mode": "primary"
+      "name": "LabWired Firmware Agent",
+      "description": "LabWired Firmware Agent — the easiest way to write firmware. On-prem. Writes firmware and checks it on a virtual board.",
+      "mode": "primary",
+      "color": "#0056b3"
     }
   },
   "default_agent": "labwired"

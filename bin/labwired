@@ -13,15 +13,36 @@ export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"
 # Pinned OpenCode version (npm package opencode-ai). Bump deliberately.
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ ! -f "$ROOT/lib/resolve-sim.sh" ]]; then
-  # Installed copy: only bin/labwired may be on PATH; libs sit next to it.
-  ROOT="$(cd "$(dirname "$0")" && pwd)"
-fi
+# Product home resolution (branded LabWired install)
+# 1) LABWIRED_AGENT_HOME  2) sibling of this bin/  3) ~/.labwired/agent
+_labwired_find_root() {
+  local cand
+  if [[ -n "${LABWIRED_AGENT_HOME:-}" && -f "${LABWIRED_AGENT_HOME}/lib/resolve-sim.sh" ]]; then
+    echo "${LABWIRED_AGENT_HOME}"
+    return 0
+  fi
+  cand="$(cd "$(dirname "$0")/.." && pwd)"
+  if [[ -f "$cand/lib/resolve-sim.sh" ]]; then
+    echo "$cand"
+    return 0
+  fi
+  cand="${HOME}/.labwired/agent"
+  if [[ -f "$cand/lib/resolve-sim.sh" ]]; then
+    echo "$cand"
+    return 0
+  fi
+  # last resort: directory containing this script
+  echo "$(cd "$(dirname "$0")" && pwd)"
+}
+
+ROOT="$(_labwired_find_root)"
+export LABWIRED_AGENT_HOME="$ROOT"
 # shellcheck source=lib/resolve-sim.sh
 source "$ROOT/lib/resolve-sim.sh"
 
+# LabWired brand colors (cyan accent in terminal)
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
+brand() { printf '\033[34m%s\033[0m\n' "$1"; }
 fail() { printf 'labwired: %s\n' "$1" >&2; exit 1; }
 
 # Resolve simulator if present; export LABWIRED_CLI only when found.
@@ -46,22 +67,37 @@ cmd_version() {
   if [[ -f "$ROOT/VERSION" ]]; then
     agent_ver="$(tr -d '[:space:]' <"$ROOT/VERSION")"
   fi
-  echo "LabWired Firmware Agent — the easiest way to write firmware"
-  echo "agent version: ${agent_ver}"
-  echo "opencode pin: ${OPENCODE_PIN}"
+  if [[ -f "$ROOT/branding/banner.txt" ]]; then
+    cat "$ROOT/branding/banner.txt"
+  fi
+  brand "LabWired Firmware Agent — the easiest way to write firmware"
+  echo "brand:          LabWired"
+  echo "agent version:  ${agent_ver}"
+  echo "product home:   ${ROOT}"
+  echo "opencode pin:   ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
     raw="$(opencode --version 2>&1 || true)"
     ver="$(parse_opencode_version "$raw")"
-    echo "opencode installed: ${ver:-$raw}"
+    echo "opencode:       ${ver:-$raw}"
   else
-    echo "opencode installed: (not found)"
+    echo "opencode:       (not found — run install.sh)"
   fi
 }
 
 cmd_doctor() {
   local ok=0
   local raw ver sim
+  local strict="${LABWIRED_DOCTOR_STRICT:-0}"
+  # labwired doctor --strict  → sim required
+  if [[ "${1:-}" == "--strict" ]]; then strict=1; shift || true; fi
+
+  if [[ -f "$ROOT/branding/banner.txt" ]]; then
+    cat "$ROOT/branding/banner.txt"
+  else
+    brand "LabWired Firmware Agent"
+  fi
+  say "product home: $ROOT"
 
   if command -v opencode >/dev/null 2>&1; then
     say "ok  opencode-binary: $(command -v opencode)"
@@ -70,8 +106,13 @@ cmd_doctor() {
     if [[ "$ver" == "$OPENCODE_PIN" ]]; then
       say "ok  opencode-pin: $ver matches $OPENCODE_PIN"
     else
-      printf '\033[31mFAIL\033[0m opencode-pin: got %s, need exact pin %s\n' "${ver:-$raw}" "$OPENCODE_PIN"
-      ok=1
+      # Accept nearby 1.18.x for product UX; pin is preferred
+      if [[ "$ver" == 1.18.* ]]; then
+        printf '\033[33mwarn\033[0m opencode-pin: got %s (preferred %s) — OK for product use\n' "${ver:-$raw}" "$OPENCODE_PIN"
+      else
+        printf '\033[31mFAIL\033[0m opencode-pin: got %s, need %s.x\n' "${ver:-$raw}" "1.18"
+        ok=1
+      fi
     fi
   else
     printf '\033[31mFAIL\033[0m opencode-binary: not on PATH — run ./install.sh (installs opencode-ai@%s)\n' "$OPENCODE_PIN"
@@ -83,16 +124,19 @@ cmd_doctor() {
     say "ok  labwired-sim: $sim"
   else
     unset LABWIRED_CLI
-    printf '\033[31mFAIL\033[0m labwired-sim: no simulator found on PATH\n'
-    printf '     install: curl -fsSL https://labwired.com/install.sh | sh\n'
-    printf '     or:      export LABWIRED_CLI=/path/to/labwired-simulator\n'
-    printf '     or:      export LABWIRED_SIM=/path/to/labwired-simulator\n'
-    printf '     note:    this agent launcher is never used as the simulator\n'
-    ok=1
+    if [[ "$strict" == "1" ]]; then
+      printf '\033[31mFAIL\033[0m labwired-sim: no simulator found (strict mode)\n'
+      printf '     install: curl -fsSL https://labwired.com/install.sh | sh\n'
+      ok=1
+    else
+      printf '\033[33mwarn\033[0m labwired-sim: not found (optional for agent shell)\n'
+      printf '     full checks: curl -fsSL https://labwired.com/install.sh | sh\n'
+      printf '     or: export LABWIRED_CLI=/path/to/simulator\n'
+    fi
   fi
 
   if command -v npx >/dev/null 2>&1; then
-    say "ok  npx: present (MCP uses npx -y @labwired/mcp)"
+    say "ok  npx: present (MCP uses @labwired/mcp)"
   else
     printf '\033[31mFAIL\033[0m npx: not found (Node/npm required for @labwired/mcp)\n'
     ok=1
@@ -101,9 +145,21 @@ cmd_doctor() {
   local cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
   if [[ -f "$cfg/opencode.json" ]]; then
     say "ok  config: $cfg/opencode.json"
+    if grep -q 'LabWired Firmware Agent' "$cfg/opencode.json" 2>/dev/null \
+      || grep -q '"labwired"' "$cfg/opencode.json" 2>/dev/null; then
+      say "ok  brand: LabWired agent in config"
+    else
+      printf '\033[33mwarn\033[0m brand: re-run ./install.sh to refresh LabWired branding\n'
+    fi
   else
-    printf '\033[33mwarn\033[0m config: missing %s/opencode.json — run ./install.sh\n' "$cfg"
+    printf '\033[31mFAIL\033[0m config: missing %s/opencode.json — run ./install.sh\n' "$cfg"
     ok=1
+  fi
+
+  if [[ -d "$cfg/branding" ]] || [[ -d "$ROOT/branding" ]]; then
+    say "ok  branding: assets present"
+  else
+    printf '\033[33mwarn\033[0m branding: missing — re-run ./install.sh\n'
   fi
 
   local skill
@@ -114,7 +170,7 @@ cmd_doctor() {
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     else
-      printf '\033[33mwarn\033[0m skill: missing %s/skills/%s — run ./install.sh\n' "$cfg" "$skill"
+      printf '\033[31mFAIL\033[0m skill: missing %s/skills/%s — run ./install.sh\n' "$cfg" "$skill"
       ok=1
     fi
   done
@@ -123,7 +179,7 @@ cmd_doctor() {
     say "LabWired Firmware Agent ready."
     return 0
   fi
-  printf '\nLabWired Firmware Agent not ready.\n'
+  printf '\nLabWired Firmware Agent not ready — fix FAILs above.\n'
   return 1
 }
 

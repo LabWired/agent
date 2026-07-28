@@ -83,7 +83,14 @@ assert_eq "prefer labwired-sim over agent labwired" "$got" "$FIX/bin/labwired-si
 # Only agent on PATH (no sim names): must not resolve agent as simulator
 ONLY_AGENT="$(mktemp -d)"
 mkdir -p "$ONLY_AGENT/bin"
-cp "$FIX/bin/labwired" "$ONLY_AGENT/bin/labwired"
+# Realistic agent launcher content (signature used by resolve-sim)
+cat >"$ONLY_AGENT/bin/labwired" <<'EOS'
+#!/bin/sh
+# LabWired Firmware Agent — the easiest way to write firmware.
+export LABWIRED_AGENT_HOME=/tmp/fake
+echo agent
+EOS
+chmod +x "$ONLY_AGENT/bin/labwired"
 got="$(
   (
     export PATH="$ONLY_AGENT/bin:$SYS_PATH"
@@ -93,6 +100,25 @@ got="$(
 )"
 assert_empty "reject agent-only labwired as sim" "$got"
 rm -rf "$ONLY_AGENT"
+
+# Wrapper script pointing at agent home must not count as sim
+WRAP="$(mktemp -d)"
+mkdir -p "$WRAP/bin"
+cat >"$WRAP/bin/labwired" <<EOS
+#!/usr/bin/env bash
+export LABWIRED_AGENT_HOME="$WRAP"
+exec true
+EOS
+chmod +x "$WRAP/bin/labwired"
+got="$(
+  (
+    export PATH="$WRAP/bin:$SYS_PATH"
+    unset LABWIRED_CLI LABWIRED_SIM || true
+    labwired_resolve_sim "$WRAP/bin/labwired" || true
+  )
+)"
+assert_empty "reject PATH wrapper as sim" "$got"
+rm -rf "$WRAP"
 
 # Empty when nothing usable on a clean PATH (system may still have real bins)
 got="$(
@@ -119,12 +145,19 @@ fi
 echo "resolve-sim tests passed"
 
 # --- MCP resolve -------------------------------------------------------------
+# Isolate from developer's monorepo (local packages/mcp would otherwise win).
+_mcp_env() {
+  export LABWIRED_MONOREPO="/nonexistent"
+  export HOME="$FIX/home"
+  mkdir -p "$HOME"
+}
 
 # vendor path under agent root
 mkdir -p "$FIX/mcp/vendor"
 echo 'console.log(1)' >"$FIX/mcp/vendor/index.js"
 got="$(
   (
+    _mcp_env
     export LABWIRED_PROFILE=airgap
     unset LABWIRED_MCP_ENTRY || true
     unset LABWIRED_MCP_ALLOW_NPX || true
@@ -141,6 +174,7 @@ fi
 # airgap without vendor fails (no npx fallback)
 rm -rf "$FIX/mcp"
 if (
+  _mcp_env
   export LABWIRED_PROFILE=airgap
   unset LABWIRED_MCP_ENTRY || true
   unset LABWIRED_MCP_ALLOW_NPX || true
@@ -152,9 +186,10 @@ else
   echo "ok   airgap refuses npx"
 fi
 
-# online default allows npx
+# online default allows npx when no monorepo MCP
 got="$(
   (
+    _mcp_env
     export LABWIRED_PROFILE=online
     unset LABWIRED_MCP_ENTRY || true
     unset LABWIRED_MCP_ALLOW_NPX || true
@@ -163,9 +198,10 @@ got="$(
 )"
 assert_eq "online default npx" "$got" '["npx","-y","@labwired/mcp"]'
 
-# LABWIRED_MCP_ALLOW_NPX forces npx even under airgap
+# LABWIRED_MCP_ALLOW_NPX forces npx even under airgap (still after monorepo skip)
 got="$(
   (
+    _mcp_env
     export LABWIRED_PROFILE=airgap
     export LABWIRED_MCP_ALLOW_NPX=1
     unset LABWIRED_MCP_ENTRY || true

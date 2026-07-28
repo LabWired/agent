@@ -2,16 +2,15 @@
 # resolve-sim.sh — resolve LabWired *simulator* binary (not the agent launcher).
 # shellcheck shell=bash
 
-# Returns 0 and prints absolute path (or resolved PATH path), or 1 and prints nothing.
+# Returns 0 and prints absolute path, or 1 and prints nothing.
 # Rules (first match wins):
-# 1) $LABWIRED_CLI if set and executable (file or on PATH)
-# 2) $LABWIRED_SIM if set and executable
-# 3) command -v labwired that is NOT this agent launcher (argv0 realpath)
-# 4) common names on PATH: labwired-sim, labwired-cli (only if they exist)
+# 1) $LABWIRED_CLI if set and is a real sim (not agent)
+# 2) $LABWIRED_SIM if set and is a real sim
+# 3) labwired-sim / labwired-cli on PATH
+# 4) labwired on PATH only if it is NOT the Firmware Agent launcher
 #
 # Never invent a default name that is not found.
 
-# Pure-bash dirname/basename so resolution works even if PATH is fixture-only.
 _labwired_dirname() {
   local p="${1:-.}"
   [[ "$p" == */* ]] || { echo "."; return; }
@@ -37,13 +36,28 @@ _labwired_realpath() {
   fi
 }
 
-labwired_agent_self_path() {
-  # caller should pass launcher path as $1 when available
-  if [[ -n "${1:-}" ]]; then
-    _labwired_realpath "$1"
+# True if path is the LabWired *agent* launcher / wrapper (never a sim).
+_labwired_is_agent_launcher() {
+  local p="$1"
+  [[ -z "$p" || ! -e "$p" ]] && return 1
+  # Wrapper installed by install.sh
+  if head -n 20 "$p" 2>/dev/null | grep -q 'LABWIRED_AGENT_HOME\|Firmware Agent\|opencode-ai\|OpenCode shell'; then
     return 0
   fi
-  echo ""
+  # Real agent bin under product home
+  local rp d
+  rp="$(_labwired_realpath "$p")"
+  d="$(_labwired_dirname "$rp")"
+  if [[ -f "$d/../lib/resolve-sim.sh" ]] || [[ -f "$d/../branding/banner.txt" ]]; then
+    # bin/labwired inside agent kit
+    if [[ -f "$d/../config/AGENTS.md" ]] || [[ -d "$d/../skills" ]]; then
+      return 0
+    fi
+  fi
+  if [[ "$rp" == *'/.labwired/agent/'* ]]; then
+    return 0
+  fi
+  return 1
 }
 
 labwired_resolve_sim() {
@@ -57,40 +71,39 @@ labwired_resolve_sim() {
   try_one() {
     local c="$1"
     [[ -z "$c" ]] && return 1
-    # Absolute or relative filesystem path that is executable
+    local p=""
+
     if [[ "$c" == /* || "$c" == ./* || "$c" == ../* ]] && [[ -x "$c" ]]; then
-      echo "$c"
-      return 0
-    fi
-    if [[ -x "$c" && "$c" == */* ]]; then
-      echo "$c"
-      return 0
-    fi
-    if command -v "$c" >/dev/null 2>&1; then
-      local p rp
+      p="$c"
+    elif [[ -x "$c" && "$c" == */* ]]; then
+      p="$c"
+    elif command -v "$c" >/dev/null 2>&1; then
       p="$(command -v "$c")"
-      # command -v may return a relative path; reject agent self by realpath
-      if [[ -n "$real_agent" && -e "$p" ]]; then
-        rp="$(_labwired_realpath "$p")"
-        if [[ "$rp" == "$real_agent" ]]; then
-          return 1
-        fi
+    elif [[ -x "$c" ]]; then
+      p="$c"
+    else
+      return 1
+    fi
+
+    # Reject agent launcher (by path equality or content)
+    if [[ -n "$real_agent" && -e "$p" ]]; then
+      if [[ "$(_labwired_realpath "$p")" == "$real_agent" ]]; then
+        return 1
       fi
-      echo "$p"
-      return 0
     fi
-    # Bare path that exists as executable file (not via PATH)
-    if [[ -x "$c" ]]; then
-      echo "$c"
-      return 0
+    if _labwired_is_agent_launcher "$p"; then
+      return 1
     fi
-    return 1
+
+    echo "$p"
+    return 0
   }
 
   if [[ -n "${LABWIRED_CLI:-}" ]] && try_one "$LABWIRED_CLI"; then return 0; fi
   if [[ -n "${LABWIRED_SIM:-}" ]] && try_one "$LABWIRED_SIM"; then return 0; fi
-  if try_one labwired; then return 0; fi
+  # Prefer explicit sim names before generic `labwired`
   if try_one labwired-sim; then return 0; fi
   if try_one labwired-cli; then return 0; fi
+  if try_one labwired; then return 0; fi
   return 1
 }

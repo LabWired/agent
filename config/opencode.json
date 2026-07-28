@@ -25,13 +25,13 @@
   "provider": {
     "labwired-local": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "LabWired (local)",
+      "name": "LabWired",
       "options": {
         "baseURL": "{env:LABWIRED_MODEL_URL}",
         "apiKey": "{env:LABWIRED_MODEL_KEY}"
       },
       "models": {
-        "qwen2.5-coder": { "name": "Qwen2.5-Coder" }
+        "qwen2.5-coder": { "name": "LabWired · Qwen2.5-Coder" }
       }
     }
   },
@@ -40,8 +40,10 @@
   "share": "disabled",
   "agent": {
     "labwired": {
+      "name": "LabWired Firmware Agent",
       "description": "LabWired Firmware Agent — the easiest way to write firmware. Writes firmware and checks it on a virtual board.",
-      "mode": "primary"
+      "mode": "primary",
+      "color": "#0056b3"
     }
   },
   "default_agent": "labwired"

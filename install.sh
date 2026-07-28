@@ -68,6 +68,40 @@ else
   warn "  or https://opencode.ai"
 fi
 
+# Ensure `opencode` is on a PATH location users actually use (~/.local/bin)
+_labwired_link_opencode() {
+  mkdir -p "$BIN_DIR"
+  if command -v opencode >/dev/null 2>&1; then
+    local oc
+    oc="$(command -v opencode)"
+    # If already on BIN_DIR, done
+    if [[ "$oc" == "$BIN_DIR/opencode" ]]; then
+      return 0
+    fi
+  fi
+  local npm_bin=""
+  if command -v npm >/dev/null 2>&1; then
+    npm_bin="$(npm prefix -g 2>/dev/null)/bin/opencode"
+  fi
+  if [[ -n "$npm_bin" && -e "$npm_bin" ]]; then
+    ln -sfn "$npm_bin" "$BIN_DIR/opencode"
+    say "linked opencode → $BIN_DIR/opencode"
+    return 0
+  fi
+  # Fallback: walk npm root
+  if command -v npm >/dev/null 2>&1; then
+    local pkg
+    pkg="$(npm root -g 2>/dev/null)/opencode-ai/bin/opencode.exe"
+    if [[ -e "$pkg" ]]; then
+      ln -sfn "$pkg" "$BIN_DIR/opencode"
+      say "linked opencode → $BIN_DIR/opencode (from package)"
+      return 0
+    fi
+  fi
+  warn "could not place opencode on $BIN_DIR — ensure npm global bin is on PATH"
+}
+_labwired_link_opencode
+
 # 2. simulator CLI (oracle binary the MCP shells out to) ----------------------
 # Prefer LABWIRED_CLI / LABWIRED_SIM when set; do not invent a missing binary name.
 if [[ -n "${LABWIRED_CLI:-}" ]] && command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
@@ -115,10 +149,49 @@ cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
 say "wrote MCP command into $CFG_DIR/opencode.json"
 
-# 5. branded entrypoint -------------------------------------------------------
+# 5. product home + branded entrypoint ----------------------------------------
+# Full kit lives under ~/.labwired/agent so launcher always finds lib/branding.
+AGENT_HOME="${LABWIRED_AGENT_HOME:-$HOME/.labwired/agent}"
+say "installing product home → $AGENT_HOME"
+mkdir -p "$AGENT_HOME"
+# Sync kit files (preserve user's agent home as the product install root)
+rsync -a --delete \
+  --exclude '.git' \
+  --exclude 'node_modules' \
+  --exclude '.DS_Store' \
+  "$SRC/" "$AGENT_HOME/" 2>/dev/null || {
+  # rsync optional; fall back to cp
+  for d in bin lib config skills branding fixtures mcp scripts; do
+    if [[ -d "$SRC/$d" ]]; then
+      mkdir -p "$AGENT_HOME/$d"
+      cp -R "$SRC/$d/." "$AGENT_HOME/$d/"
+    fi
+  done
+  for f in install.sh demo.sh VERSION LICENSE README.md package.json CHANGELOG.md; do
+    [[ -f "$SRC/$f" ]] && cp "$SRC/$f" "$AGENT_HOME/$f"
+  done
+}
+
+# Branding into OpenCode config (product identity)
+mkdir -p "$CFG_DIR/branding"
+cp -R "$AGENT_HOME/branding/." "$CFG_DIR/branding/" 2>/dev/null || true
+if [[ -f "$AGENT_HOME/config/tui.json" ]]; then
+  cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
+fi
+if [[ -f "$AGENT_HOME/config/AGENTS.md" ]]; then
+  cp "$AGENT_HOME/config/AGENTS.md" "$CFG_DIR/AGENTS.md"
+fi
+# OpenCode also reads AGENTS from project; primary rules already in CFG_DIR
+
 mkdir -p "$BIN_DIR"
-install -m 0755 "$SRC/bin/labwired" "$BIN_DIR/labwired"
-say "installed agent launcher → $BIN_DIR/labwired"
+# Thin PATH wrapper → product home (always LabWired-branded, never bare opencode)
+cat >"$BIN_DIR/labwired" <<WRAP
+#!/usr/bin/env bash
+export LABWIRED_AGENT_HOME="${AGENT_HOME}"
+exec "${AGENT_HOME}/bin/labwired" "\$@"
+WRAP
+chmod 0755 "$BIN_DIR/labwired"
+say "installed LabWired launcher → $BIN_DIR/labwired"
 case ":$PATH:" in
   *":$BIN_DIR:"*) : ;;
   *) warn "$BIN_DIR is not on PATH — add:  export PATH=\"$BIN_DIR:\$PATH\"" ;;
@@ -126,23 +199,30 @@ esac
 
 # Resolved paths summary (sim may still be missing — doctor will say so)
 RESOLVED_SIM=""
-if RESOLVED_SIM="$(labwired_resolve_sim "$BIN_DIR/labwired" 2>/dev/null)"; then
+if RESOLVED_SIM="$(labwired_resolve_sim "$AGENT_HOME/bin/labwired" 2>/dev/null)"; then
   :
 else
-  RESOLVED_SIM="(not found — set LABWIRED_CLI or install simulator)"
+  RESOLVED_SIM="(not found — optional for doctor; needed for full checks)"
+fi
+
+if [[ -f "$AGENT_HOME/branding/banner.txt" ]]; then
+  cat "$AGENT_HOME/branding/banner.txt"
 fi
 
 cat <<EOF
 
 $(say "done — LabWired Firmware Agent installed")
+  product:  LabWired Firmware Agent
+  home:     $AGENT_HOME
   launcher: $BIN_DIR/labwired
   config:   $CFG_DIR/opencode.json
+  branding: $CFG_DIR/branding/
   sim:      $RESOLVED_SIM
   profile:  $PROFILE
 
 Next:
   labwired doctor
-  labwired              # start the agent
+  labwired
 
 Optional:
   ollama pull qwen2.5-coder && ollama serve
@@ -151,5 +231,6 @@ Optional:
 Prefer Claude or Codex?
   claude mcp add labwired --transport http https://api.labwired.com/mcp
 
-Pro workbench: https://labwired.com/pro.html
+Product: https://labwired.com/agent.html
+Pro:     https://labwired.com/pro.html
 EOF
