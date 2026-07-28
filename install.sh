@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# LabWired Firmware Agent installer — the easiest way to write firmware.
-# Wires stock OpenCode to the LabWired MCP harness (no fork).
-# No source fork: pure distribution layer under github.com/LabWired/agent.
+# LabWired Agent installer
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -205,32 +203,16 @@ else
   RESOLVED_SIM="(not found — optional for doctor; needed for full checks)"
 fi
 
-if [[ -f "$AGENT_HOME/branding/banner.txt" ]]; then
-  cat "$AGENT_HOME/branding/banner.txt"
-fi
-
 cat <<EOF
 
-$(say "done — LabWired Firmware Agent installed")
-  product:  LabWired Firmware Agent
-  home:     $AGENT_HOME
-  launcher: $BIN_DIR/labwired
-  config:   $CFG_DIR/opencode.json
-  branding: $CFG_DIR/branding/
-  sim:      $RESOLVED_SIM
-  profile:  $PROFILE
+$(say "installed")
+  home      $AGENT_HOME
+  labwired  $BIN_DIR/labwired
+  config    $CFG_DIR/opencode.json
+  sim       $RESOLVED_SIM
 
-Next:
   labwired doctor
   labwired
 
-Optional:
-  ollama pull qwen2.5-coder && ollama serve
-  curl -fsSL https://labwired.com/install.sh | sh   # simulator for full checks
-
-Prefer Claude or Codex?
-  claude mcp add labwired --transport http https://api.labwired.com/mcp
-
-Product: https://labwired.com/agent.html
-Pro:     https://labwired.com/pro.html
+  https://labwired.com/agent.html
 EOF

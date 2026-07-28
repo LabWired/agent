@@ -1,6 +1,1 @@
-
-  ╔══════════════════════════════════════════════════╗
-  ║  LabWired Firmware Agent                         ║
-  ║  the easiest way to write firmware               ║
-  ╚══════════════════════════════════════════════════╝
-
+LabWired Agent

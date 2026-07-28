@@ -42,8 +42,8 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "name": "LabWired Firmware Agent",
-      "description": "LabWired Firmware Agent — the easiest way to write firmware. On-prem. Writes firmware and checks it on a virtual board.",
+      "name": "LabWired Agent",
+      "description": "Write firmware and run it on a virtual board. On-prem.",
       "mode": "primary",
       "color": "#0056b3"
     }

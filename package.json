@@ -1,7 +1,7 @@
 {
   "name": "@labwired/agent",
   "version": "0.1.0",
-  "description": "LabWired Firmware Agent — the easiest way to write firmware",
+  "description": "LabWired Agent — write firmware, run it on a virtual board",
   "license": "MIT",
   "homepage": "https://labwired.com",
   "repository": {

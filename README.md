@@ -1,128 +1,94 @@
-# LabWired Firmware Agent — the easiest way to write firmware
+# LabWired Agent
 
 <p align="left">
   <img src="branding/logo.svg" alt="LabWired" width="32" height="32" />
 </p>
 
-<p align="center">
-  <a href="https://labwired.com/agent.html"><img src="docs/assets/agent-og.png" alt="LabWired Firmware Agent — Write. Check. Green." width="720" /></a>
-</p>
+Write firmware. Run it on a virtual board. Only green when it matches.
 
-An AI agent that writes firmware and checks it on a virtual board before you
-touch hardware. Free. Open source. Works with a local model, or with Claude /
-Codex.
-
-**Product page:** [labwired.com/agent.html](https://labwired.com/agent.html) · live **Write → Check → Fix → Green** demo
+[Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
-[![Install](https://img.shields.io/badge/install-curl%20%7C%20sh-black)](#install)
+[![version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
 
 ## Install
 
-**One command** (recommended):
-
 ```bash
 curl -fsSL https://labwired.com/agent-install.sh | sh
-labwired doctor
 labwired
 ```
-
-npm:
 
 ```bash
-npm i -g @labwired/agent
-labwired doctor
-labwired
+# or
+npm i -g @labwired/agent && labwired
 ```
-
-From git:
 
 ```bash
-git clone https://github.com/LabWired/agent && cd agent
-./install.sh
-labwired
+# or
+git clone https://github.com/LabWired/agent && cd agent && ./install.sh
 ```
 
-Already on Claude or Codex? Skip the agent shell and connect LabWired:
+Claude / Codex:
 
 ```bash
 claude mcp add labwired --transport http https://api.labwired.com/mcp
 codex mcp add labwired --url https://api.labwired.com/mcp
 ```
 
-Simulator (for full on-device-style checks on the twin):
+Simulator (for full checks):
 
 ```bash
 curl -fsSL https://labwired.com/install.sh | sh
 ```
 
-## What it does
+## How it works
 
-1. You describe the board and the job  
+1. You describe the board and the task  
 2. The agent writes firmware  
-3. It runs that firmware on a digital twin of the chip  
-4. You get a green result only when the behavior matches  
-
-No “looks fine in the source” passes.
-
-## Product line
-
-| Product | What you get |
-|---------|----------------|
-| **Firmware Agent** (this) | Free CLI agent + skills + twin check |
-| **[Pro](https://labwired.com/pro.html)** | Private projects, priority builds, editor workbench |
-| **Enterprise** | Air-gap, on-prem model, vault | Talk to us on the site |
-
-Packaging plan: [docs/PRODUCT.md](docs/PRODUCT.md).
-
-## Skills
-
-| Skill | What it’s for |
-|-------|----------------|
-| `verify-firmware` | Run the check; report only what the twin says |
-| `diagnose-firmware` | Fail first, fix, check again |
-| `inspect-evidence` | Explain a result without inventing details |
-| `board-bringup` | Pick a board and wire a valid setup |
-| `scaffold-firmware` | Minimal blink or serial “hello” |
-| `report-evidence` | Clear report for you or CI |
+3. It runs on a virtual board  
+4. Green only if behavior matches  
 
 ## Commands
 
-| Command | Purpose |
-|---------|---------|
-| `labwired` | Start the agent |
+| | |
+|--|--|
+| `labwired` | Start |
 | `labwired doctor` | Check install |
-| `labwired version` | Version info |
-| `./demo.sh` | Offline smoke + Gate 1 demo |
+| `labwired version` | Version |
+| `./demo.sh` | Smoke test |
+
+Optional local model:
 
 ```bash
-ollama pull qwen2.5-coder && ollama serve   # optional local model
+ollama pull qwen2.5-coder && ollama serve
 labwired
 ```
 
-## Air-gapped
+## Skills
+
+| | |
+|--|--|
+| `verify-firmware` | Run the check |
+| `diagnose-firmware` | Fail, patch, re-check |
+| `inspect-evidence` | Read a result |
+| `board-bringup` | Board + wiring |
+| `scaffold-firmware` | Blink / serial hello |
+| `report-evidence` | Report for you or CI |
+
+## Air-gap
 
 ```bash
 curl -fsSL https://labwired.com/agent-install.sh | sh -s -- --airgap
-# or: ./install.sh --airgap
 ```
 
-See [mcp/README.md](mcp/README.md).
+[mcp/README.md](mcp/README.md)
 
 ## Demo
 
-Red → green check story: [fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md).
+[fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md)
 
 ```bash
 ./demo.sh
 ```
 
-## Links
-
-- Site: [labwired.com](https://labwired.com)  
-- Pro: [labwired.com/pro.html](https://labwired.com/pro.html)  
-- Playground: [app.labwired.com](https://app.labwired.com/)  
-- Changelog: [CHANGELOG.md](CHANGELOG.md)  
-
-MIT — [LICENSE](LICENSE).
+MIT · [LICENSE](LICENSE)
