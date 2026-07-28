@@ -12,10 +12,12 @@ bash tests/harness.sh
 echo "==> skill + fixture shape"
 for skill in \
   verify-firmware diagnose-firmware inspect-evidence \
-  board-bringup scaffold-firmware report-evidence
+  board-bringup scaffold-firmware report-evidence flash-firmware
 do
   test -f "skills/$skill/SKILL.md"
 done
+# probe help must work without hardware
+bin/labwired probe help >/dev/null
 test -f fixtures/gate1/oracle.json
 test -f fixtures/gate1/artifacts/broken.verify.json
 test -f fixtures/gate1/artifacts/fixed.verify.json

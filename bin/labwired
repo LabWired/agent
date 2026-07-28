@@ -37,6 +37,10 @@ ROOT="$(_labwired_find_root)"
 export LABWIRED_AGENT_HOME="$ROOT"
 # shellcheck source=lib/resolve-sim.sh
 source "$ROOT/lib/resolve-sim.sh"
+# shellcheck source=lib/resolve-probe.sh
+source "$ROOT/lib/resolve-probe.sh"
+# shellcheck source=lib/probe.sh
+source "$ROOT/lib/probe.sh"
 
 # LabWired brand colors (cyan accent in terminal)
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
@@ -162,7 +166,7 @@ cmd_doctor() {
   local skill
   for skill in \
     verify-firmware diagnose-firmware inspect-evidence \
-    board-bringup scaffold-firmware report-evidence
+    board-bringup scaffold-firmware report-evidence flash-firmware
   do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
@@ -171,6 +175,20 @@ cmd_doctor() {
       ok=1
     fi
   done
+
+  # Multi-probe backend (probe-rs) + virtual LabWired device
+  local prs=""
+  if prs="$(labwired_resolve_probe_rs 2>/dev/null)"; then
+    say "ok  probe-backend: $prs (ST-Link / J-Link / CMSIS-DAP / …)"
+  else
+    printf '\033[33mwarn\033[0m probe-backend: probe-rs not installed\n'
+    printf '     labwired probe install-backend   # multi-probe; not OpenOCD\n'
+  fi
+  if sim="$(labwired_resolve_sim "$0" 2>/dev/null)"; then
+    say "ok  virtual-device: LabWired sim ($sim)"
+  else
+    printf '\033[33mwarn\033[0m virtual-device: sim missing (virtual boards)\n'
+  fi
 
   if [[ $ok -eq 0 ]]; then
     say "ready"
@@ -194,13 +212,21 @@ Usage:
   labwired version         Version
   labwired assert-status <expected> [file]
                            Exit 0 if verify JSON status matches
+  labwired probe …         Boards: physical probes + virtual LabWired
   labwired help            This help
+
+Probe (any popular debugger via probe-rs; virtual = LabWired sim):
+  labwired probe list
+  labwired probe chips stm32
+  labwired probe flash <elf> --chip <id> [--target virtual|probe|auto]
+  labwired probe install-backend
 
 Env:
   LABWIRED_MODEL_URL       Model base URL (default Ollama)
   LABWIRED_MODEL_KEY       API key
   LABWIRED_BUILDER_URL     Compile service
   LABWIRED_CLI / LABWIRED_SIM   Simulator binary
+  LABWIRED_PROBE_RS        probe-rs binary override
   OPENCODE_PIN             opencode-ai pin (default ${OPENCODE_PIN})
   OPENCODE_CONFIG_DIR      Config dir (default ~/.config/opencode)
 EOF
@@ -228,6 +254,10 @@ case "${1:-}" in
   assert-status)
     shift
     cmd_assert_status "$@"
+    ;;
+  probe)
+    shift
+    labwired_probe_cmd "$@"
     ;;
   "")
     if ! command -v opencode >/dev/null 2>&1; then

@@ -55,7 +55,21 @@ curl -fsSL https://labwired.com/install.sh | sh
 | `labwired` | Start |
 | `labwired doctor` | Check install |
 | `labwired version` | Version |
+| `labwired probe …` | Boards: probes + virtual LabWired |
 | `./demo.sh` | Smoke test |
+
+### Boards (not OpenOCD)
+
+Popular debuggers via **probe-rs** (ST-Link, J-Link, CMSIS-DAP, …).  
+Virtual boards via **LabWired sim** (validation device).
+
+```bash
+labwired probe list
+labwired probe chips stm32
+labwired probe flash build/app.elf --chip STM32L476RGTx
+labwired probe flash build/app.elf --target virtual --chip nucleo-l476rg
+labwired probe install-backend   # if probe-rs missing
+```
 
 Optional local model:
 

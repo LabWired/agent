@@ -116,6 +116,33 @@ else
   warn "  export LABWIRED_CLI=/path/to/sim   # real path; never a fictional name"
 fi
 
+# 2b. multi-probe backend (probe-rs) — not OpenOCD
+# Default: do not block install on long cargo builds. Set LABWIRED_INSTALL_PROBE_RS=1 to install now.
+# shellcheck source=lib/resolve-probe.sh
+source "$SRC/lib/resolve-probe.sh"
+mkdir -p "$BIN_DIR"
+if prs="$(labwired_resolve_probe_rs 2>/dev/null)"; then
+  say "probe-rs already installed ($prs)"
+  if [[ "$prs" != "$BIN_DIR/probe-rs" && -x "$prs" ]]; then
+    ln -sfn "$prs" "$BIN_DIR/probe-rs" 2>/dev/null || true
+  fi
+elif [[ "${LABWIRED_INSTALL_PROBE_RS:-0}" == "1" ]] && command -v cargo >/dev/null 2>&1; then
+  say "installing probe-rs (ST-Link / J-Link / CMSIS-DAP / … — not OpenOCD)"
+  if cargo install probe-rs-tools --locked 2>/dev/null \
+    || cargo install probe-rs-cli --locked 2>/dev/null; then
+    if [[ -x "${HOME}/.cargo/bin/probe-rs" ]]; then
+      ln -sfn "${HOME}/.cargo/bin/probe-rs" "$BIN_DIR/probe-rs"
+      say "linked probe-rs → $BIN_DIR/probe-rs"
+    fi
+  else
+    warn "probe-rs install failed — later: labwired probe install-backend"
+  fi
+else
+  warn "probe-rs not on PATH yet (physical boards)"
+  warn "  labwired probe install-backend"
+  warn "  or: LABWIRED_INSTALL_PROBE_RS=1 ./install.sh"
+fi
+
 # 3. resolve MCP command (airgap fails without vendor / LABWIRED_MCP_ENTRY) ---
 MCP_JSON="$(labwired_resolve_mcp_command_json "$SRC")" || {
   die "airgap install requires LABWIRED_MCP_ENTRY or mcp/vendor/index.js — see mcp/README.md"

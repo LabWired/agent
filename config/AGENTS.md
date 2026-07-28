@@ -43,6 +43,7 @@ labwired assert-status model_verified < verify.json
 | `board-bringup` | New board or wiring |
 | `scaffold-firmware` | Minimal blink / serial hello |
 | `report-evidence` | Clear summary for the user or CI |
+| `flash-firmware` | Physical probes (probe-rs) or virtual LabWired device |
 
 ## Tools
 

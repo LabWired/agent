@@ -236,7 +236,7 @@ echo "resolve-mcp tests passed"
 
 # --- skill inventory ---------------------------------------------------------
 
-want=$'board-bringup\ndiagnose-firmware\ninspect-evidence\nreport-evidence\nscaffold-firmware\nverify-firmware'
+want=$'board-bringup\ndiagnose-firmware\nflash-firmware\ninspect-evidence\nreport-evidence\nscaffold-firmware\nverify-firmware'
 got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
 assert_eq "skill inventory" "$got" "$want"
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then

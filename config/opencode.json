@@ -19,7 +19,8 @@
       "inspect-evidence": "allow",
       "board-bringup": "allow",
       "scaffold-firmware": "allow",
-      "report-evidence": "allow"
+      "report-evidence": "allow",
+      "flash-firmware": "allow"
     }
   },
   "provider": {

@@ -1,6 +1,6 @@
 {
   "name": "@labwired/agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LabWired Agent — write firmware, run it on a virtual board",
   "license": "MIT",
   "homepage": "https://labwired.com",
