@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LabWired Firmware Agent installer — the easy way to build hardware.
+# LabWired Firmware Agent installer — the easiest way to write firmware.
 # Wires stock OpenCode to the LabWired MCP harness (no fork).
 # No source fork: pure distribution layer under github.com/LabWired/agent.
 set -euo pipefail

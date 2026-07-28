@@ -16,7 +16,10 @@
     "skill": {
       "verify-firmware": "allow",
       "diagnose-firmware": "allow",
-      "inspect-evidence": "allow"
+      "inspect-evidence": "allow",
+      "board-bringup": "allow",
+      "scaffold-firmware": "allow",
+      "report-evidence": "allow"
     }
   },
   "provider": {
@@ -37,7 +40,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired Firmware Agent — the easy way to build hardware. Drafts firmware; model-verified only when labwired_verify returns status model_verified.",
+      "description": "LabWired Firmware Agent — the easiest way to write firmware. Agent proposes; oracle disposes. Model-verified only when labwired_verify returns status model_verified.",
       "mode": "primary"
     }
   },

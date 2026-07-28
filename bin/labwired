@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# LabWired Firmware Agent — the easy way to build hardware.
+# LabWired Firmware Agent — the easiest way to write firmware.
+# (LabWired product tagline: the easy way to build hardware.)
 # OpenCode shell (no fork): wires opencode to @labwired/mcp, skills, local/on-prem model.
 set -euo pipefail
 
@@ -41,7 +42,8 @@ parse_opencode_version() {
 }
 
 cmd_version() {
-  echo "LabWired Firmware Agent — the easy way to build hardware"
+  echo "LabWired Firmware Agent — the easiest way to write firmware"
+  echo "agent proposes · oracle disposes"
   echo "opencode pin: ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
@@ -101,7 +103,10 @@ cmd_doctor() {
   fi
 
   local skill
-  for skill in verify-firmware diagnose-firmware inspect-evidence; do
+  for skill in \
+    verify-firmware diagnose-firmware inspect-evidence \
+    board-bringup scaffold-firmware report-evidence
+  do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     else
@@ -119,8 +124,13 @@ cmd_doctor() {
 }
 
 cmd_help() {
+  if [[ -f "$ROOT/branding/banner.txt" ]]; then
+    cat "$ROOT/branding/banner.txt"
+    echo
+  fi
   cat <<EOF
-LabWired Firmware Agent — the easy way to build hardware.
+LabWired Firmware Agent — the easiest way to write firmware.
+agent proposes · oracle disposes
 
 Usage:
   labwired              Launch OpenCode with LabWired MCP + skills

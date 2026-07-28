@@ -17,7 +17,10 @@
     "skill": {
       "verify-firmware": "allow",
       "diagnose-firmware": "allow",
-      "inspect-evidence": "allow"
+      "inspect-evidence": "allow",
+      "board-bringup": "allow",
+      "scaffold-firmware": "allow",
+      "report-evidence": "allow"
     }
   },
   "provider": {
@@ -39,7 +42,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired firmware agent (on-prem) — proposes firmware; model-verifies with the deterministic oracle harness.",
+      "description": "LabWired Firmware Agent (on-prem) — the easiest way to write firmware. Agent proposes; oracle disposes. Model-verified only when labwired_verify returns status model_verified.",
       "mode": "primary"
     }
   },
