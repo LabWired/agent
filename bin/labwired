@@ -111,10 +111,10 @@ cmd_doctor() {
   done
 
   if [[ $ok -eq 0 ]]; then
-    say "LabWired OpenCode harness ready."
+    say "LabWired Firmware Agent ready."
     return 0
   fi
-  printf '\nLabWired OpenCode harness not ready.\n'
+  printf '\nLabWired Firmware Agent not ready.\n'
   return 1
 }
 
