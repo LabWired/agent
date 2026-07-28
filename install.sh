@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# LabWired agent installer — wires stock OpenCode to the LabWired MCP harness.
+# LabWired Firmware Agent installer — the easy way to build hardware.
+# Wires stock OpenCode to the LabWired MCP harness (no fork).
 # No source fork: pure distribution layer under github.com/LabWired/agent.
 set -euo pipefail
 

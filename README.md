@@ -1,10 +1,11 @@
 # LabWired Firmware Agent
 
-Install an agent that writes firmware and **stops at a real gate**.
+**The easy way to build hardware.**
 
-A model may draft code. It may not claim the firmware works until LabWired’s
-oracle returns `status: model_verified` on the exact binary. Compile success,
-UART chatter, or “looks fine in the source” is not a pass.
+Install an agent that writes firmware and **stops at a real gate**. A model may
+draft code. It may not claim the firmware works until LabWired’s oracle returns
+`status: model_verified` on the exact binary. Compile success, UART chatter, or
+“looks fine in the source” is not a pass.
 
 This repo is a thin [OpenCode](https://opencode.ai) distribution (MIT, no fork):
 launcher, config, skills, and MCP wiring. The sim and MCP server live elsewhere.

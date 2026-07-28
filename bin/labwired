@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# LabWired Firmware Agent — OpenCode shell (no fork).
-# Wires opencode to @labwired/mcp, skills, and a local/on-prem model.
+# LabWired Firmware Agent — the easy way to build hardware.
+# OpenCode shell (no fork): wires opencode to @labwired/mcp, skills, local/on-prem model.
 set -euo pipefail
 
 export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-http://127.0.0.1:11434/v1}"
@@ -41,7 +41,7 @@ parse_opencode_version() {
 }
 
 cmd_version() {
-  echo "LabWired Firmware Agent (OpenCode shell)"
+  echo "LabWired Firmware Agent — the easy way to build hardware"
   echo "opencode pin: ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
@@ -120,7 +120,7 @@ cmd_doctor() {
 
 cmd_help() {
   cat <<EOF
-LabWired Firmware Agent — OpenCode shell. Oracle gate on labwired_verify.
+LabWired Firmware Agent — the easy way to build hardware.
 
 Usage:
   labwired              Launch OpenCode with LabWired MCP + skills

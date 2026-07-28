@@ -37,7 +37,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired Firmware Agent. Drafts firmware; model-verified only when labwired_verify returns status model_verified.",
+      "description": "LabWired Firmware Agent — the easy way to build hardware. Drafts firmware; model-verified only when labwired_verify returns status model_verified.",
       "mode": "primary"
     }
   },
