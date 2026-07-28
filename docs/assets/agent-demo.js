@@ -1,28 +1,28 @@
 /**
- * LabWired Firmware Agent — product demo loop (draft → fail → fix → green).
- * Pure front-end; no network. ~30s full cycle.
+ * LabWired Firmware Agent — product demo loop.
+ * Write → Check → Fix → Green. ~28s cycle, holds the green beat longer.
  */
 (function () {
   var host = document.getElementById('ag-term-lines');
   var steps = document.querySelectorAll('#ag-step-list [data-step]');
   if (!host) return;
 
+  // delayMs: time to wait *after* showing this line (before the next)
   var script = [
-    { step: 0, html: '<span class="prompt">you ›</span> Blink LED and print ready on UART' },
-    { step: 0, html: '<span class="dim">agent ›</span> Drafting <span class="hl">main.c</span> for nucleo-l476rg…' },
-    { step: 0, html: '<span class="dim">agent ›</span> Wrote firmware · compiling…' },
-    { step: 1, html: '<span class="dim">check ›</span> Running on virtual board…' },
-    { step: 1, html: '<span class="bad">failed</span> · expected serial <span class="hl">LABWIRED_OK</span>, saw <span class="hl">BOOT</span>' },
-    { step: 2, html: '<span class="dim">agent ›</span> Patching UART marker…' },
-    { step: 2, html: '<span class="dim">agent ›</span> Recompiling…' },
-    { step: 3, html: '<span class="dim">check ›</span> Running on virtual board…' },
-    { step: 3, html: '<span class="ok">green</span> · serial matches · ready to flash when you are' },
-    { step: 3, html: '<span class="dim">— loop restarts —</span>' },
+    { step: 0, delayMs: 1600, html: '<span class="prompt">you ›</span> Make the board print ready on serial' },
+    { step: 0, delayMs: 1400, html: '<span class="dim">agent ›</span> Writing <span class="hl">main.c</span>…' },
+    { step: 0, delayMs: 1200, html: '<span class="dim">agent ›</span> Compiling…' },
+    { step: 1, delayMs: 1600, html: '<span class="dim">check ›</span> Running on virtual board…' },
+    { step: 1, delayMs: 2600, html: '<span class="bad">failed</span> · wanted <span class="hl">READY</span>, got <span class="hl">BOOT</span>' },
+    { step: 2, delayMs: 1500, html: '<span class="dim">agent ›</span> Fixing the serial message…' },
+    { step: 2, delayMs: 1200, html: '<span class="dim">agent ›</span> Compiling again…' },
+    { step: 3, delayMs: 1500, html: '<span class="dim">check ›</span> Running on virtual board…' },
+    { step: 3, delayMs: 3200, html: '<span class="ok">green</span> · it matches · ready when you are' },
   ];
 
-  var lineDelay = 2200;
-  var restartPause = 2800;
+  var restartPause = 1800;
   var i = 0;
+  var timer = null;
 
   function setStep(n) {
     steps.forEach(function (el) {
@@ -35,11 +35,9 @@
     div.className = 'line';
     div.innerHTML = html;
     host.appendChild(div);
-    // force reflow for transition
     void div.offsetWidth;
     div.classList.add('show');
-    // keep last ~10 lines visible
-    while (host.children.length > 10) {
+    while (host.children.length > 9) {
       host.removeChild(host.firstChild);
     }
   }
@@ -53,22 +51,22 @@
     var item = script[i];
     setStep(item.step);
     addLine(item.html);
+    var wait = item.delayMs || 1500;
     i += 1;
     if (i >= script.length) {
       i = 0;
-      setTimeout(tick, restartPause);
+      timer = setTimeout(tick, restartPause);
     } else {
-      setTimeout(tick, lineDelay);
+      timer = setTimeout(tick, wait);
     }
   }
 
-  // Prefer reduced motion: show final state only
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce) {
     clearTerm();
     setStep(3);
-    script.filter(function (s) { return s.step === 3 && s.html.indexOf('green') !== -1; })
-      .forEach(function (s) { addLine(s.html); });
+    addLine('<span class="prompt">you ›</span> Make the board print ready on serial');
+    addLine('<span class="ok">green</span> · it matches · ready when you are');
     return;
   }
 
