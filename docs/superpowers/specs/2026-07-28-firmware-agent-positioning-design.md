@@ -7,12 +7,13 @@
 | Repo | Role |
 |------|------|
 | [LabWired/agent](https://github.com/LabWired/agent) (`Projects/labwired-agent`) | Open Firmware Agent kit (OpenCode harness + skills + branding) |
-| [labwired-landing-deck](https://github.com/…) (`Projects/labwired-landing-deck`) | Marketing funnel: homepage dual-path + `/pro.html` |
+| monorepo `landing_page/` (`Projects/labwired/landing_page`) | Live site source: **already has** `/pro.html` + homepage; we *extend* the funnel |
 
 **Related docs:**
 
 - `docs/plans/2026-07-27-unembarrass-agent-harness.md` (harness mechanics — already shipped)
 - monorepo `docs/positioning.md`, `docs/pro-page-spec.md`, `docs/product-tiers.md`
+- **Live:** https://labwired.com/pro.html (source: `landing_page/astro/src/partials/pro.body.html`)
 
 ---
 
@@ -21,7 +22,7 @@
 Position LabWired as open-source tooling and the **go-to place to get a Firmware Agent**:
 
 1. **Agent kit** — stock OpenCode harness, LabWired-branded, with a clear install story and skill pack.
-2. **Landing funnel** — Pro product narrative (`/pro.html`) plus dual path on the **main** homepage (turnkey agent + BYO MCP).
+2. **Landing funnel** — **Enhance** the existing Pro page (https://labwired.com/pro.html is already live) and add dual path on the **main** homepage (turnkey agent + BYO MCP). Do **not** rebuild `/pro.html` from scratch.
 
 We do **not** fork OpenCode. We keep the existing harness (launcher, doctor, claim gate, resolve-sim/mcp, install, demo, tests) and package it as product surface.
 
@@ -156,63 +157,54 @@ Allowed micro-edits:
 
 ---
 
-## 4. Landing funnel
+## 4. Landing funnel (monorepo `landing_page/` — Pro already live)
 
-### 4.1 `/pro.html` (implement pro-page-spec, adapted)
+**Correction (2026-07-28):** https://labwired.com/pro.html **ships today**. Source of truth:
 
-Source of narrative: monorepo `docs/pro-page-spec.md`.
+- `landing_page/astro/src/pages/pro.astro`
+- `landing_page/astro/src/partials/pro.body.html` / `pro.head.html`
+- Nav already includes Pro in `landing_page/astro/src/layouts/Layout.astro`
+- Pricing tiers partial exists: `pricing-tiers.partial.html`
+- Stripe Get Pro CTA is live on the Pro page
 
-Implement in **labwired-landing-deck** (live site source), not only monorepo docs:
+**labwired-landing-deck** is a separate/legacy deck — **do not implement Pro there** for this work. Funnel edits go in **`w1ne/labwired` → `landing_page/`**.
 
-| File | Action |
-|------|--------|
-| `astro/src/pages/pro.astro` | New page |
-| `astro/src/partials/pro.body.html` | Sections |
-| `astro/src/partials/pro.head.html` | Scoped styles + meta |
-| `astro/src/layouts/Layout.astro` | Nav link **Pro** between For CI and Pricing |
-| `components/header.html` | Same nav for legacy HTML |
-| Built `pro.html` | After Astro build (or mirror CI pattern) |
-| `tests/content.test.js` | Assert Pro nav, hero promise, agent GitHub link, no vaporware red flags |
+### 4.1 What’s already on Pro (do not rebuild)
 
-**Sections (top → bottom):**
+Live narrative (Write → Run → Rewind):
 
-1. Hero — ship firmware you can trust; CTAs: Get Pro / Open Playground / Get the Firmware Agent (OSS)
-2. Develop → Test → Debug loop cards (oracle + time-travel honesty)
-3. Why honest (three wedge bullets)
-4. What’s in Pro (aligned with live pricing honesty)
-5. Supported tech strip (only sim-verified claims)
-6. Enterprise teaser
-7. Pricing — **adapt**: landing-deck currently has pilot-style `pricing.html` (€4,999 pilot), **not** Starter/Pro $9/$39 partial. Do **not** invent a tiers partial with stale numbers. Prefer: link/embed current pricing truth + “Pro product story” language from `product-tiers.md` with clear “checkout coming soon” if still true, **or** pilot CTA if that remains the live paid path. Single source of truth: do not hardcode conflicting prices.
-8. FAQ — BYO agent vs turnkey harness; sim first; on-prem = Enterprise
+- Hero: “The easiest way to write firmware” + Get Pro (Stripe) + Open Playground
+- Loop cards: agent/BYO harness for Zephyr write; sim run without a desk board; reverse-step
+- Feature list already mentions **“Agent harness — built in, or bring your own Claude or Codex”** with **Coming soon**
+- FAQ already covers BYO agent, no hardware required, cloud vs Enterprise
 
-**Agent kit callout (required):**
+### 4.2 What we change on Pro (enhance only)
 
-- Explicit block: open-source **Firmware Agent** on GitHub (`https://github.com/LabWired/agent`)
-- Install one-liner matching agent README
-- Wording: “opencode-based agent harness” / “OpenCode-based” — not “we built OpenCode”
+| Change | Detail |
+|--------|--------|
+| **Promote harness from “Coming soon”** | When `LabWired/agent` packaging is ready: ship OSS install path; remove or narrow “Coming soon” for the **open harness kit** (Pro cloud integrations can stay phased) |
+| **Firmware Agent callout** | Explicit block: open-source kit at `https://github.com/LabWired/agent` + install one-liner matching agent README |
+| **Honesty** | Keep “OpenCode-based / opencode-based harness” language; claim gate story optional one-liner (oracle disposes) |
+| **Secondary CTA** | e.g. “Get the open Firmware Agent →” alongside Get Pro / Playground (does not replace paid CTA) |
+| **FAQ** | Point BYO + turnkey answers at the GitHub kit when live |
 
-### 4.2 Homepage dual-path (`#agent-harness`)
+Do **not** rewrite hero positioning wholesale unless product asks — Pro page is working. We **link the kit into the existing story**.
 
-Edit `astro/src/partials/index.body.html` (and rebuild static `index.html`):
+### 4.3 Homepage dual-path
 
-- Section kicker can stay “For coding agents”
-- H2/sub: include **turnkey Firmware Agent** alongside MCP
-- **Path A — Turnkey agent:** clone + `./install.sh` + link to repo + optional `/pro.html`
-- **Path B — BYO MCP:** keep hosted Codex/Claude commands + local `npx -y @labwired/mcp`
-- Hero primary CTA: either “Get the Firmware Agent →” (anchor to dual-path) or dual CTAs (agent + Playground) — prefer dual so Playground is not demoted
+Edit monorepo `landing_page/astro/src/partials/index.body.html` (current home is agent-prompt / projects style — not the landing-deck `#agent-harness` block):
 
-### 4.3 Nav / GitHub
+- Add a clear path to **turnkey Firmware Agent** (`LabWired/agent`) and keep / reinforce **BYO MCP** / Playground
+- Link Pro (`/pro.html`) where the paid workbench story fits
+- Prefer additive section or CTA strip over full homepage redesign
 
-- Nav: add **Pro**
-- Consider secondary GitHub link to `LabWired/agent` on Pro and agent-harness only (homepage trust strip may keep core stars; Pro/agent sections link agent kit)
+### 4.4 Content / design tests
 
-### 4.4 Content tests
+Extend monorepo landing tests (e.g. `landing_page/tests/…`):
 
-Extend `tests/content.test.js`:
-
-- Pro page exists and is linked from chrome
-- Agent install string or `github.com/LabWired/agent` on homepage agent section
-- No claim that AI self-grades as verified
+- `github.com/LabWired/agent` (or install path) present where we claim the open agent
+- Pro still has Get Pro + no vaporware regressions
+- Harness “Coming soon” consistent with ship state
 
 ---
 
@@ -244,9 +236,9 @@ Across agent README, skills, Pro page, homepage:
 1. `LabWired/agent` README reads as a Firmware Agent product page; install path works.
 2. Six skills present, allowlisted, installed by `install.sh`, asserted in `tests/harness.sh`.
 3. `labwired doctor` / `./demo.sh` / harness tests remain green (or fail only for missing sim, as today).
-4. `/pro.html` ships in landing-deck with nav; tells Pro loop + OSS agent kit.
-5. Homepage `#agent-harness` offers turnkey agent + BYO MCP.
-6. No conflicting price claims between Pro page and live pricing.
+4. Live `/pro.html` links the open Firmware Agent kit; harness “Coming soon” updated to match ship state.
+5. Homepage offers turnkey agent + existing Playground/MCP paths without a full redesign.
+6. No conflicting price claims; Stripe Get Pro stays the paid CTA.
 7. Spec-aligned wording with `positioning.md` propose/dispose story.
 
 ---
@@ -254,12 +246,12 @@ Across agent README, skills, Pro page, homepage:
 ## 8. Implementation order (for the plan)
 
 1. **Agent kit packaging** — branding, README, AGENTS, three skills, opencode permissions, harness tests.
-2. **Landing Pro page** — partials + nav + content tests.
-3. **Homepage dual-path** — agent-harness section + content tests.
-4. **Cross-link polish** — llms.txt / agent README ↔ pro/home consistency.
-5. **Verify** — harness.sh, landing content tests, manual install smoke if environment allows.
+2. **Pro page enhance** — agent callout + CTAs + FAQ/feature “Coming soon” truth in monorepo `landing_page/`.
+3. **Homepage dual-path** — additive CTAs/section for the open agent kit.
+4. **Cross-link polish** — agent README ↔ pro/home; llms if needed.
+5. **Verify** — agent `tests/harness.sh`; monorepo landing tests; optional install smoke.
 
-Suggested PR split: (1) agent repo, (2) landing-deck — so each deploys independently.
+Suggested PR split: (1) `LabWired/agent`, (2) monorepo `landing_page/` — independent deploys.
 
 ---
 
@@ -267,11 +259,12 @@ Suggested PR split: (1) agent repo, (2) landing-deck — so each deploys indepen
 
 | Question | Decision |
 |----------|----------|
-| Scope | Agent kit + Pro page + homepage (Approach A) |
+| Scope | Agent kit + enhance live Pro + homepage (Approach A) |
 | Skills | Trio + board-bringup, scaffold-firmware, report-evidence |
-| Funnel | Pro page + agent on main |
+| Funnel | **Existing** https://labwired.com/pro.html + agent on main |
 | OpenCode | Keep harness; no fork |
-| Pricing on Pro page | Do not invent tiers partial; align with live landing pricing truth |
+| Landing source | monorepo `landing_page/` (not labwired-landing-deck) |
+| Pricing on Pro page | Already live Stripe + tiers partial — do not invent parallel pricing |
 
 ---
 
