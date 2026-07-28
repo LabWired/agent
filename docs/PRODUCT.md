@@ -103,9 +103,9 @@ Install must land:
 
 ### P1 — looks like a product
 
-- [ ] Dedicated `/agent` page (hero, install, demo GIF, Pro upsell)  
-- [ ] 30s screen recording / GIF: describe → fail → fix → green  
-- [ ] GitHub Release `v0.1.0` with notes  
+- [x] Dedicated `/agent` page (hero, install, looping demo, Pro upsell)  
+- [x] ~30s looping demo: describe → fail → fix → green (`assets/agent-demo.js`)  
+- [x] GitHub Release `v0.1.0` with notes  
 - [ ] `labwired update` (pull agent home + reinstall skills)  
 - [ ] Social OG image for agent  
 

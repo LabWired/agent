@@ -4,9 +4,15 @@
   <img src="branding/logo.svg" alt="LabWired" width="32" height="32" />
 </p>
 
+<p align="center">
+  <a href="https://labwired.com/agent.html"><img src="docs/assets/agent-og.png" alt="LabWired Firmware Agent — Write. Check. Green." width="720" /></a>
+</p>
+
 An AI agent that writes firmware and checks it on a virtual board before you
 touch hardware. Free. Open source. Works with a local model, or with Claude /
 Codex.
+
+**Product page:** [labwired.com/agent.html](https://labwired.com/agent.html) · live **Write → Check → Fix → Green** demo
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
