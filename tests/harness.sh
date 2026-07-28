@@ -200,7 +200,7 @@ echo "resolve-mcp tests passed"
 
 # --- skill inventory ---------------------------------------------------------
 
-want=$'diagnose-firmware\ninspect-evidence\nverify-firmware'
+want=$'board-bringup\ndiagnose-firmware\ninspect-evidence\nreport-evidence\nscaffold-firmware\nverify-firmware'
 got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
 assert_eq "skill inventory" "$got" "$want"
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then
@@ -246,6 +246,20 @@ if echo '{"content":"{\"status\":\"model_verified\"}"}' | labwired_assert_status
   echo "ok   assert-status nested content status string"
 else
   echo "FAIL assert-status nested content status string"
+  fail=1
+fi
+
+# Gate 1 public proof artifacts (offline claim shape)
+if labwired_assert_status failed <"$ROOT/fixtures/gate1/artifacts/broken.verify.json" >/dev/null; then
+  echo "ok   gate1 artifact broken → failed"
+else
+  echo "FAIL gate1 artifact broken should be status failed"
+  fail=1
+fi
+if labwired_assert_status model_verified <"$ROOT/fixtures/gate1/artifacts/fixed.verify.json" >/dev/null; then
+  echo "ok   gate1 artifact fixed → model_verified"
+else
+  echo "FAIL gate1 artifact fixed should be status model_verified"
   fail=1
 fi
 

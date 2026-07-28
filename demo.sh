@@ -10,12 +10,21 @@ echo "==> harness unit tests"
 bash tests/harness.sh
 
 echo "==> skill + fixture shape"
-test -f skills/verify-firmware/SKILL.md
-test -f skills/diagnose-firmware/SKILL.md
-test -f skills/inspect-evidence/SKILL.md
+for skill in \
+  verify-firmware diagnose-firmware inspect-evidence \
+  board-bringup scaffold-firmware report-evidence
+do
+  test -f "skills/$skill/SKILL.md"
+done
 test -f fixtures/gate1/oracle.json
+test -f fixtures/gate1/artifacts/broken.verify.json
+test -f fixtures/gate1/artifacts/fixed.verify.json
 grep -q LABWIRED_OK fixtures/gate1/fixed/main.c
 ! grep -q LABWIRED_OK fixtures/gate1/broken/main.c
+
+echo "==> Gate 1 claim artifacts"
+bin/labwired assert-status failed fixtures/gate1/artifacts/broken.verify.json
+bin/labwired assert-status model_verified fixtures/gate1/artifacts/fixed.verify.json
 
 echo "==> doctor (may warn if OpenCode/sim not installed)"
 if bin/labwired doctor; then

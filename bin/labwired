@@ -43,7 +43,6 @@ parse_opencode_version() {
 
 cmd_version() {
   echo "LabWired Firmware Agent — the easiest way to write firmware"
-  echo "agent proposes · oracle disposes"
   echo "opencode pin: ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
@@ -130,7 +129,6 @@ cmd_help() {
   fi
   cat <<EOF
 LabWired Firmware Agent — the easiest way to write firmware.
-agent proposes · oracle disposes
 
 Usage:
   labwired              Launch OpenCode with LabWired MCP + skills
@@ -154,9 +152,6 @@ Env:
 Simulator resolution (first match): LABWIRED_CLI, LABWIRED_SIM, labwired
 (if not this agent), labwired-sim, labwired-cli — only names that exist.
 Never defaults to a fictional binary.
-
-This is a distribution layer only — no OpenCode fork.
-Oracle contracts live in the LabWired platform; this repo only wires the agent.
 EOF
 }
 

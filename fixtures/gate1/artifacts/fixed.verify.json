@@ -1,0 +1,20 @@
+{
+  "status": "model_verified",
+  "proven": true,
+  "firmware_ref": "fixtures/gate1/fixed (demo digest)",
+  "board": "nucleo-l476rg",
+  "oracle": {
+    "serial": [{ "contains": "LABWIRED_OK" }]
+  },
+  "oracle_results": [
+    {
+      "clause": "serial.contains:LABWIRED_OK",
+      "passed": true,
+      "detail": "UART observed LABWIRED_OK"
+    }
+  ],
+  "gaps": [],
+  "evidence_ref": "sha256:gate1-demo-fixed-not-a-production-digest",
+  "diagnosis": null,
+  "note": "Gate 1 green artifact — illustrative payload for offline assert-status / report demos. Live model_verified requires labwired_verify against a healthy twin; this file is not hardware proof."
+}

@@ -1,0 +1,21 @@
+{
+  "status": "failed",
+  "proven": false,
+  "firmware_ref": "fixtures/gate1/broken (demo digest)",
+  "board": "nucleo-l476rg",
+  "oracle": {
+    "serial": [{ "contains": "LABWIRED_OK" }]
+  },
+  "oracle_results": [
+    {
+      "clause": "serial.contains:LABWIRED_OK",
+      "passed": false,
+      "detail": "UART captured BOOT; required marker LABWIRED_OK not observed"
+    }
+  ],
+  "gaps": [
+    "serial marker LABWIRED_OK missing (saw BOOT)"
+  ],
+  "diagnosis": "Firmware printed BOOT instead of LABWIRED_OK. Fix the UART marker, recompile, re-verify with the same oracle.",
+  "note": "Gate 1 red artifact — illustrative payload for offline assert-status / report demos. Live model_verified requires labwired_verify against a healthy twin."
+}

@@ -1,7 +1,7 @@
 # Design: LabWired Firmware Agent positioning
 
 **Date:** 2026-07-28  
-**Status:** Approved for planning  
+**Status:** Implemented (2026-07-28) — kit packaging + Gate 1 artifacts + landing one-liner; deploy landing + push agent still pending  
 **Repos:**
 
 | Repo | Role |
@@ -97,7 +97,7 @@ Tone: open-source product, not internal ops. Keep technical accuracy from the cu
 
 Launcher copy:
 
-- `labwired version` / help: “LabWired Firmware Agent (OpenCode harness)”
+- `labwired version` / help: “LabWired Firmware Agent — the easiest way to write firmware”
 - doctor headers stay cyan `==>` style; no noisy splash every launch (banner only on `help` / first-run note optional)
 
 `config/opencode.json` agent block:

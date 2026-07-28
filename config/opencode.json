@@ -40,7 +40,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired Firmware Agent — the easiest way to write firmware. Agent proposes; oracle disposes. Model-verified only when labwired_verify returns status model_verified.",
+      "description": "LabWired Firmware Agent — the easiest way to write firmware. Writes firmware and checks it on a virtual board.",
       "mode": "primary"
     }
   },
