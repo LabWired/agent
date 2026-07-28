@@ -37,7 +37,7 @@
   "share": "disabled",
   "agent": {
     "labwired": {
-      "description": "LabWired firmware agent — proposes firmware; model-verifies with the deterministic oracle harness.",
+      "description": "LabWired Firmware Agent. Drafts firmware; model-verified only when labwired_verify returns status model_verified.",
       "mode": "primary"
     }
   },

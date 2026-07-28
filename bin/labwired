@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LabWired agent — branded OpenCode harness (no fork).
+# LabWired Firmware Agent — OpenCode shell (no fork).
 # Wires opencode to @labwired/mcp, skills, and a local/on-prem model.
 set -euo pipefail
 
@@ -41,7 +41,7 @@ parse_opencode_version() {
 }
 
 cmd_version() {
-  echo "LabWired agent (OpenCode harness)"
+  echo "LabWired Firmware Agent (OpenCode shell)"
   echo "opencode pin: ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
@@ -120,7 +120,7 @@ cmd_doctor() {
 
 cmd_help() {
   cat <<EOF
-LabWired agent — OpenCode harness for the deterministic firmware oracle.
+LabWired Firmware Agent — OpenCode shell. Oracle gate on labwired_verify.
 
 Usage:
   labwired              Launch OpenCode with LabWired MCP + skills
