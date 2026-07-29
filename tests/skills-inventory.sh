@@ -47,17 +47,38 @@ else
   fail=1
 fi
 
-# hw-promote board-agnostic (not C3 product)
-if grep -qi 'board-agnostic\|BOARD-AGNOSTIC\|not a single-MCU' "$ROOT/skills/hw-promote/SKILL.md"; then
+# Product is board-agnostic (not a single-MCU tool)
+if grep -qi 'board-agnostic\|not a single-MCU\|not the product focus' "$ROOT/skills/hw-promote/SKILL.md"; then
   echo "ok   hw-promote board-agnostic"
 else
-  # softer check
-  if grep -qi 'ESP32-C3 beachhead' "$ROOT/skills/hw-promote/SKILL.md"; then
-    echo "FAIL hw-promote still C3-centric beachhead"
-    fail=1
-  else
-    echo "ok   hw-promote (no C3 beachhead title)"
-  fi
+  echo "FAIL hw-promote missing board-agnostic wording"
+  fail=1
+fi
+if grep -qi 'ESP32-C3 beachhead\|C3 baseline marker' "$ROOT/config/AGENTS.md"; then
+  echo "FAIL AGENTS.md still C3-product centric"
+  fail=1
+else
+  echo "ok   AGENTS.md generic HW env"
+fi
+if grep -q 'LABWIRED_HW_PORT' "$ROOT/config/AGENTS.md" \
+  && grep -q 'LABWIRED_HW_MARKER' "$ROOT/config/AGENTS.md"; then
+  echo "ok   AGENTS generic LABWIRED_HW_* env"
+else
+  echo "FAIL AGENTS.md missing LABWIRED_HW_* env"
+  fail=1
+fi
+if [[ -x "$ROOT/scripts/dev-cycle.sh" ]]; then
+  echo "ok   generic scripts/dev-cycle.sh"
+else
+  echo "FAIL missing scripts/dev-cycle.sh"
+  fail=1
+fi
+# examples are canaries, not product roots
+if [[ -d "$ROOT/workspaces" ]]; then
+  echo "FAIL workspaces/ should not ship (use examples/ profiles)"
+  fail=1
+else
+  echo "ok   no product workspaces/ dump"
 fi
 
 if [[ "$fail" -ne 0 ]]; then

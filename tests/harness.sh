@@ -405,10 +405,10 @@ else
 fi
 
 # LABWIRED_SERIAL_FIXTURE override
-printf 'prefix LABWIRED_C3_BASELINE_OK suffix\n' >"$SC_FIX"
+printf 'prefix LABWIRED_OK suffix\n' >"$SC_FIX"
 if (
   export LABWIRED_SERIAL_FIXTURE="$SC_FIX"
-  labwired_serial_capture /dev/null 115200 LABWIRED_C3_BASELINE_OK 1
+  labwired_serial_capture /dev/null 115200 LABWIRED_OK 1
 ) >/dev/null; then
   echo "ok   serial-capture LABWIRED_SERIAL_FIXTURE override"
 else

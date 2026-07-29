@@ -44,7 +44,7 @@ labwired assert-status hardware_observed < hw-result.json
 | Twin verify | All oracle clauses pass; no blocking gaps | `model_verified` | Only `labwired_verify` |
 | Twin observe | N/A (not a gate) | *(none)* | `labwired_run` logs only |
 | Offline claim gate | `assert-status` matches artifact | CI green | Checked-in JSON |
-| C3 / desk HW promote | Flash ok **and** marker in capture window | `hardware_observed` | Never map to twin green |
+| Desk HW promote (any chip) | Flash ok **and** marker in capture window | `hardware_observed` | Never map to twin green |
 | Score-verify | Structured match on verify JSON | exit 0 | Optional scoring helper |
 
 **Ordering:** Prefer twin verify → `model_verified` before desk promote. Desk
@@ -66,14 +66,19 @@ Constrained multi-step repair (`firmware-repair-loop` / diagnose path):
 
 Do not spin past the budget. Do not edit the oracle to force green.
 
-## hw-promote rules
+## hw-promote rules (board-agnostic)
 
 1. Prefer sim / twin green first when a twin path exists.  
 2. Flash alone ≠ `hardware_observed` — serial/RTT marker in a **captured** window is required.  
-3. C3 baseline marker: `LABWIRED_C3_BASELINE_OK` (`fixtures/c3-baseline/`); serial port env: `LABWIRED_C3_PORT`.  
+3. **Target from env/task, never a fixed product MCU.**  
+   - Port: `LABWIRED_HW_PORT`  
+   - Marker: `LABWIRED_HW_MARKER` (default `LABWIRED_OK`)  
+   - Chip: `LABWIRED_HW_CHIP` / probe list  
+   - Optional same-binary cycle: `scripts/dev-cycle.sh` + `LABWIRED_HW_WS`  
 4. Emit `hardware_observed` only; **never** upgrade to `model_verified`.  
 5. If twin is green and HW is red (or vice versa), report **both** honestly.  
-6. Report should include chip, probe selector (if any), ELF path/digest if known, marker, and capture excerpt ref.
+6. Report should include chip, probe selector (if any), ELF path/digest if known, marker, and capture excerpt ref.  
+7. Board examples under `examples/` / `fixtures/` are **canaries**, not the product.
 
 ## Skills
 

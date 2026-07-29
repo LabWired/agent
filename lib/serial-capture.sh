@@ -96,7 +96,7 @@ def open_stream(path: str, baudrate: int):
         return f, False, f.close
 
     # Character device (UART / USB-CDC). RDWR so we can toggle DTR/RTS for reset
-    # (ESP32-C3 USB-Serial/JTAG needs a pulse after flash or capture is empty).
+    # (many native-USB chips need a pulse after flash or capture is empty).
     try:
         fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     except OSError:

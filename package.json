@@ -1,6 +1,6 @@
 {
   "name": "@labwired/agent",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "LabWired Agent \u2014 portable verified firmware agent for macOS, Linux, and Windows",
   "license": "MIT",
   "homepage": "https://labwired.com",

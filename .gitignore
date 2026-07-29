@@ -9,9 +9,11 @@ dist/
 .pio/**
 workspaces/**/.pio/
 fixtures/**/.pio/
+examples/**/.pio/
 
 # Runtime evidence (generated)
 workspaces/**/evidence/
+examples/**/evidence/
 **/evidence/
 *.elf
 *.bin

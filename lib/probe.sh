@@ -223,11 +223,17 @@ labwired_probe_flash() {
         echo "labwired probe flash: set LABWIRED_HW_PORT for esptool" >&2
         return 1
       }
-      local chip_arg="esp32c3"
-      [[ "$chip_lc" == *esp32s3* ]] && chip_arg="esp32s3"
-      [[ "$chip_lc" == *esp32s2* ]] && chip_arg="esp32s2"
-      [[ "$chip_lc" == *esp32c6* ]] && chip_arg="esp32c6"
-      [[ "$chip_lc" == *esp32\ * || "$chip_lc" == "esp32" ]] && chip_arg="esp32"
+      # Map free-form chip id → esptool --chip (generic ESP family backend)
+      local chip_arg="esp32"
+      case "$chip_lc" in
+        *esp32c3*) chip_arg="esp32c3" ;;
+        *esp32c6*) chip_arg="esp32c6" ;;
+        *esp32s3*) chip_arg="esp32s3" ;;
+        *esp32s2*) chip_arg="esp32s2" ;;
+        *esp32h2*) chip_arg="esp32h2" ;;
+        *esp8266*) chip_arg="esp8266" ;;
+        *esp32*)   chip_arg="esp32" ;;
+      esac
       echo "==> physical flash via esptool ($chip_arg)"
       esptool --chip "$chip_arg" -p "$port" -b 460800 write_flash 0x10000 "$bin" \
         || esptool --chip "$chip_arg" -p "$port" write_flash 0x0 "$bin"

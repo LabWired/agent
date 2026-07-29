@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7 — 2026-07-29
+
+### Board-agnostic product surface
+- Generic `scripts/dev-cycle.sh` driven by `LABWIRED_HW_*` (ws, port, marker, chip, system)
+- ESP32-C3 is an **example profile** only (`examples/esp32c3-serial`, `scripts/profiles/`)
+- Default serial marker `LABWIRED_OK`; fixture `fixtures/hw-serial-esp32c3`
+- AGENTS + skills use generic HW env (no C3-as-product wording)
+- Compat shim: `scripts/c3-dev-cycle.sh` → profile
+
 ## 0.2.6 — 2026-07-29
 
 ### Keep the product tree clean
