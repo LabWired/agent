@@ -198,11 +198,27 @@ say "installing LabWired config into $CFG_DIR"
 mkdir -p "$CFG_DIR/skills"
 if [[ "$PROFILE" == "airgap" && -f "$SRC/config/opencode.airgap.json" ]]; then
   cp "$SRC/config/opencode.airgap.json" "$CFG_DIR/opencode.json"
+elif [[ -n "${DEEPINFRA_API_KEY:-}" && -f "$SRC/config/opencode.deepinfra.json" ]]; then
+  cp "$SRC/config/opencode.deepinfra.json" "$CFG_DIR/opencode.json"
+  say "OpenCode provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
 else
   cp "$SRC/config/opencode.json" "$CFG_DIR/opencode.json"
 fi
 cp "$SRC/config/AGENTS.md"     "$CFG_DIR/AGENTS.md"
 cp -R "$SRC/skills/." "$CFG_DIR/skills/"
+# Ensure new skills allowed in permission block if using stock config
+if [[ -f "$CFG_DIR/opencode.json" ]] && command -v python3 >/dev/null 2>&1; then
+  python3 - <<'PY'
+import json, os
+from pathlib import Path
+p = Path(os.environ["CFG_DIR"]) / "opencode.json"
+cfg = json.loads(p.read_text())
+perm = cfg.setdefault("permission", {}).setdefault("skill", {})
+for s in ("firmware-repair-loop", "hw-promote"):
+    perm.setdefault(s, "allow")
+p.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
+fi
 say "skills installed: $(ls -1 "$CFG_DIR/skills" | tr '\n' ' ')"
 
 # Rewrite mcp.labwired.command with resolved argv (never leave naked npx on airgap)

@@ -1,7 +1,7 @@
 {
   "name": "@labwired/agent",
-  "version": "0.2.4",
-  "description": "LabWired Agent — portable verified firmware agent for macOS, Linux, and Windows",
+  "version": "0.2.5",
+  "description": "LabWired Agent \u2014 portable verified firmware agent for macOS, Linux, and Windows",
   "license": "MIT",
   "homepage": "https://labwired.com",
   "repository": {
@@ -53,7 +53,10 @@
   },
   "scripts": {
     "postinstall": "node scripts/npm-install.js --postinstall || true",
-    "test": "bash tests/harness.sh"
+    "test": "bash tests/all.sh",
+    "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh",
+    "test:install": "bash tests/install-smoke.sh",
+    "test:llm": "bash tests/llm-deepinfra.sh"
   },
   "publishConfig": {
     "access": "public"

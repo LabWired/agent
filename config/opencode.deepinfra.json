@@ -1,0 +1,71 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "labwired": {
+      "type": "local",
+      "command": ["npx", "-y", "@labwired/mcp"],
+      "enabled": true,
+      "timeout": 120000,
+      "environment": {
+        "LABWIRED_CLI": "{env:LABWIRED_CLI}",
+        "LABWIRED_BUILDER_URL": "{env:LABWIRED_BUILDER_URL}"
+      }
+    }
+  },
+  "permission": {
+    "skill": {
+      "verify-firmware": "allow",
+      "diagnose-firmware": "allow",
+      "inspect-evidence": "allow",
+      "board-bringup": "allow",
+      "scaffold-firmware": "allow",
+      "report-evidence": "allow",
+      "flash-firmware": "allow",
+      "firmware-repair-loop": "allow",
+      "hw-promote": "allow"
+    }
+  },
+  "provider": {
+    "deepinfra": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DeepInfra",
+      "options": {
+        "baseURL": "https://api.deepinfra.com/v1/openai",
+        "apiKey": "{env:DEEPINFRA_API_KEY}"
+      },
+      "models": {
+        "moonshotai/Kimi-K2.5": {
+          "name": "Kimi K2.5 (DeepInfra)"
+        },
+        "Qwen/Qwen2.5-Coder-32B-Instruct": {
+          "name": "Qwen2.5-Coder-32B (DeepInfra)"
+        }
+      }
+    },
+    "labwired-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LabWired",
+      "options": {
+        "baseURL": "{env:LABWIRED_MODEL_URL}",
+        "apiKey": "{env:LABWIRED_MODEL_KEY}"
+      },
+      "models": {
+        "qwen2.5-coder": {
+          "name": "LabWired · Qwen2.5-Coder"
+        }
+      }
+    }
+  },
+  "model": "deepinfra/moonshotai/Kimi-K2.5",
+  "autoupdate": false,
+  "share": "disabled",
+  "agent": {
+    "labwired": {
+      "name": "LabWired Agent",
+      "description": "Write firmware and run it on a virtual board.",
+      "mode": "primary",
+      "color": "#0056b3"
+    }
+  },
+  "default_agent": "labwired"
+}

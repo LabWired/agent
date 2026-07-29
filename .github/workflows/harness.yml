@@ -3,11 +3,43 @@ on:
   push:
   pull_request:
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: harness tests
-        run: bash tests/harness.sh
-      - name: demo (unit)
+      - name: unit + skills + public-install
+        run: |
+          bash tests/harness.sh
+          bash tests/skills-inventory.sh
+          bash tests/public-install.sh
+          bash tests/prefix-unit.sh
+      - name: demo
         run: ./demo.sh
+
+  install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install dependencies for sim download
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl tar ca-certificates
+      - name: portable install smoke
+        env:
+          LABWIRED_FAST: "1"
+          LABWIRED_INSTALL_PIO: "0"
+          # Skip full opencode npm if flaky — install script warns but smoke checks skills/sim
+        run: bash tests/install-smoke.sh
+        # Sim download from GitHub releases; may need network
+
+  llm-deepinfra:
+    runs-on: ubuntu-latest
+    # only when secret is configured on the repo
+    if: ${{ secrets.DEEPINFRA_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: DeepInfra Kimi chat smoke
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          LABWIRED_LLM_MODEL: moonshotai/Kimi-K2.5
+        run: bash tests/llm-deepinfra.sh
