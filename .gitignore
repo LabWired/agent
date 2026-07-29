@@ -1,9 +1,23 @@
-
+# Local agent tooling (not product)
 .grok/
+.DS_Store
+
+# Build / pack artifacts
 dist/
 *.tar.gz
 .pio/
 .pio/**
 workspaces/**/.pio/
-workspaces/**/evidence/*.txt
+fixtures/**/.pio/
+
+# Runtime evidence (generated)
 workspaces/**/evidence/
+**/evidence/
+*.elf
+*.bin
+!fixtures/**/*.bin
+
+# Secrets / env
+.env
+.env.*
+*.pem

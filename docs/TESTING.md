@@ -42,5 +42,6 @@ Repo secret for CI: `DEEPINFRA_API_KEY` (optional job in `.github/workflows/harn
 
 ## Workflow
 
-Grok workflow: `.grok/workflows/agent-test-matrix.rhai`  
-Run: `/workflow agent-test-matrix` or the workflow tool with `root` arg.
+Grok workflow (local): copy `docs/workflows/agent-test-matrix.rhai` into
+`.grok/workflows/` if needed. Pass **`args.root`** (absolute path to this repo).
+The workflow returns a summary only — it does not write reports into the tree.
