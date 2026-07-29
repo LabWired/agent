@@ -48,18 +48,19 @@ labwired probe reset --chip STM32L476RGTx
 
 Optional: `--probe <selector>` from `labwired probe list`.
 
-## ESP32-C3 and USB-CDC
+## USB-CDC / native-USB targets (ESP32, RP2040, …)
 
-ESP32-C3 boards often expose **USB-CDC** (and/or USB-JTAG) as the serial console
-and sometimes as the flash path:
+Some boards expose **USB-CDC** (or USB-JTAG) as the serial console and flash path:
 
-- After flash, open the **CDC ACM** (or board UART) port for the marker window —
-  not only the probe-rs session.
-- USB-CDC may re-enumerate on reset; re-resolve the port if capture fails mid-window.
+- After flash, open the **host ACM/modem** port for the marker window — not only
+  the probe-rs session.
+- USB-CDC may re-enumerate on reset; re-resolve `LABWIRED_HW_PORT` if capture fails.
 - Baud and line endings must match the firmware (common: 115200 8N1).
-- If **probe-rs is missing**, prefer **PlatformIO** or **esptool** for C3 flash
+- When probe-rs is a poor fit, use **PlatformIO** or **esptool** for that family
   (see `hw-promote`); still require serial marker capture for any
   `hardware_observed` claim.
+- Arduino USB-CDC builds often need:
+  `-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1`
 
 Promote path (marker + dual status): **`hw-promote`**.
 
@@ -68,6 +69,6 @@ Promote path (marker + dual status): **`hw-promote`**.
 1. Obtain ELF (builder or local toolchain).
 2. Sim verify when possible (`verify-firmware` / `labwired_verify`).
 3. `labwired probe list` — pick virtual or physical.
-4. Flash with explicit `--chip` (or PlatformIO/esptool for C3 when probe-rs absent).
+4. Flash with explicit `--chip` (or family backend when probe-rs is absent).
 5. Report paths separately: sim status vs flash vs observed serial.
 6. For hardware-observed claims, continue with `hw-promote` (serial oracle marker).

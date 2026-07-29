@@ -75,10 +75,13 @@ codex mcp add labwired --url https://api.labwired.com/mcp
 
 ## How it works
 
-1. You describe the board and the task  
+1. You describe **any** board and the task  
 2. The agent writes firmware  
-3. It runs on a virtual board  
-4. Green only if behavior matches  
+3. It runs on a virtual board (twin)  
+4. Green only if behavior matches — never because the source “looks right”  
+
+Board-agnostic by design. Chip/port/marker come from the task and env
+(`LABWIRED_HW_PORT`, `LABWIRED_HW_MARKER`, `LABWIRED_HW_CHIP`) — not a single-MCU product path.
 
 ## Commands
 
@@ -87,13 +90,15 @@ codex mcp add labwired --url https://api.labwired.com/mcp
 | `labwired` | Start |
 | `labwired doctor` | Check install |
 | `labwired version` | Version |
-| `labwired probe …` | Boards: probes + virtual LabWired |
+| `labwired probe …` | Physical probes + virtual LabWired |
+| `labwired serial-capture` | UART/CDC marker window |
 | `./demo.sh` | Smoke test |
 
 ### Boards (not OpenOCD)
 
 Popular debuggers via **probe-rs** (ST-Link, J-Link, CMSIS-DAP, …).  
-Virtual boards via **LabWired sim** (validation device).
+Virtual boards via **LabWired sim**. Optional desk promote: flash + serial marker →
+`hardware_observed` only.
 
 ```bash
 labwired probe list
@@ -101,6 +106,12 @@ labwired probe chips stm32
 labwired probe flash build/app.elf --chip STM32L476RGTx
 labwired probe flash build/app.elf --target virtual --chip nucleo-l476rg
 labwired probe install-backend   # if probe-rs missing
+
+# Same-binary build → twin → desk (any PlatformIO project)
+export LABWIRED_HW_WS=/path/to/project
+export LABWIRED_HW_PORT=/dev/ttyACM0
+export LABWIRED_HW_MARKER=LABWIRED_OK
+scripts/dev-cycle.sh
 ```
 
 Optional local model:

@@ -68,7 +68,7 @@ Do not mark pass without the matching payload.
 | Twin verify | sim + MCP healthy | `firmware_ref`, diagram, oracle | all clauses pass; no blocking gaps | `model_verified` | `failed` / `inconclusive` / `unsupported` | |
 | Twin observe | sim + MCP | firmware + run params | *(not a gate — logs only)* | *(none)* | runner error → inconclusive if used as evidence | |
 | Offline claim gate | checked-in JSON | verify / HW artifact | `assert-status` match | CI green | CI red | |
-| C3 / desk HW promote | model-green preferred; target attached | ELF, chip id, serial port, marker | flash ok **and** marker in capture window | `hardware_observed` | flash fail / no marker → failed or inconclusive | |
+| Desk HW promote (any chip) | model-green preferred; target attached | ELF, chip id, `LABWIRED_HW_PORT`, marker | flash ok **and** marker in capture window | `hardware_observed` | flash fail / no marker → failed or inconclusive | |
 | Score-verify (optional) | any verify JSON | expected status (+ clauses) | structured match | exit 0 | exit non-zero | |
 
 ### Dual-claim footer (copy when both paths ran)

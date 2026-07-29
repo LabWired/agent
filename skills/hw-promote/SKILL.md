@@ -61,22 +61,23 @@ labwired probe doctor
 labwired probe flash <elf> --chip <chip-id>
 ```
 
-**ESP32-C3 / ESP USB-Serial/JTAG:** use PlatformIO or esptool (probe-rs path is
-secondary). From a PlatformIO project:
+**ESP family / USB-Serial/JTAG:** PlatformIO or esptool often fit better than
+probe-rs alone. From a PlatformIO project:
 
 ```bash
+export LABWIRED_HW_PORT=/dev/ttyACM0   # or cu.usbmodem*, ttyUSB*
 pio run -t upload
 # or
-labwired probe flash build/app.elf --chip esp32c3   # routes to PIO/esptool when possible
+labwired probe flash build/app.elf --chip <esp-chip-id>
 ```
 
-USB-CDC builds must set:
+USB-CDC Arduino builds typically need:
 
 ```
 -DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1
 ```
 
-Without those flags, flash succeeds but serial capture is empty.
+Without those flags, flash can succeed while serial capture stays empty.
 
 Virtual twin path (not hardware_observed):
 

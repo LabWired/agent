@@ -85,11 +85,11 @@ Use `null` when the trajectory has no code change.
 
 ```json
 {
-  "id": "c3-baseline-hw-01",
+  "id": "hw-serial-esp32c3-01",
   "task": {
-    "prompt": "Flash C3 baseline and confirm serial marker",
+    "prompt": "Flash serial-marker fixture and confirm LABWIRED_OK on the port",
     "goal": "hardware_observed",
-    "fixture": "fixtures/c3-baseline"
+    "fixture": "fixtures/hw-serial-esp32c3"
   },
   "tools": [
     {
@@ -101,7 +101,7 @@ Use `null` when the trajectory has no code change.
     {
       "name": "serial-capture",
       "kind": "serial_capture",
-      "inputs": { "port_env": "LABWIRED_C3_PORT", "marker": "LABWIRED_C3_BASELINE_OK" },
+      "inputs": { "port_env": "LABWIRED_HW_PORT", "marker": "LABWIRED_OK" },
       "status": "ok"
     }
   ],
@@ -109,7 +109,7 @@ Use `null` when the trajectory has no code change.
     {
       "source": "serial-capture",
       "summary": "marker present in window",
-      "excerpt": "LABWIRED_C3_BASELINE_OK"
+      "excerpt": "LABWIRED_OK"
     }
   ],
   "patch": null,
@@ -127,11 +127,12 @@ When a collector is added:
 
 1. Emit one JSONL object per episode (task → tools → observations → optional patch → verification).
 2. Keep oracle identity and verification status machine-readable — do not train on soft-pass labels.
-3. Prefer red→repair→green Gate 1 and C3 promote episodes as seed data.
+3. Prefer red→repair→green Gate 1 and generic HW promote episodes as seed data.
 4. This repo’s product surface still **must not** invoke training as part of the agent runtime.
 
 ## Related
 
 - Claim policy: `config/AGENTS.md`
 - Twin red/green shape: `fixtures/gate1/`
-- C3 serial marker: `fixtures/c3-baseline/` (`LABWIRED_C3_BASELINE_OK`, port `LABWIRED_C3_PORT`)
+- Example HW serial marker: `fixtures/hw-serial-esp32c3/` (`LABWIRED_OK`, port `LABWIRED_HW_PORT`)
+- Generic cycle: `scripts/dev-cycle.sh`
