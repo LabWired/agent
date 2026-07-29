@@ -1,16 +1,21 @@
 #include <Arduino.h>
 
-// Oracle / serial-capture marker for this dev cycle.
+// Same binary for desk + twin:
+// - Serial  = USB-CDC → /dev/cu.usbmodem* (desk)
+// - Serial0 = UART0   → labwired-sim uart_contains (twin)
 static const char *const kMarker = "LABWIRED_C3_CYCLE_OK";
 
 void setup() {
   Serial.begin(115200);
-  // USB-CDC often needs a moment after boot.
-  delay(800);
+  Serial0.begin(115200);
+  delay(500);
   Serial.println(kMarker);
+  Serial0.println(kMarker);
   Serial.println("chip=esp32c3");
+  Serial0.println("chip=esp32c3");
   Serial.println("fw=labwired-dev-cycle-1");
-  pinMode(8, OUTPUT); // many C3 boards: onboard LED on GPIO8
+  Serial0.println("fw=labwired-dev-cycle-1");
+  pinMode(8, OUTPUT);
 }
 
 void loop() {
@@ -19,4 +24,5 @@ void loop() {
   digitalWrite(8, LOW);
   delay(800);
   Serial.println(kMarker);
+  Serial0.println(kMarker);
 }
