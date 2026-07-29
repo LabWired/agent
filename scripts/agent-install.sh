@@ -1,48 +1,35 @@
-#!/usr/bin/env sh
-# LabWired Firmware Agent — one-command install
-# https://labwired.com/agent-install.sh
-# https://github.com/LabWired/agent
+#!/usr/bin/env bash
+# LabWired Firmware Agent — one-command install (legacy URL)
+# Prefer:  curl -fsSL https://labwired.com/install | bash
+# Legacy:  curl -fsSL https://labwired.com/agent-install.sh | sh
 #
-# Usage:
-#   curl -fsSL https://labwired.com/agent-install.sh | sh
-#   curl -fsSL https://labwired.com/agent-install.sh | sh -s -- --airgap
-#
-# Clones/updates the agent kit into ~/.labwired/agent and runs install.sh.
+# Thin wrapper around scripts/public/install (Cursor-style entry).
+set -euo pipefail
 
-set -eu
-
+HERE="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+PUBLIC="$HERE/public/install"
+if [[ -f "$PUBLIC" ]]; then
+  exec bash "$PUBLIC" "$@"
+fi
+# Fallback when only this file is published alone
+export LABWIRED_HOME="${LABWIRED_HOME:-$HOME/.labwired}"
+export LABWIRED_AGENT_HOME="${LABWIRED_AGENT_HOME:-$LABWIRED_HOME/agent}"
 REPO_URL="${LABWIRED_AGENT_REPO:-https://github.com/LabWired/agent.git}"
 REPO_REF="${LABWIRED_AGENT_REF:-main}"
-AGENT_HOME="${LABWIRED_AGENT_HOME:-$HOME/.labwired/agent}"
-
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 die() { printf 'labwired-agent-install: %s\n' "$1" >&2; exit 1; }
-
-need() {
-  command -v "$1" >/dev/null 2>&1 || die "need '$1' on PATH"
-}
-
-need git
-need curl
-
-say "LabWired Firmware Agent — the easiest way to write firmware"
+command -v git >/dev/null || die "need git"
+command -v bash >/dev/null || die "need bash"
+AGENT_HOME="$LABWIRED_AGENT_HOME"
 say "install home: $AGENT_HOME (ref $REPO_REF)"
-
-if [ -d "$AGENT_HOME/.git" ]; then
-  say "updating existing install"
+if [[ -d "$AGENT_HOME/.git" ]]; then
   git -C "$AGENT_HOME" fetch --depth 1 origin "$REPO_REF"
   git -C "$AGENT_HOME" checkout -q FETCH_HEAD
 else
-  say "cloning $REPO_URL"
   mkdir -p "$(dirname "$AGENT_HOME")"
   rm -rf "$AGENT_HOME"
   git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$AGENT_HOME" \
     || git clone --depth 1 "$REPO_URL" "$AGENT_HOME"
 fi
-
-if [ ! -x "$AGENT_HOME/install.sh" ]; then
-  die "install.sh missing in $AGENT_HOME"
-fi
-
-say "running installer"
-exec sh "$AGENT_HOME/install.sh" "$@"
+[[ -f "$AGENT_HOME/install.sh" ]] || die "install.sh missing"
+exec bash "$AGENT_HOME/install.sh" --full "$@"

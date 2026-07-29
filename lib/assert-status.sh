@@ -25,7 +25,7 @@ except Exception:
 def find_status(obj):
     if isinstance(obj, dict):
         if "status" in obj and obj["status"] in (
-            "model_verified","failed","inconclusive","unsupported"):
+            "model_verified","hardware_observed","failed","inconclusive","unsupported","abstain"):
             return obj["status"]
         for v in obj.values():
             s=find_status(v)
@@ -39,7 +39,7 @@ def find_status(obj):
             return find_status(json.loads(obj))
         except Exception:
             m=re.search(
-                r"\"status\"\s*:\s*\"(model_verified|failed|inconclusive|unsupported)\"",
+                r"\"status\"\s*:\s*\"(model_verified|hardware_observed|failed|inconclusive|unsupported|abstain)\"",
                 obj,
             )
             if m: return m.group(1)
@@ -48,7 +48,7 @@ if data is not None:
     status=find_status(data)
 if not status:
     m=re.search(
-        r"\"status\"\s*:\s*\"(model_verified|failed|inconclusive|unsupported)\"",
+        r"\"status\"\s*:\s*\"(model_verified|hardware_observed|failed|inconclusive|unsupported|abstain)\"",
         raw,
     )
     status=m.group(1) if m else None

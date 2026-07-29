@@ -4,6 +4,7 @@ description: >-
   Model-verify firmware on LabWired's digital twin with a mandatory oracle.
   Use before claiming boots, blinks, prints, or passes. Returns typed status
   model_verified|failed|inconclusive|unsupported via labwired_verify.
+  On red, hand off to firmware-repair-loop (max 3 repairs); never soft-pass.
 license: MIT
 compatibility: opencode
 metadata:
@@ -17,7 +18,7 @@ metadata:
 
 You may tell the user firmware is **model-verified** only when `labwired_verify`
 returns `status: model_verified`. Compile success, `labwired_run` output, or reading
-the source is never enough.
+the source is never enough. LLM judgment is never enough.
 
 ## Claim vocabulary
 
@@ -27,6 +28,8 @@ the source is never enough.
 - **unsupported** — unmodeled instruction/MMIO/peripheral/clause
 - `proven: true` is a deprecated alias for model_verified — never upgrade it to a hardware claim
 - **hardware-confirmed** is out of scope until a hardware worker exists
+- On budgeted repair stop without green, the repair loop may report **abstain**
+  (not a soft pass and not `model_verified`)
 
 ## Procedure
 
@@ -36,6 +39,11 @@ the source is never enough.
 4. Call `labwired_verify` with `firmware_ref`, board/target, `diagram`, `oracle`.
 5. Report `status`, `gaps`, and (when present) `evidence_ref`. Quote failing clauses and diagnosis on non-pass.
 6. Never weaken the oracle to obtain a pass. Fix firmware or report unsupported honestly.
+7. **On red / non-green:** hand off to `firmware-repair-loop` (entry also via
+   `diagnose-firmware`). That loop freezes this oracle, allows at most **3**
+   repair iterations, scores deterministically, and **abstains** when the budget
+   or gaps block progress. Re-entry here is only for dispose; status minting
+   remains solely `labwired_verify`.
 
 ## Tools
 

@@ -35,6 +35,8 @@ _labwired_find_root() {
 
 ROOT="$(_labwired_find_root)"
 export LABWIRED_AGENT_HOME="$ROOT"
+# shellcheck source=lib/prefix.sh
+source "$ROOT/lib/prefix.sh"
 # shellcheck source=lib/resolve-sim.sh
 source "$ROOT/lib/resolve-sim.sh"
 # shellcheck source=lib/resolve-probe.sh
@@ -99,6 +101,12 @@ cmd_doctor() {
     echo "LabWired Agent"
   fi
   say "home $ROOT"
+  if declare -F labwired_prefix_runtime_label >/dev/null 2>&1; then
+    say "runtime $(labwired_prefix_runtime_label)"
+  fi
+  if declare -F labwired_prefix_is_wsl >/dev/null 2>&1 && labwired_prefix_is_wsl; then
+    say "ok  wsl: detected (use Linux install path; USB probes need usbipd attach)"
+  fi
 
   if command -v opencode >/dev/null 2>&1; then
     say "ok  opencode-binary: $(command -v opencode)"
@@ -166,7 +174,8 @@ cmd_doctor() {
   local skill
   for skill in \
     verify-firmware diagnose-firmware inspect-evidence \
-    board-bringup scaffold-firmware report-evidence flash-firmware
+    board-bringup scaffold-firmware report-evidence flash-firmware \
+    firmware-repair-loop hw-promote
   do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
@@ -181,20 +190,36 @@ cmd_doctor() {
   if prs="$(labwired_resolve_probe_rs 2>/dev/null)"; then
     say "ok  probe-backend: $prs (ST-Link / J-Link / CMSIS-DAP / …)"
   else
-    printf '\033[33mwarn\033[0m probe-backend: probe-rs not installed\n'
-    printf '     labwired probe install-backend   # multi-probe; not OpenOCD\n'
+    if [[ "$strict" == "1" ]]; then
+      printf '\033[31mFAIL\033[0m probe-backend: probe-rs not installed\n'
+      ok=1
+    else
+      printf '\033[33mwarn\033[0m probe-backend: probe-rs not installed\n'
+    fi
+    printf '     fix: ./install.sh --full   # or: labwired probe install-backend\n'
   fi
   if sim="$(labwired_resolve_sim "$0" 2>/dev/null)"; then
     say "ok  virtual-device: LabWired sim ($sim)"
   else
-    printf '\033[33mwarn\033[0m virtual-device: sim missing (virtual boards)\n'
+    if [[ "$strict" == "1" ]]; then
+      printf '\033[31mFAIL\033[0m virtual-device: sim missing\n'
+      ok=1
+    else
+      printf '\033[33mwarn\033[0m virtual-device: sim missing (virtual boards)\n'
+    fi
+    printf '     fix: ./install.sh --full   # installs labwired-sim\n'
+  fi
+  if command -v pio >/dev/null 2>&1 || command -v platformio >/dev/null 2>&1; then
+    say "ok  platformio: $(command -v pio 2>/dev/null || command -v platformio)"
+  else
+    printf '\033[33mwarn\033[0m platformio: not found (optional for Arduino/ESP flash)\n'
   fi
 
   if [[ $ok -eq 0 ]]; then
     say "ready"
     return 0
   fi
-  printf '\nnot ready — fix FAILs above\n'
+  printf '\nnot ready — fix FAILs above (./install.sh --full)\n'
   return 1
 }
 
@@ -208,10 +233,18 @@ LabWired Agent
 
 Usage:
   labwired                 Start
-  labwired doctor          Check install
-  labwired version         Version
+  labwired doctor [--strict]  Check install (strict = require sim + probe-rs)
+  labwired update             Self-update kit + tools (like Cursor agent update)
+  labwired smoke              Prove install works (claim gate + sim)
+  labwired install-deps       Install sim + probe-rs into prefix
+  labwired package …          Portable prefix: info | path | env | uninstall
+  labwired version            Version
   labwired assert-status <expected> [file]
                            Exit 0 if verify JSON status matches
+  labwired score-verify [--expect STATUS] [file]
+                           Score verify JSON / matrix; print score
+  labwired serial-capture <port> <baud> <marker> <timeout>
+                           UART capture; exit 0 if marker observed
   labwired probe …         Boards: physical probes + virtual LabWired
   labwired help            This help
 
@@ -225,11 +258,83 @@ Env:
   LABWIRED_MODEL_URL       Model base URL (default Ollama)
   LABWIRED_MODEL_KEY       API key
   LABWIRED_BUILDER_URL     Compile service
-  LABWIRED_CLI / LABWIRED_SIM   Simulator binary
+  LABWIRED_CLI / LABWIRED_SIM   Simulator binary (prefer labwired-sim)
   LABWIRED_PROBE_RS        probe-rs binary override
+  LABWIRED_SERIAL_FIXTURE  Override serial port with a fixture file
   OPENCODE_PIN             opencode-ai pin (default ${OPENCODE_PIN})
   OPENCODE_CONFIG_DIR      Config dir (default ~/.config/opencode)
 EOF
+}
+
+cmd_install_deps() {
+  # shellcheck source=lib/install-deps.sh
+  source "$ROOT/lib/install-deps.sh"
+  export LABWIRED_MINIMAL=0
+  export LABWIRED_INSTALL_SIM=1
+  export LABWIRED_INSTALL_PROBE_RS=1
+  export LABWIRED_INSTALL_PIO=1
+  labwired_prefix_ensure_dirs
+  labwired_install_full_deps
+  labwired_prefix_write_manifest
+  labwired_prefix_link_user_shim
+  cmd_doctor
+}
+
+cmd_update() {
+  # shellcheck source=lib/update.sh
+  source "$ROOT/lib/update.sh"
+  labwired_cmd_update "$@"
+}
+
+cmd_smoke() {
+  # shellcheck source=lib/smoke.sh
+  source "$ROOT/lib/smoke.sh"
+  labwired_smoke "$ROOT"
+}
+
+cmd_package() {
+  local sub="${1:-info}"
+  shift || true
+  case "$sub" in
+    info|show)
+      labwired_prefix_info
+      ;;
+    path|home)
+      echo "$(labwired_prefix_home)"
+      ;;
+    env)
+      cat "$(labwired_prefix_home)/env.sh" 2>/dev/null || fail "no env.sh — run install"
+      ;;
+    uninstall)
+      local h
+      h="$(labwired_prefix_home)"
+      if [[ "$h" == "/" || -z "$h" ]]; then
+        fail "refusing to uninstall empty/root prefix"
+      fi
+      echo "This removes the portable prefix: $h"
+      echo "User shim: $(labwired_user_bin)/labwired"
+      if [[ "${1:-}" != "--yes" ]]; then
+        fail "re-run: labwired package uninstall --yes"
+      fi
+      rm -f "$(labwired_user_bin)/labwired"
+      rm -rf "$h/agent" "$h/tools" "$h/bin" "$h/cache" "$h/share" \
+        "$h/env.sh" "$h/MANIFEST.json" "$h/PREFIX_VERSION"
+      # leave $h if other product data (artifacts/evidence) exists
+      say "uninstalled portable package from $h"
+      ;;
+    *)
+      cat <<'EOF'
+labwired package — manage portable install
+
+  labwired package info       Show prefix, platform, MANIFEST
+  labwired package path       Print LABWIRED_HOME
+  labwired package env        Print env.sh
+  labwired package uninstall --yes
+                              Remove prefix kit + tools + user shim
+EOF
+      return 2
+      ;;
+  esac
 }
 
 cmd_assert_status() {
@@ -247,30 +352,69 @@ cmd_assert_status() {
   fi
 }
 
+cmd_score_verify() {
+  # shellcheck source=lib/score-verify.sh
+  source "$ROOT/lib/score-verify.sh"
+  labwired_score_verify "$@"
+}
+
+cmd_serial_capture() {
+  # shellcheck source=lib/serial-capture.sh
+  source "$ROOT/lib/serial-capture.sh"
+  labwired_serial_capture "$@"
+}
+
 case "${1:-}" in
   doctor)  shift; cmd_doctor "$@" ;;
+  install-deps|deps)
+    shift
+    cmd_install_deps "$@"
+    ;;
+  update|self-update|upgrade)
+    shift
+    cmd_update "$@"
+    ;;
+  smoke|check|hello)
+    shift
+    cmd_smoke "$@"
+    ;;
+  package|pkg)
+    shift
+    cmd_package "$@"
+    ;;
   version|--version|-V) cmd_version ;;
   help|--help|-h) cmd_help ;;
   assert-status)
     shift
     cmd_assert_status "$@"
     ;;
+  score-verify)
+    shift
+    cmd_score_verify "$@"
+    ;;
+  serial-capture)
+    shift
+    cmd_serial_capture "$@"
+    ;;
   probe)
     shift
     labwired_probe_cmd "$@"
     ;;
   "")
+    # Ensure prefix tools visible for this session
+    if [[ -n "${LABWIRED_HOME:-}" && -d "${LABWIRED_HOME}/bin" ]]; then
+      export PATH="${LABWIRED_HOME}/bin:${PATH}"
+    fi
     if ! command -v opencode >/dev/null 2>&1; then
-      fail "'opencode' not found on PATH. Run ./install.sh first (pins opencode-ai@${OPENCODE_PIN})."
+      fail "'opencode' not found. Install Node 18+, then re-run: curl -fsSL https://labwired.com/install | bash"
     fi
     if labwired_export_sim; then
-      : # LABWIRED_CLI exported for MCP child
+      :
     else
-      echo "labwired: warning — no simulator found; run/verify will fail." >&2
-      echo "         install: curl -fsSL https://labwired.com/install.sh | sh" >&2
-      echo "         or set LABWIRED_CLI / LABWIRED_SIM to the simulator binary." >&2
+      echo "labwired: note — no local sim; hosted MCP verify still works." >&2
+      echo "         fix: labwired update --tools-only" >&2
     fi
-    # Config/skills live under ~/.config/opencode from install.sh
+    echo "labwired: starting agent (skills + MCP)…" >&2
     exec opencode "$@"
     ;;
   *)

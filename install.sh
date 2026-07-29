@@ -7,16 +7,23 @@ CFG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 BIN_DIR="${LABWIRED_BIN_DIR:-$HOME/.local/bin}"
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
+# shellcheck source=lib/prefix.sh
+source "$SRC/lib/prefix.sh"
 # shellcheck source=lib/resolve-mcp.sh
 source "$SRC/lib/resolve-mcp.sh"
 # shellcheck source=lib/resolve-sim.sh
 source "$SRC/lib/resolve-sim.sh"
+# shellcheck source=lib/resolve-probe.sh
+source "$SRC/lib/resolve-probe.sh"
+# shellcheck source=lib/install-deps.sh
+source "$SRC/lib/install-deps.sh"
 
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$1" >&2; }
 die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 
-# Optional: ./install.sh --airgap  (fail closed without vendored MCP / LABWIRED_MCP_ENTRY)
+# Optional: ./install.sh --airgap|--minimal|--full|--prefix DIR
+# Default: FULL portable stack under LABWIRED_HOME (default ~/.labwired).
 PROFILE="${LABWIRED_PROFILE:-online}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,12 +31,67 @@ while [[ $# -gt 0 ]]; do
       PROFILE=airgap
       shift
       ;;
+    --minimal)
+      export LABWIRED_MINIMAL=1
+      shift
+      ;;
+    --full)
+      export LABWIRED_MINIMAL=0
+      export LABWIRED_INSTALL_SIM=1
+      export LABWIRED_INSTALL_PROBE_RS=1
+      # PIO stays off unless --with-pio (keeps one-liner fast)
+      export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
+      shift
+      ;;
+    --with-pio|--pio)
+      export LABWIRED_INSTALL_PIO=1
+      shift
+      ;;
+    --quick|--fast)
+      export LABWIRED_FAST=1
+      export LABWIRED_INSTALL_PIO=0
+      shift
+      ;;
+    --prefix)
+      export LABWIRED_HOME="${2:?--prefix requires a path}"
+      shift 2
+      ;;
+    --prefix=*)
+      export LABWIRED_HOME="${1#--prefix=}"
+      shift
+      ;;
     -h|--help)
       cat <<'USAGE'
-Usage: ./install.sh [--airgap]
+Usage: ./install.sh [--full] [--minimal] [--airgap] [--prefix DIR]
 
-  --airgap   Set LABWIRED_PROFILE=airgap: require LABWIRED_MCP_ENTRY or
-             mcp/vendor/index.js (no naked npx). See mcp/README.md.
+Portable, contained install (multi-platform):
+
+  Everything lives under one prefix (LABWIRED_HOME, default ~/.labwired):
+
+    $LABWIRED_HOME/
+      agent/          kit (skills, lib, launcher)
+      tools/sim/      labwired-sim (oracle)
+      tools/probe-rs/ probe-rs
+      tools/pio/      optional PlatformIO venv
+      bin/            shims (put this OR the thin user shim on PATH)
+      env.sh          source to activate
+      MANIFEST.json   versions + platform
+
+  Default / --full   Agent + labwired-sim + probe-rs (fast; PIO off)
+  --with-pio         Also install PlatformIO (slower)
+  --minimal          Agent kit only
+  --airgap           Vendored MCP / LABWIRED_MCP_ENTRY
+  --prefix DIR       Portable root (USB, CI, /opt/labwired)
+
+  curl -fsSL https://labwired.com/install | bash
+  irm 'https://labwired.com/install?win32=true' | iex   # Windows
+  npx @labwired/agent
+
+  After install:  labwired smoke && labwired
+
+Env:
+  LABWIRED_HOME  LABWIRED_BIN_DIR  LABWIRED_INSTALL_PIO=1  LABWIRED_FAST=0
+  LABWIRED_CORE_VERSION=vX.Y
 USAGE
       exit 0
       ;;
@@ -39,6 +101,15 @@ USAGE
   esac
 done
 export LABWIRED_PROFILE="$PROFILE"
+export LABWIRED_HOME="$(labwired_prefix_home)"
+export LABWIRED_AGENT_HOME="$(labwired_prefix_agent)"
+BIN_DIR="$(labwired_user_bin)"
+say "portable prefix: $LABWIRED_HOME (platform $(labwired_prefix_platform)$(labwired_prefix_is_wsl && echo '+wsl' || true))"
+if labwired_prefix_is_wsl; then
+  say "WSL detected — using Linux prebuilts (same as native Linux)"
+  say "USB boards: attach from Windows with usbipd, then labwired probe list"
+fi
+labwired_prefix_ensure_dirs
 
 parse_opencode_version() {
   echo "$1" | sed -n 's/.*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1
@@ -100,47 +171,18 @@ _labwired_link_opencode() {
 }
 _labwired_link_opencode
 
-# 2. simulator CLI (oracle binary the MCP shells out to) ----------------------
-# Prefer LABWIRED_CLI / LABWIRED_SIM when set; do not invent a missing binary name.
-if [[ -n "${LABWIRED_CLI:-}" ]] && command -v "$LABWIRED_CLI" >/dev/null 2>&1; then
-  say "simulator already installed (LABWIRED_CLI=$LABWIRED_CLI → $(command -v "$LABWIRED_CLI"))"
-elif command -v labwired-sim >/dev/null 2>&1; then
-  say "simulator candidate: labwired-sim → $(command -v labwired-sim)"
-elif command -v labwired-cli >/dev/null 2>&1; then
-  say "simulator candidate: labwired-cli → $(command -v labwired-cli)"
-elif command -v labwired >/dev/null 2>&1 && [[ "$(command -v labwired)" != "$BIN_DIR/labwired" ]]; then
-  say "found simulator candidate at $(command -v labwired) — set LABWIRED_CLI if needed"
-else
-  warn "LabWired simulator not found. Install it (needed for run/verify/inspect):"
-  warn "  curl -fsSL https://labwired.com/install.sh | sh"
-  warn "  export LABWIRED_CLI=/path/to/sim   # real path; never a fictional name"
+# 2. Runtime tools into portable prefix (sim required for local twin; PIO optional)
+export LABWIRED_FAST="${LABWIRED_FAST:-1}"
+export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
+say "installing tools into prefix (sim + probe; PIO=${LABWIRED_INSTALL_PIO})"
+if ! labwired_install_full_deps; then
+  warn "some tools missing — agent still usable; later: labwired update --tools-only"
 fi
-
-# 2b. multi-probe backend (probe-rs) — not OpenOCD
-# Default: do not block install on long cargo builds. Set LABWIRED_INSTALL_PROBE_RS=1 to install now.
-# shellcheck source=lib/resolve-probe.sh
-source "$SRC/lib/resolve-probe.sh"
-mkdir -p "$BIN_DIR"
-if prs="$(labwired_resolve_probe_rs 2>/dev/null)"; then
-  say "probe-rs already installed ($prs)"
-  if [[ "$prs" != "$BIN_DIR/probe-rs" && -x "$prs" ]]; then
-    ln -sfn "$prs" "$BIN_DIR/probe-rs" 2>/dev/null || true
-  fi
-elif [[ "${LABWIRED_INSTALL_PROBE_RS:-0}" == "1" ]] && command -v cargo >/dev/null 2>&1; then
-  say "installing probe-rs (ST-Link / J-Link / CMSIS-DAP / … — not OpenOCD)"
-  if cargo install probe-rs-tools --locked 2>/dev/null \
-    || cargo install probe-rs-cli --locked 2>/dev/null; then
-    if [[ -x "${HOME}/.cargo/bin/probe-rs" ]]; then
-      ln -sfn "${HOME}/.cargo/bin/probe-rs" "$BIN_DIR/probe-rs"
-      say "linked probe-rs → $BIN_DIR/probe-rs"
-    fi
-  else
-    warn "probe-rs install failed — later: labwired probe install-backend"
-  fi
+if sim_path="$(labwired_resolve_sim 2>/dev/null)"; then
+  export LABWIRED_CLI="$sim_path"
+  say "simulator ready: $sim_path"
 else
-  warn "probe-rs not on PATH yet (physical boards)"
-  warn "  labwired probe install-backend"
-  warn "  or: LABWIRED_INSTALL_PROBE_RS=1 ./install.sh"
+  warn "simulator missing — hosted MCP verify still works"
 fi
 
 # 3. resolve MCP command (airgap fails without vendor / LABWIRED_MCP_ENTRY) ---
@@ -174,19 +216,18 @@ cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
 say "wrote MCP command into $CFG_DIR/opencode.json"
 
-# 5. product home + branded entrypoint ----------------------------------------
-# Full kit lives under ~/.labwired/agent so launcher always finds lib/branding.
-AGENT_HOME="${LABWIRED_AGENT_HOME:-$HOME/.labwired/agent}"
-say "installing product home → $AGENT_HOME"
+# 5. product kit into portable prefix ----------------------------------------
+AGENT_HOME="$(labwired_prefix_agent)"
+PREFIX_BIN="$(labwired_prefix_bin)"
+say "installing agent kit → $AGENT_HOME"
 mkdir -p "$AGENT_HOME"
-# Sync kit files (preserve user's agent home as the product install root)
 rsync -a --delete \
   --exclude '.git' \
   --exclude 'node_modules' \
   --exclude '.DS_Store' \
+  --exclude '.grok' \
   "$SRC/" "$AGENT_HOME/" 2>/dev/null || {
-  # rsync optional; fall back to cp
-  for d in bin lib config skills branding fixtures mcp scripts; do
+  for d in bin lib config skills branding fixtures mcp scripts docs tests; do
     if [[ -d "$SRC/$d" ]]; then
       mkdir -p "$AGENT_HOME/$d"
       cp -R "$SRC/$d/." "$AGENT_HOME/$d/"
@@ -197,6 +238,27 @@ rsync -a --delete \
   done
 }
 
+# Prefix bin/labwired → agent kit (contained, portable)
+mkdir -p "$PREFIX_BIN"
+_PH="$(labwired_prefix_home)"
+cat >"${PREFIX_BIN}/labwired" <<WRAP
+#!/usr/bin/env bash
+export LABWIRED_HOME="${_PH}"
+export LABWIRED_AGENT_HOME="\${LABWIRED_HOME}/agent"
+export PATH="\${LABWIRED_HOME}/bin:\${PATH}"
+# shellcheck disable=SC1090
+[[ -f "\${LABWIRED_HOME}/env.sh" ]] && source "\${LABWIRED_HOME}/env.sh"
+if [[ -x "\${LABWIRED_HOME}/tools/sim/labwired-sim" ]]; then
+  export LABWIRED_CLI="\${LABWIRED_HOME}/tools/sim/labwired-sim"
+  export LABWIRED_SIM="\${LABWIRED_CLI}"
+fi
+if [[ -x "\${LABWIRED_HOME}/tools/probe-rs/probe-rs" ]]; then
+  export LABWIRED_PROBE_RS="\${LABWIRED_HOME}/tools/probe-rs/probe-rs"
+fi
+exec "\${LABWIRED_HOME}/agent/bin/labwired" "\$@"
+WRAP
+chmod 0755 "${PREFIX_BIN}/labwired"
+
 # Branding into OpenCode config (product identity)
 mkdir -p "$CFG_DIR/branding"
 cp -R "$AGENT_HOME/branding/." "$CFG_DIR/branding/" 2>/dev/null || true
@@ -206,40 +268,69 @@ fi
 if [[ -f "$AGENT_HOME/config/AGENTS.md" ]]; then
   cp "$AGENT_HOME/config/AGENTS.md" "$CFG_DIR/AGENTS.md"
 fi
-# OpenCode also reads AGENTS from project; primary rules already in CFG_DIR
 
-mkdir -p "$BIN_DIR"
-# Thin PATH wrapper → product home (always LabWired-branded, never bare opencode)
-cat >"$BIN_DIR/labwired" <<WRAP
-#!/usr/bin/env bash
-export LABWIRED_AGENT_HOME="${AGENT_HOME}"
-exec "${AGENT_HOME}/bin/labwired" "\$@"
-WRAP
-chmod 0755 "$BIN_DIR/labwired"
-say "installed LabWired launcher → $BIN_DIR/labwired"
-case ":$PATH:" in
-  *":$BIN_DIR:"*) : ;;
-  *) warn "$BIN_DIR is not on PATH — add:  export PATH=\"$BIN_DIR:\$PATH\"" ;;
-esac
+# Thin user PATH shim — self-contained (no need to source env.sh first)
+labwired_prefix_write_env
+labwired_prefix_write_manifest
+labwired_prefix_link_user_shim
+# Also put prefix bin on PATH for this shell
+export PATH="$(labwired_prefix_bin):$(labwired_user_bin):$PATH"
+# shellcheck disable=SC1090
+source "$(labwired_prefix_home)/env.sh" 2>/dev/null || true
 
-# Resolved paths summary (sim may still be missing — doctor will say so)
+# Soft PATH persistence (portable — only if missing)
+_user_bin="$(labwired_user_bin)"
+_prefix="$(labwired_prefix_home)"
+for _rc in "${HOME}/.zprofile" "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
+  if [[ -f "$_rc" ]] || [[ "$_rc" == "${HOME}/.zprofile" ]]; then
+    if [[ ! -f "$_rc" ]]; then touch "$_rc"; fi
+    if ! grep -q 'LABWIRED_HOME\|labwired/env.sh\|\.labwired/bin' "$_rc" 2>/dev/null; then
+      {
+        echo ""
+        echo "# LabWired Agent (portable prefix)"
+        echo "[ -f \"${_prefix}/env.sh\" ] && . \"${_prefix}/env.sh\""
+        echo "export PATH=\"${_user_bin}:\$PATH\""
+      } >>"$_rc"
+      say "PATH hook → $_rc"
+      break
+    fi
+  fi
+done
+
+say "installed user shim → $(labwired_user_bin)/labwired"
+
 RESOLVED_SIM=""
 if RESOLVED_SIM="$(labwired_resolve_sim "$AGENT_HOME/bin/labwired" 2>/dev/null)"; then
   :
 else
-  RESOLVED_SIM="(not found — optional for doctor; needed for full checks)"
+  RESOLVED_SIM="(hosted MCP / install later)"
+fi
+
+# Prove the loop
+# shellcheck source=lib/smoke.sh
+source "$SRC/lib/smoke.sh"
+SMOKE_OK=0
+if labwired_smoke "$AGENT_HOME"; then
+  SMOKE_OK=1
 fi
 
 cat <<EOF
 
-$(say "installed")
-  home      $AGENT_HOME
-  labwired  $BIN_DIR/labwired
-  config    $CFG_DIR/opencode.json
-  sim       $RESOLVED_SIM
+$(say "ready — portable install")
+  LABWIRED_HOME  $(labwired_prefix_home)
+  platform       $(labwired_prefix_runtime_label)
+  sim            $RESOLVED_SIM
+  smoke          $([[ "$SMOKE_OK" -eq 1 ]] && echo PASS || echo partial)
 
+  # run the agent
+  labwired smoke     # re-check anytime
   labwired doctor
-  labwired
+  labwired           # start (OpenCode + LabWired skills)
 
   https://labwired.com/agent.html
 EOF
+
+if [[ "$SMOKE_OK" -ne 1 ]]; then
+  warn "smoke incomplete — agent kit is installed; fix warns above"
+  exit 0
+fi
