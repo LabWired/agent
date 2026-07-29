@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.6 — 2026-07-29
+
+### Keep the product tree clean
+- Drop machine-local twin yamls from C3 canary workspace (matrix system lives in core)
+- Remove internal design/research dumps under `docs/superpowers` and `docs/plans`
+- Test-matrix workflow reports via result only (no report files in-repo)
+- Tighter `.gitignore` for evidence, build products, secrets
+
 ## 0.2.5 — 2026-07-29
 
 ### Test matrix

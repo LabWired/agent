@@ -8,7 +8,7 @@ let meta = #{
         #{ title: "Unit", detail: "harness, prefix, public-install, skills" },
         #{ title: "Install", detail: "portable temp prefix smoke" },
         #{ title: "LLM", detail: "DeepInfra Kimi if key present" },
-        #{ title: "Report", detail: "summarize pass/fail" },
+        #{ title: "Result", detail: "return pass/fail summary (no files written)" },
     ],
 };
 
@@ -22,19 +22,14 @@ let lane_schema = #{
     },
 };
 
-let report_schema = #{
-    "type": "object",
-    "required": ["summary", "all_pass", "lanes"],
-    "properties": #{
-        "summary": #{ "type": "string" },
-        "all_pass": #{ "type": "boolean" },
-        "lanes": #{ "type": "array", "items": #{ "type": "string" } },
-    },
-};
-
 let root = if args == () { () } else { args.root };
 if root == () {
-    root = "/Users/andrii/Projects/labwired-agent";
+    log("error: pass args.root (absolute path to agent repo)");
+    complete(#{
+        summary: "missing args.root",
+        all_pass: false,
+        lanes: [],
+    });
 }
 
 log("agent-test-matrix root=" + root);
@@ -117,25 +112,7 @@ if llm != () && llm.success && llm.output != () {
     all_pass = false;
 }
 
-let rep_prompt = "";
-rep_prompt += "Write a short markdown test report for LabWired agent.\n";
-rep_prompt += "Root: " + root + "\n";
-rep_prompt += "Lanes (name:pass): " + json_encode(lanes) + "\n";
-rep_prompt += "all_pass computed: " + all_pass.to_string() + "\n";
-rep_prompt += "Write file: " + root + "/docs/superpowers/specs/2026-07-29-test-matrix-report.md\n";
-rep_prompt += "Include: what ran, what needs DEEPINFRA_API_KEY, next CI steps.\n";
-rep_prompt += "Return summary, all_pass, lanes.\n";
-
-let rep = agent(rep_prompt, #{
-    label: "report",
-    capability_mode: "read-write",
-    output_schema: report_schema,
-    cwd: root,
-});
-
-if rep != () && rep.success && rep.output != () {
-    complete(rep.output);
-}
+// Report stays in the workflow result only — never write into the product tree.
 complete(#{
     summary: "test matrix finished",
     all_pass: all_pass,
