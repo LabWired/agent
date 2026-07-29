@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5 — 2026-07-29
+
+### Test matrix
+- `tests/all.sh` — harness, skills, public-install, prefix-unit, install-smoke, optional LLM
+- `tests/llm-deepinfra.sh` — DeepInfra OpenAI-compatible chat (`moonshotai/Kimi-K2.5`)
+- `config/opencode.deepinfra.json` — auto-selected when `DEEPINFRA_API_KEY` is set at install
+- CI: unit + install-smoke + optional llm job (repo secret)
+- Workflow: `.grok/workflows/agent-test-matrix.rhai`
+- Docs: `docs/TESTING.md`
+
 ## 0.2.4 — 2026-07-29
 
 ### Fast portable install + install→run loop
