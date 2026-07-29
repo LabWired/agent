@@ -48,10 +48,15 @@ echo sim
 EOS
 chmod +x "$FIX/bin/labwired-sim"
 
+# Isolate from developer's portable prefix (~/.labwired/tools/sim)
+EMPTY_PREFIX="$(mktemp -d)"
+export LABWIRED_HOME="$EMPTY_PREFIX"
+
 # When LABWIRED_CLI points at sim path, use it (explicit path wins)
 got="$(
   (
     export PATH="$FIX_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     export LABWIRED_CLI="$FIX/bin/labwired-sim"
     unset LABWIRED_SIM || true
     labwired_resolve_sim "$FIX/bin/labwired" || true
@@ -63,6 +68,7 @@ assert_eq "explicit LABWIRED_CLI path" "$got" "$FIX/bin/labwired-sim"
 got="$(
   (
     export PATH="$FIX_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     unset LABWIRED_CLI || true
     export LABWIRED_SIM="$FIX/bin/labwired-sim"
     labwired_resolve_sim "$FIX/bin/labwired" || true
@@ -74,6 +80,7 @@ assert_eq "explicit LABWIRED_SIM path" "$got" "$FIX/bin/labwired-sim"
 got="$(
   (
     export PATH="$FIX_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     unset LABWIRED_CLI LABWIRED_SIM || true
     labwired_resolve_sim "$FIX/bin/labwired" || true
   )
@@ -94,6 +101,7 @@ chmod +x "$ONLY_AGENT/bin/labwired"
 got="$(
   (
     export PATH="$ONLY_AGENT/bin:$SYS_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     unset LABWIRED_CLI LABWIRED_SIM || true
     labwired_resolve_sim "$ONLY_AGENT/bin/labwired" || true
   )
@@ -113,6 +121,7 @@ chmod +x "$WRAP/bin/labwired"
 got="$(
   (
     export PATH="$WRAP/bin:$SYS_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     unset LABWIRED_CLI LABWIRED_SIM || true
     labwired_resolve_sim "$WRAP/bin/labwired" || true
   )
@@ -124,6 +133,7 @@ rm -rf "$WRAP"
 got="$(
   (
     export PATH="$SYS_PATH"
+    export LABWIRED_HOME="$EMPTY_PREFIX"
     unset LABWIRED_CLI LABWIRED_SIM || true
     labwired_resolve_sim "$FIX/bin/labwired" || true
   )
@@ -137,6 +147,7 @@ if [[ "$sys_has" -eq 0 ]]; then
 else
   echo "skip none-found (system has a labwired* binary on $SYS_PATH)"
 fi
+rm -rf "$EMPTY_PREFIX"
 
 if [[ "$fail" -ne 0 ]]; then
   echo "resolve-sim tests FAILED"
@@ -236,7 +247,7 @@ echo "resolve-mcp tests passed"
 
 # --- skill inventory ---------------------------------------------------------
 
-want=$'board-bringup\ndiagnose-firmware\nflash-firmware\ninspect-evidence\nreport-evidence\nscaffold-firmware\nverify-firmware'
+want=$'board-bringup\ndiagnose-firmware\nfirmware-repair-loop\nflash-firmware\nhw-promote\ninspect-evidence\nreport-evidence\nscaffold-firmware\nverify-firmware'
 got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
 assert_eq "skill inventory" "$got" "$want"
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then
@@ -245,6 +256,15 @@ if [[ -d "$ROOT/skills/firmware-verification" ]]; then
 else
   echo "ok   no firmware-verification skill"
 fi
+# Required v0 skills (packages skills-repair / skills-hw)
+for _skill in firmware-repair-loop hw-promote; do
+  if [[ -f "$ROOT/skills/$_skill/SKILL.md" ]]; then
+    echo "ok   skill present: $_skill"
+  else
+    echo "FAIL skill missing: skills/$_skill/SKILL.md"
+    fail=1
+  fi
+done
 
 if [[ "$fail" -ne 0 ]]; then
   echo "harness tests FAILED"
@@ -277,6 +297,20 @@ else
   fail=1
 fi
 
+if echo '{"status":"hardware_observed","proven":false}' | labwired_assert_status hardware_observed >/dev/null; then
+  echo "ok   assert-status hardware_observed accepts"
+else
+  echo "FAIL assert-status hardware_observed should accept"
+  fail=1
+fi
+
+if echo '{"status":"hardware_observed"}' | labwired_assert_status model_verified >/dev/null 2>&1; then
+  echo "FAIL assert-status hardware_observed must not pass as model_verified"
+  fail=1
+else
+  echo "ok   assert-status hardware_observed rejects model_verified"
+fi
+
 # Nested MCP-style content string carrying a status JSON blob
 if echo '{"content":"{\"status\":\"model_verified\"}"}' | labwired_assert_status model_verified >/dev/null; then
   echo "ok   assert-status nested content status string"
@@ -304,4 +338,88 @@ if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi
 echo "assert-status tests passed"
+
+# --- score-verify ------------------------------------------------------------
+# shellcheck source=lib/score-verify.sh
+source "$ROOT/lib/score-verify.sh"
+
+got="$(labwired_score_verify --matrix --oracle 1 --build 1 --warnings 0 --lines 0)"
+assert_eq "score-verify matrix green" "$got" "120"
+
+got="$(labwired_score_verify --matrix --oracle 0 --build 1 --warnings 2 --lines 5)"
+assert_eq "score-verify matrix red patch" "$got" "0"
+
+if got="$(labwired_score_verify --expect model_verified <"$ROOT/fixtures/gate1/artifacts/fixed.verify.json")"; then
+  # 100 oracle + 20 build = 120
+  assert_eq "score-verify fixed fixture score" "$got" "120"
+else
+  echo "FAIL score-verify fixed fixture should exit 0"
+  fail=1
+fi
+
+if labwired_score_verify --expect model_verified <"$ROOT/fixtures/gate1/artifacts/broken.verify.json" >/dev/null 2>&1; then
+  echo "FAIL score-verify broken should not match model_verified"
+  fail=1
+else
+  echo "ok   score-verify broken rejects model_verified"
+fi
+
+if got="$(labwired_score_verify --expect failed <"$ROOT/fixtures/gate1/artifacts/broken.verify.json")"; then
+  # oracle 0, build 0 → 0
+  assert_eq "score-verify broken fixture score" "$got" "0"
+else
+  echo "FAIL score-verify broken with --expect failed should exit 0"
+  fail=1
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "harness tests FAILED"
+  exit 1
+fi
+echo "score-verify tests passed"
+
+# --- serial-capture (fixture mode; no hardware) ------------------------------
+# shellcheck source=lib/serial-capture.sh
+source "$ROOT/lib/serial-capture.sh"
+
+SC_FIX="$(mktemp)"
+printf 'BOOT\nnoise\nLABWIRED_OK\nmore\n' >"$SC_FIX"
+if out="$(labwired_serial_capture "$SC_FIX" 115200 LABWIRED_OK 1)"; then
+  if echo "$out" | grep -q '"matched":true' && echo "$out" | grep -q 'LABWIRED_OK'; then
+    echo "ok   serial-capture fixture marker match"
+  else
+    echo "FAIL serial-capture match JSON: $out"
+    fail=1
+  fi
+else
+  echo "FAIL serial-capture should exit 0 on fixture marker"
+  fail=1
+fi
+
+printf 'BOOT only\n' >"$SC_FIX"
+if labwired_serial_capture "$SC_FIX" 115200 LABWIRED_OK 0 >/dev/null 2>&1; then
+  echo "FAIL serial-capture should fail without marker"
+  fail=1
+else
+  echo "ok   serial-capture fixture misses marker"
+fi
+
+# LABWIRED_SERIAL_FIXTURE override
+printf 'prefix LABWIRED_C3_BASELINE_OK suffix\n' >"$SC_FIX"
+if (
+  export LABWIRED_SERIAL_FIXTURE="$SC_FIX"
+  labwired_serial_capture /dev/null 115200 LABWIRED_C3_BASELINE_OK 1
+) >/dev/null; then
+  echo "ok   serial-capture LABWIRED_SERIAL_FIXTURE override"
+else
+  echo "FAIL serial-capture LABWIRED_SERIAL_FIXTURE override"
+  fail=1
+fi
+rm -f "$SC_FIX"
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "harness tests FAILED"
+  exit 1
+fi
+echo "serial-capture tests passed"
 echo "all harness tests passed"

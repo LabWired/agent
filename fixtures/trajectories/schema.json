@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labwired.local/schemas/trajectory-v0.json",
+  "title": "LabWired agent trajectory (v0)",
+  "description": "Minimal JSONL episode schema for demos, harness eval, and later QLoRA collection. One object per line.",
+  "type": "object",
+  "required": ["task", "tools", "observations", "patch", "verification"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable trajectory identifier"
+    },
+    "task": {
+      "type": "object",
+      "required": ["prompt"],
+      "additionalProperties": true,
+      "properties": {
+        "prompt": { "type": "string" },
+        "goal": { "type": "string" },
+        "fixture": { "type": "string" },
+        "oracle_ref": { "type": "string" }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "additionalProperties": true,
+        "properties": {
+          "ts": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "verify",
+              "patch",
+              "flash",
+              "serial_capture",
+              "run",
+              "inspect",
+              "report",
+              "other"
+            ]
+          },
+          "inputs": { "type": "object" },
+          "result_ref": { "type": "string" },
+          "status": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "summary"],
+        "additionalProperties": true,
+        "properties": {
+          "ts": { "type": "string" },
+          "source": { "type": "string" },
+          "summary": { "type": "string" },
+          "excerpt": { "type": "string" },
+          "status": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "patch": {
+      "description": "Code change applied, or null if none",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "diff": { "type": "string" },
+            "files": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "summary": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "verification": {
+      "type": "object",
+      "required": ["status", "path"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "model_verified",
+            "hardware_observed",
+            "failed",
+            "inconclusive",
+            "unsupported"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "enum": ["twin", "hardware", "offline_claim", "other"]
+        },
+        "assert_ref": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

@@ -13,32 +13,64 @@ Write firmware. Run it on a virtual board.
 
 ## Install
 
+**Easy on every platform** — one portable prefix, thin PATH shim.
+
+| OS | One-liner (Cursor CLI style) |
+|----|------------------------------|
+| **macOS / Linux / WSL2** | `curl -fsSL https://labwired.com/install \| bash` |
+| **Windows** (PowerShell) | `irm 'https://labwired.com/install?win32=true' \| iex` |
+| **Any** (Node 18+) | `npx @labwired/agent` |
+
+**WSL:** use the **bash** line *inside* the distro (same as Cursor). USB → `usbipd`.
+
+Then (install already proved with **smoke**):
+
 ```bash
-curl -fsSL https://labwired.com/agent-install.sh | sh
+labwired smoke     # claim gate + sim + skills
+labwired           # start agent
+labwired update    # self-update (like Cursor agent update)
+```
+
+```powershell
+labwired smoke
 labwired
+labwired update
 ```
 
-```bash
-# or
-npm i -g @labwired/agent && labwired
-```
+Portable root anywhere:
 
 ```bash
-# or
-git clone https://github.com/LabWired/agent && cd agent && ./install.sh
+curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
+# or from git checkout:
+LABWIRED_HOME=./.lw ./install.sh --full && ./.lw/userbin/labwired smoke
 ```
+
+```text
+$LABWIRED_HOME/   (~/.labwired or %USERPROFILE%\.labwired)
+  agent/  tools/sim  tools/probe-rs  bin/  env.sh|env.ps1  MANIFEST.json
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--full` / `-Full` | Agent + tools into the prefix (default) |
+| `--prefix DIR` / `-Prefix` | Custom root (USB, CI, `D:\labwired`) |
+| `--minimal` / `-Minimal` | Kit only |
+| `--airgap` / `-Airgap` | Vendored MCP |
+
+```bash
+labwired package info
+labwired install-deps
+labwired package uninstall --yes
+```
+
+Full matrix (Windows twin = hosted MCP until Windows sim prebuild ships):  
+[docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
 
 Claude / Codex:
 
 ```bash
 claude mcp add labwired --transport http https://api.labwired.com/mcp
 codex mcp add labwired --url https://api.labwired.com/mcp
-```
-
-Simulator (for full checks):
-
-```bash
-curl -fsSL https://labwired.com/install.sh | sh
 ```
 
 ## How it works

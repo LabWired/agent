@@ -1,7 +1,7 @@
 {
   "name": "@labwired/agent",
-  "version": "0.2.0",
-  "description": "LabWired Agent — write firmware, run it on a virtual board",
+  "version": "0.2.4",
+  "description": "LabWired Agent — portable verified firmware agent for macOS, Linux, and Windows",
   "license": "MIT",
   "homepage": "https://labwired.com",
   "repository": {
@@ -25,6 +25,12 @@
   "files": [
     "scripts/npm-install.js",
     "scripts/agent-install.sh",
+    "scripts/agent-install.ps1",
+    "scripts/install.ps1",
+    "scripts/pack-portable.sh",
+    "scripts/public/install",
+    "scripts/public/install.ps1",
+    "scripts/public/DEPLOY.md",
     "bin",
     "config",
     "skills",
@@ -32,9 +38,15 @@
     "branding",
     "install.sh",
     "demo.sh",
+    "docs/PORTABLE_INSTALL.md",
     "VERSION",
     "README.md",
     "LICENSE"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
   ],
   "engines": {
     "node": ">=18"

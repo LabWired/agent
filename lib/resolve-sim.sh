@@ -101,6 +101,12 @@ labwired_resolve_sim() {
 
   if [[ -n "${LABWIRED_CLI:-}" ]] && try_one "$LABWIRED_CLI"; then return 0; fi
   if [[ -n "${LABWIRED_SIM:-}" ]] && try_one "$LABWIRED_SIM"; then return 0; fi
+
+  # Portable prefix (contained install) — prefer before PATH scatter
+  local prefix_home="${LABWIRED_HOME:-$HOME/.labwired}"
+  if try_one "${prefix_home}/tools/sim/labwired-sim"; then return 0; fi
+  if try_one "${prefix_home}/bin/labwired-sim"; then return 0; fi
+
   # Prefer explicit sim names before generic `labwired`
   if try_one labwired-sim; then return 0; fi
   if try_one labwired-cli; then return 0; fi
