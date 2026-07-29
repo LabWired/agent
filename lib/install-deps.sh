@@ -36,6 +36,29 @@ labwired_deps_install_sim() {
   cache="$home/cache"
   mkdir -p "$tools" "$bin" "$cache"
 
+  # Prefer monorepo-built CLI when present (has newer chip models than GH prebuild)
+  local mono=""
+  for mono in \
+    "${LABWIRED_CORE_CLI:-}" \
+    "${LABWIRED_CORE_SRC:-}/target/release/labwired" \
+    "${HOME}/Projects/labwired/core/target/release/labwired" \
+    "${HOME}/Projects/labwired-emit-ts/core/target/release/labwired"
+  do
+    [[ -n "$mono" && -x "$mono" ]] || continue
+    # Always refresh if monorepo binary is newer than installed
+    if [[ ! -x "$tools/labwired-sim" ]] || [[ "$mono" -nt "$tools/labwired-sim" ]]; then
+      cp "$mono" "$tools/labwired-sim"
+      chmod +x "$tools/labwired-sim"
+      echo "local-monorepo" >"$tools/VERSION"
+      labwired_deps_ok "simulator from monorepo → $tools/labwired-sim"
+    else
+      labwired_deps_ok "simulator already in prefix (monorepo not newer)"
+    fi
+    ln -sfn "$tools/labwired-sim" "$bin/labwired-sim"
+    ln -sfn "$tools/labwired-sim" "$bin/labwired-cli"
+    return 0
+  done
+
   if [[ -x "$tools/labwired-sim" ]]; then
     labwired_deps_ok "simulator already in prefix: $tools/labwired-sim"
     ln -sfn "$tools/labwired-sim" "$bin/labwired-sim"

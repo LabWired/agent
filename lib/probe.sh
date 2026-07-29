@@ -193,16 +193,57 @@ labwired_probe_flash() {
     return 0
   fi
 
-  # Physical: probe-rs
+  # Physical: ESP32* often uses esptool/PIO (USB-Serial/JTAG), not probe-rs alone.
+  local chip_lc
+  chip_lc="$(printf '%s' "$chip" | tr '[:upper:]' '[:lower:]')"
+  if [[ -z "$chip" ]]; then
+    echo "labwired probe flash: --chip required for physical flash" >&2
+    return 2
+  fi
+  if [[ "$chip_lc" == *esp32* ]] || [[ "$chip_lc" == *esp8266* ]]; then
+    if command -v pio >/dev/null 2>&1 && [[ -f "platformio.ini" ]]; then
+      echo "==> physical flash via PlatformIO (ESP family — USB-CDC path)"
+      echo "    chip: $chip"
+      echo "    elf:  $elf  (pio rebuilds from project; prefer project dir)"
+      pio run -t upload
+      echo "claim: flashed via PIO — capture serial before hardware_observed"
+      return 0
+    fi
+    local bin=""
+    # Accept .bin next to .elf or same stem
+    if [[ "$elf" == *.elf && -f "${elf%.elf}.bin" ]]; then
+      bin="${elf%.elf}.bin"
+    elif [[ -f "$elf" && "$elf" == *.bin ]]; then
+      bin="$elf"
+    fi
+    if [[ -n "$bin" ]] && command -v esptool >/dev/null 2>&1; then
+      local port="${LABWIRED_HW_PORT:-${LABWIRED_C3_PORT:-}}"
+      [[ -n "$port" ]] || port="$(ls /dev/cu.usbmodem* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | head -1 || true)"
+      [[ -n "$port" ]] || {
+        echo "labwired probe flash: set LABWIRED_HW_PORT for esptool" >&2
+        return 1
+      }
+      local chip_arg="esp32c3"
+      [[ "$chip_lc" == *esp32s3* ]] && chip_arg="esp32s3"
+      [[ "$chip_lc" == *esp32s2* ]] && chip_arg="esp32s2"
+      [[ "$chip_lc" == *esp32c6* ]] && chip_arg="esp32c6"
+      [[ "$chip_lc" == *esp32\ * || "$chip_lc" == "esp32" ]] && chip_arg="esp32"
+      echo "==> physical flash via esptool ($chip_arg)"
+      esptool --chip "$chip_arg" -p "$port" -b 460800 write_flash 0x10000 "$bin" \
+        || esptool --chip "$chip_arg" -p "$port" write_flash 0x0 "$bin"
+      echo "claim: flashed via esptool — capture serial before hardware_observed"
+      return 0
+    fi
+    echo "labwired probe flash: ESP chip needs PlatformIO project or esptool + .bin" >&2
+    echo "    tip: cd project && pio run -t upload && labwired serial-capture …" >&2
+  fi
+
+  # Physical: probe-rs (STM32, nRF, …)
   local prs
   prs="$(labwired_resolve_probe_rs)" || {
     echo "labwired probe flash: probe-rs not found (labwired probe install-backend)" >&2
     return 1
   }
-  if [[ -z "$chip" ]]; then
-    echo "labwired probe flash: --chip required for physical flash (try: labwired probe chips stm32)" >&2
-    return 2
-  fi
   echo "==> physical flash via probe-rs (not OpenOCD)"
   echo "    probe-rs: $prs"
   echo "    chip:     $chip"

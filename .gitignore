@@ -4,3 +4,6 @@ dist/
 *.tar.gz
 .pio/
 .pio/**
+workspaces/**/.pio/
+workspaces/**/evidence/*.txt
+workspaces/**/evidence/
