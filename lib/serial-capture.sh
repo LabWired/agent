@@ -95,12 +95,16 @@ def open_stream(path: str, baudrate: int):
         f = open(path, "rb")
         return f, False, f.close
 
-    # Character device (UART)
+    # Character device (UART / USB-CDC). RDWR so we can toggle DTR/RTS for reset
+    # (ESP32-C3 USB-Serial/JTAG needs a pulse after flash or capture is empty).
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
-    except OSError as e:
-        sys.stderr.write(f"serial-capture: open failed: {path}: {e}\n")
-        sys.exit(2)
+        fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except OSError:
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
+        except OSError as e:
+            sys.stderr.write(f"serial-capture: open failed: {path}: {e}\n")
+            sys.exit(2)
 
     if termios is not None:
         try:
@@ -113,6 +117,7 @@ def open_stream(path: str, baudrate: int):
                 cflag |= termios.CREAD
             if hasattr(termios, "CLOCAL"):
                 cflag |= termios.CLOCAL
+            # HUPCL can hang USB-CDC; leave default unless set
             attrs[2] = cflag
             attrs[3] = 0  # lflag raw
             speed = BAUD_MAP.get(baudrate)
@@ -131,6 +136,33 @@ def open_stream(path: str, baudrate: int):
                 termios.tcflush(fd, termios.TCIFLUSH)
             except termios.error:
                 pass
+            # Best-effort board reset via DTR/RTS (macOS TIOCM* when available)
+            if os.environ.get("LABWIRED_SERIAL_NO_RESET", "") != "1":
+                try:
+                    import fcntl
+                    import struct
+
+                    TIOCMGET = getattr(termios, "TIOCMGET", 0x5415)
+                    TIOCMSET = getattr(termios, "TIOCMSET", 0x5418)
+                    TIOCM_DTR = 0x002
+                    TIOCM_RTS = 0x004
+                    status = struct.unpack(
+                        "I", fcntl.ioctl(fd, TIOCMGET, struct.pack("I", 0))
+                    )[0]
+                    fcntl.ioctl(
+                        fd,
+                        TIOCMSET,
+                        struct.pack("I", status | TIOCM_DTR | TIOCM_RTS),
+                    )
+                    time.sleep(0.05)
+                    fcntl.ioctl(
+                        fd,
+                        TIOCMSET,
+                        struct.pack("I", status & ~(TIOCM_DTR | TIOCM_RTS)),
+                    )
+                    time.sleep(0.25)
+                except Exception:
+                    pass
         except termios.error as e:
             sys.stderr.write(f"serial-capture: termios configure failed: {e}\n")
             # continue with best-effort read

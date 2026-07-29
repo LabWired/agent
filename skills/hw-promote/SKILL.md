@@ -61,16 +61,29 @@ labwired probe doctor
 labwired probe flash <elf> --chip <chip-id>
 ```
 
+**ESP32-C3 / ESP USB-Serial/JTAG:** use PlatformIO or esptool (probe-rs path is
+secondary). From a PlatformIO project:
+
+```bash
+pio run -t upload
+# or
+labwired probe flash build/app.elf --chip esp32c3   # routes to PIO/esptool when possible
+```
+
+USB-CDC builds must set:
+
+```
+-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1
+```
+
+Without those flags, flash succeeds but serial capture is empty.
+
 Virtual twin path (not hardware_observed):
 
 ```bash
 labwired probe flash <elf> --target virtual --chip <board-or-system>
 # or MCP: labwired_verify
 ```
-
-When probe-rs is missing, use the **target’s normal flash tool** (PlatformIO,
-esptool, vendor CLI) — document which tool you used. Do not invent OpenOCD
-configs as the default.
 
 Still require serial/RTT marker capture after flash — the flash tool alone does
 not grant `hardware_observed`.
