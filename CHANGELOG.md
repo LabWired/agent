@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.9 — 2026-07-30
+
+### One-line install (really easy)
+- Public install always refreshes kit (re-run = update)
+- Success banner: only `labwired` / `labwired doctor`
+- Windows: zip download (no git required) + `install.ps1` one-liner
+- README leads with a single command per OS
+- Install copies `share/` catalog into the prefix
+
 ## 0.2.8 — 2026-07-30
 
 ### Live twin catalog + Gate 1

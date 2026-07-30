@@ -9,82 +9,46 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.2.9-blue)](CHANGELOG.md)
 
 ## Install
 
-**Easy on every platform** — one portable prefix, thin PATH shim.
-
-| OS | One-liner (Cursor CLI style) |
-|----|------------------------------|
-| **macOS / Linux / WSL2** | `curl -fsSL https://labwired.com/install \| bash` |
-| **Windows** (PowerShell) | `irm 'https://labwired.com/install?win32=true' \| iex` |
-| **Any** (Node 18+) | `npx @labwired/agent` |
-
-**WSL:** use the **bash** line *inside* the distro (same as Cursor). USB → `usbipd`.
-
-Then (install already proved with **smoke**):
+**macOS / Linux / WSL:**
 
 ```bash
-labwired smoke     # claim gate + sim + skills
-labwired           # start agent
-labwired update    # self-update (like Cursor agent update)
+curl -fsSL https://labwired.com/install | bash
 ```
+
+**Windows (PowerShell):**
 
 ```powershell
-labwired smoke
+irm https://labwired.com/install.ps1 | iex
+```
+
+Then:
+
+```bash
 labwired
-labwired update
 ```
 
-Portable root anywhere:
+Same one-liner updates. That’s the whole install story.
+
+<details>
+<summary>Options (optional)</summary>
 
 ```bash
+# custom prefix
 curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
-# or from git checkout:
-LABWIRED_HOME=./.lw ./install.sh --full && ./.lw/userbin/labwired smoke
-```
 
-```text
-$LABWIRED_HOME/   (~/.labwired or %USERPROFILE%\.labwired)
-  agent/  tools/sim  tools/probe-rs  bin/  env.sh|env.ps1  MANIFEST.json
-```
+# npm
+npx @labwired/agent
 
-| Flag | Meaning |
-|------|---------|
-| `--full` / `-Full` | Agent + tools into the prefix (default) |
-| `--prefix DIR` / `-Prefix` | Custom root (USB, CI, `D:\labwired`) |
-| `--minimal` / `-Minimal` | Kit only |
-| `--airgap` / `-Airgap` | Vendored MCP |
-
-```bash
-labwired package info
-labwired install-deps
-labwired package uninstall --yes
-```
-
-Full matrix (Windows twin = hosted MCP until Windows sim prebuild ships):  
-[docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
-
-## VS Code / Cursor workbench (Pro)
-
-Embedder-shaped shell redesigned for LabWired — **Agent · Evidence · Monitor**:
-
-```bash
-cd extensions/labwired-vscode && npm install && npm run compile
-# package:
-npm run package
-cursor --install-extension ./labwired-vscode.vsix
-```
-
-See [extensions/labwired-vscode/README.md](extensions/labwired-vscode/README.md) and [docs/PRODUCT.md](docs/PRODUCT.md).
-
-Claude / Codex:
-
-```bash
+# Claude / Codex MCP
 claude mcp add labwired --transport http https://api.labwired.com/mcp
-codex mcp add labwired --url https://api.labwired.com/mcp
 ```
+
+More: [docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
+</details>
 
 ## How it works
 

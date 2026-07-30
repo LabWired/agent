@@ -243,7 +243,7 @@ rsync -a --delete \
   --exclude '.DS_Store' \
   --exclude '.grok' \
   "$SRC/" "$AGENT_HOME/" 2>/dev/null || {
-  for d in bin lib config skills branding fixtures mcp scripts docs tests; do
+  for d in bin lib config skills branding fixtures mcp scripts docs tests share examples; do
     if [[ -d "$SRC/$d" ]]; then
       mkdir -p "$AGENT_HOME/$d"
       cp -R "$SRC/$d/." "$AGENT_HOME/$d/"
@@ -330,23 +330,20 @@ if labwired_smoke "$AGENT_HOME"; then
   SMOKE_OK=1
 fi
 
+# Make labwired available in *this* shell immediately
+export PATH="$(labwired_user_bin):$(labwired_prefix_bin):${PATH}"
+
 cat <<EOF
 
-$(say "ready — portable install")
-  LABWIRED_HOME  $(labwired_prefix_home)
-  platform       $(labwired_prefix_runtime_label)
-  sim            $RESOLVED_SIM
-  smoke          $([[ "$SMOKE_OK" -eq 1 ]] && echo PASS || echo partial)
+$(printf '\033[32m✓\033[0m') LabWired Agent installed
 
-  # run the agent
-  labwired smoke     # re-check anytime
-  labwired doctor
-  labwired           # start (OpenCode + LabWired skills)
+  Run:     labwired
+  Check:   labwired doctor
+  Update:  curl -fsSL https://labwired.com/install | bash
 
-  https://labwired.com/agent.html
 EOF
 
 if [[ "$SMOKE_OK" -ne 1 ]]; then
-  warn "smoke incomplete — agent kit is installed; fix warns above"
+  warn "smoke partial — kit is installed; run: labwired doctor"
   exit 0
 fi
