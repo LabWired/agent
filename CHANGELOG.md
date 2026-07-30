@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.8 — 2026-07-30
+
+### Live twin catalog + Gate 1
+- `share/catalog/` — thin system YAMLs (chip names bundled in labwired-sim; no monorepo)
+- `lib/resolve-catalog.sh` + `scripts/sync-catalog.sh`
+- `scripts/live-gate1.sh` — real twin red→green on bare-metal UART0 ELFs
+- `fixtures/gate1-live/` — fixed/broken prebuilt ELFs (copy of core C3 blinky path)
+
 ## 0.2.7 — 2026-07-29
 
 ### Board-agnostic product surface

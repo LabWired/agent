@@ -73,6 +73,21 @@ else
   echo "FAIL missing scripts/dev-cycle.sh"
   fail=1
 fi
+if [[ -x "$ROOT/scripts/live-gate1.sh" ]] \
+  && [[ -f "$ROOT/share/catalog/boards.json" ]] \
+  && [[ -f "$ROOT/share/catalog/systems/esp32c3.yaml" ]]; then
+  echo "ok   catalog + live-gate1"
+else
+  echo "FAIL catalog or live-gate1 missing"
+  fail=1
+fi
+if [[ -f "$ROOT/fixtures/gate1-live/firmware/gate1-fixed.elf" ]] \
+  && [[ -f "$ROOT/fixtures/gate1-live/firmware/gate1-broken.elf" ]]; then
+  echo "ok   gate1-live prebuilt ELFs"
+else
+  echo "FAIL gate1-live ELFs missing"
+  fail=1
+fi
 # examples are canaries, not product roots
 if [[ -d "$ROOT/workspaces" ]]; then
   echo "FAIL workspaces/ should not ship (use examples/ profiles)"

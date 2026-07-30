@@ -1,0 +1,5 @@
+# LabWired agent twin system — thin wrapper around sim-bundled chip "nrf52840".
+name: "agent-nrf52840"
+chip: "nrf52840"
+external_devices: []
+board_io: []

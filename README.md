@@ -66,6 +66,19 @@ labwired package uninstall --yes
 Full matrix (Windows twin = hosted MCP until Windows sim prebuild ships):  
 [docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
 
+## VS Code / Cursor workbench (Pro)
+
+Embedder-shaped shell redesigned for LabWired — **Agent · Evidence · Monitor**:
+
+```bash
+cd extensions/labwired-vscode && npm install && npm run compile
+# package:
+npm run package
+cursor --install-extension ./labwired-vscode.vsix
+```
+
+See [extensions/labwired-vscode/README.md](extensions/labwired-vscode/README.md) and [docs/PRODUCT.md](docs/PRODUCT.md).
+
 Claude / Codex:
 
 ```bash
@@ -142,10 +155,14 @@ curl -fsSL https://labwired.com/agent-install.sh | sh -s -- --airgap
 
 ## Demo
 
-[fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md)
+[fixtures/gate1/GATE1.md](fixtures/gate1/GATE1.md) — offline claim shapes  
+[fixtures/gate1-live/](fixtures/gate1-live/) — **live** twin red→green
 
 ```bash
 ./demo.sh
+scripts/live-gate1.sh    # needs labwired-sim; no monorepo
 ```
+
+Twin boards (chip names inside the sim): `share/catalog/`.
 
 MIT · [LICENSE](LICENSE)

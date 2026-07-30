@@ -43,6 +43,13 @@ SKIP_FLASH="${LABWIRED_HW_SKIP_FLASH:-0}"
 
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
+# shellcheck source=lib/resolve-catalog.sh
+source "$ROOT/lib/resolve-catalog.sh"
+export LABWIRED_AGENT_HOME="${LABWIRED_AGENT_HOME:-$ROOT}"
+if [[ -z "$SYS" && -n "${CHIP:-}" && "$CHIP" != "unknown" ]]; then
+  SYS="$(labwired_catalog_system "$CHIP" 2>/dev/null || true)"
+fi
+
 if [[ -z "$WS" ]]; then
   cat >&2 <<'EOF'
 dev-cycle: set LABWIRED_HW_WS to a PlatformIO project directory.

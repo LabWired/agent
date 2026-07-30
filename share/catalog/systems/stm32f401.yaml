@@ -1,0 +1,5 @@
+# LabWired agent twin system — thin wrapper around sim-bundled chip "stm32f401".
+name: "agent-stm32f401"
+chip: "stm32f401"
+external_devices: []
+board_io: []
