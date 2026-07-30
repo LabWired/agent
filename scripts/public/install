@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# LabWired Agent — one-liner install (fast, portable)
+# LabWired Agent — one-line install (Cursor-style)
 #
 #   curl -fsSL https://labwired.com/install | bash
-#   curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
 #
-# Windows:  irm 'https://labwired.com/install?win32=true' | iex
-# WSL:      use this bash installer inside the distro
+# That's it. Then: labwired
+#
+# Windows:  irm https://labwired.com/install.ps1 | iex
+# Optional: curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || true)" == MINGW* ]] \
   || [[ "$(uname -s 2>/dev/null || true)" == MSYS* ]]; then
-  echo "labwired: on native Windows use PowerShell:" >&2
-  echo "  irm 'https://labwired.com/install?win32=true' | iex" >&2
+  echo "On Windows, use PowerShell:" >&2
+  echo "  irm https://labwired.com/install.ps1 | iex" >&2
   exit 1
 fi
 
@@ -20,20 +21,19 @@ REPO_URL="${LABWIRED_AGENT_REPO:-https://github.com/${REPO_SLUG}.git}"
 REPO_REF="${LABWIRED_AGENT_REF:-main}"
 PREFIX="${LABWIRED_HOME:-$HOME/.labwired}"
 AGENT_HOME="${LABWIRED_AGENT_HOME:-$PREFIX/agent}"
-# Fast path: skip PlatformIO venv (slow). Full stack: LABWIRED_INSTALL_PIO=1
+# Fast default: no PlatformIO (slow). Opt in: LABWIRED_INSTALL_PIO=1
 export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
 
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 die() { printf 'labwired install: %s\n' "$1" >&2; exit 1; }
-
 need() { command -v "$1" >/dev/null 2>&1 || die "need '$1' on PATH"; }
 
 need curl
 need bash
 need tar
 
-say "LabWired Agent — fast portable install"
-say "prefix: $PREFIX  ref: $REPO_REF"
+say "Installing LabWired Agent…"
+say "  → $PREFIX"
 
 mkdir -p "$PREFIX"
 export LABWIRED_HOME="$PREFIX"
@@ -41,18 +41,14 @@ export LABWIRED_AGENT_HOME="$AGENT_HOME"
 
 _install_kit_from_tarball() {
   local url tmp top
-  # codeload is faster than git clone for shallow kit
   url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/${REPO_REF}"
-  if [[ "$REPO_REF" == v* || "$REPO_REF" == *.* ]]; then
-    # tag-style
+  if [[ "$REPO_REF" == v* ]]; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/tags/${REPO_REF}"
   fi
-  say "downloading kit tarball (${REPO_REF})…"
   tmp="$(mktemp -d)"
-  if ! curl -fsSL --retry 3 --connect-timeout 15 "$url" | tar -xz -C "$tmp" 2>/dev/null; then
-    # try heads/main if tag failed
+  if ! curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" 2>/dev/null; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/main"
-    curl -fsSL --retry 3 --connect-timeout 15 "$url" | tar -xz -C "$tmp" || {
+    curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" || {
       rm -rf "$tmp"
       return 1
     }
@@ -65,16 +61,12 @@ _install_kit_from_tarball() {
   rm -rf "$AGENT_HOME"
   mkdir -p "$(dirname "$AGENT_HOME")"
   mv "$top" "$AGENT_HOME"
-  rm -rf "$tmp"
-  # drop .git if any — portable tree
-  rm -rf "$AGENT_HOME/.git"
-  say "kit ready (tarball)"
+  rm -rf "$tmp" "$AGENT_HOME/.git"
   return 0
 }
 
 _install_kit_from_git() {
   need git
-  say "cloning kit via git…"
   if [[ -d "$AGENT_HOME/.git" ]]; then
     git -C "$AGENT_HOME" fetch --depth 1 origin "$REPO_REF" 2>/dev/null || true
     git -C "$AGENT_HOME" checkout -q FETCH_HEAD 2>/dev/null \
@@ -86,19 +78,19 @@ _install_kit_from_git() {
   fi
 }
 
-# Prefer tarball (no git required, faster). Git fallback.
-if [[ -d "$AGENT_HOME" && -f "$AGENT_HOME/install.sh" && "${LABWIRED_FORCE_REINSTALL:-0}" != "1" ]]; then
-  say "existing kit found — reinstalling into prefix"
+# Always refresh kit on one-liner (re-run = update). Skip only if asked.
+if [[ "${LABWIRED_SKIP_KIT_UPDATE:-0}" == "1" && -f "$AGENT_HOME/install.sh" ]]; then
+  say "keeping existing kit (LABWIRED_SKIP_KIT_UPDATE=1)"
 else
   if ! _install_kit_from_tarball; then
-    say "tarball failed — falling back to git"
+    say "tarball failed — trying git"
     _install_kit_from_git
   fi
 fi
 
 [[ -f "$AGENT_HOME/install.sh" ]] || die "install.sh missing in $AGENT_HOME"
-say "running installer (sim + probe; PIO off for speed)"
-# Pass through user flags; ensure --full for tools unless --minimal
+
+# Default: full stack (agent + sim + probe). Pass-through flags.
 has_mode=0
 for a in "$@"; do
   case "$a" in --full|--minimal) has_mode=1 ;; esac

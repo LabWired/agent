@@ -353,16 +353,12 @@ Write-EnvPs1
 Write-Manifest
 Install-UserShim
 
+$env:Path = "$UserBin;" + $env:Path
+
 Write-Host ""
-Say "installed — portable prefix (Windows)"
-Write-Host "  LABWIRED_HOME  $Prefix"
-Write-Host "  platform       $(Get-PlatformId)"
-Write-Host "  agent          $(Join-Path $Prefix 'agent')"
-Write-Host "  tools          $(Join-Path $Prefix 'tools')"
-Write-Host "  user shim      $(Join-Path $UserBin 'labwired.cmd')"
-Write-Host "  activate       . $Prefix\env.ps1"
+Write-Host "✓ LabWired Agent installed" -ForegroundColor Green
 Write-Host ""
-Write-Host "  labwired doctor"
-Write-Host "  labwired"
-Write-Host "  https://labwired.com/agent.html"
+Write-Host "  Run:     labwired"
+Write-Host "  Check:   labwired doctor"
+Write-Host "  Update:  irm https://labwired.com/install.ps1 | iex"
 Write-Host ""
