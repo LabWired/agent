@@ -24,9 +24,14 @@ test -f fixtures/gate1/artifacts/fixed.verify.json
 grep -q LABWIRED_OK fixtures/gate1/fixed/main.c
 ! grep -q LABWIRED_OK fixtures/gate1/broken/main.c
 
-echo "==> Gate 1 claim artifacts"
+echo "==> Gate 1 claim artifacts (offline shapes)"
 bin/labwired assert-status failed fixtures/gate1/artifacts/broken.verify.json
 bin/labwired assert-status model_verified fixtures/gate1/artifacts/fixed.verify.json
+
+if [[ "${DEMO_LIVE_GATE1:-0}" == "1" ]]; then
+  echo "==> Gate 1 live twin"
+  bash scripts/live-gate1.sh
+fi
 
 echo "==> doctor (may warn if OpenCode/sim not installed)"
 if bin/labwired doctor; then

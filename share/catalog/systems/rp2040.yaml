@@ -1,0 +1,5 @@
+# LabWired agent twin system — thin wrapper around sim-bundled chip "rp2040".
+name: "agent-rp2040"
+chip: "rp2040"
+external_devices: []
+board_io: []

@@ -27,7 +27,24 @@ bin/labwired assert-status model_verified fixtures/gate1/artifacts/fixed.verify.
 `assert-status` exits 0 only when the JSON `status` matches. That is the same
 hard gate the agent must obey after every `labwired_verify`.
 
-## Live path (with sim + MCP)
+## Live path (real twin — preferred)
+
+```bash
+scripts/live-gate1.sh
+```
+
+Builds/uses bare-metal C3 ELFs under `fixtures/gate1-live/`, runs
+`labwired-sim test` with catalog system `share/catalog/systems/esp32c3.yaml`,
+and asserts:
+
+| Step | Status |
+|------|--------|
+| broken | `failed` |
+| fixed | `model_verified` |
+
+No monorepo required when sim is installed. Evidence: `fixtures/gate1-live/evidence/`.
+
+## Live path (with sim + MCP agent session)
 
 1. `./install.sh` then `labwired doctor`
 2. Compile broken (builder or local toolchain) → `labwired_verify` with `oracle.json` + `diagram.json`

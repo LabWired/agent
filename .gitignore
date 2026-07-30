@@ -14,12 +14,26 @@ examples/**/.pio/
 # Runtime evidence (generated)
 workspaces/**/evidence/
 examples/**/evidence/
+fixtures/**/evidence/
 **/evidence/
 *.elf
 *.bin
 !fixtures/**/*.bin
+# Gate 1 live prebuilts (tiny bare-metal twin ELFs)
+!fixtures/gate1-live/firmware/*.elf
 
 # Secrets / env
 .env
 .env.*
 *.pem
+
+# Competitor artifact dumps (re-download; keep STUDY.md only)
+docs/competitive/embedder-vscode/*.vsix
+docs/competitive/embedder-vscode/unpacked/
+docs/competitive/embedder-vscode/marketplace-query.json
+docs/competitive/embedder-vscode/marketplace-meta.json
+
+# VS Code extension build
+extensions/labwired-vscode/node_modules/
+extensions/labwired-vscode/out/
+extensions/labwired-vscode/*.vsix

@@ -1,0 +1,5 @@
+# LabWired agent twin system — thin wrapper around sim-bundled chip "mkw41z4".
+name: "agent-mkw41z4"
+chip: "mkw41z4"
+external_devices: []
+board_io: []

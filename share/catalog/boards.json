@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "description": "Twin board catalog for LabWired Agent (chip ids bundled in labwired-sim)",
+  "boards": [
+    {
+      "id": "esp32",
+      "system": "systems/esp32.yaml",
+      "chip": "esp32",
+      "role": "twin"
+    },
+    {
+      "id": "esp32c3",
+      "system": "systems/esp32c3.yaml",
+      "chip": "esp32c3",
+      "role": "twin"
+    },
+    {
+      "id": "esp32s3",
+      "system": "systems/esp32s3.yaml",
+      "chip": "esp32s3",
+      "role": "twin"
+    },
+    {
+      "id": "esp32s3-zero",
+      "system": "systems/esp32s3-zero.yaml",
+      "chip": "esp32s3-zero",
+      "role": "twin"
+    },
+    {
+      "id": "mkw41z4",
+      "system": "systems/mkw41z4.yaml",
+      "chip": "mkw41z4",
+      "role": "twin"
+    },
+    {
+      "id": "nrf52832",
+      "system": "systems/nrf52832.yaml",
+      "chip": "nrf52832",
+      "role": "twin"
+    },
+    {
+      "id": "nrf52840",
+      "system": "systems/nrf52840.yaml",
+      "chip": "nrf52840",
+      "role": "twin"
+    },
+    {
+      "id": "nrf5340",
+      "system": "systems/nrf5340.yaml",
+      "chip": "nrf5340",
+      "role": "twin"
+    },
+    {
+      "id": "nrf54l15",
+      "system": "systems/nrf54l15.yaml",
+      "chip": "nrf54l15",
+      "role": "twin"
+    },
+    {
+      "id": "rp2040",
+      "system": "systems/rp2040.yaml",
+      "chip": "rp2040",
+      "role": "twin"
+    },
+    {
+      "id": "stm32f103",
+      "system": "systems/stm32f103.yaml",
+      "chip": "stm32f103",
+      "role": "twin"
+    },
+    {
+      "id": "stm32f401",
+      "system": "systems/stm32f401.yaml",
+      "chip": "stm32f401",
+      "role": "twin"
+    },
+    {
+      "id": "stm32f401cdu6",
+      "system": "systems/stm32f401cdu6.yaml",
+      "chip": "stm32f401cdu6",
+      "role": "twin"
+    },
+    {
+      "id": "stm32f407",
+      "system": "systems/stm32f407.yaml",
+      "chip": "stm32f407",
+      "role": "twin"
+    },
+    {
+      "id": "stm32f411ceu6",
+      "system": "systems/stm32f411ceu6.yaml",
+      "chip": "stm32f411ceu6",
+      "role": "twin"
+    },
+    {
+      "id": "stm32g474re",
+      "system": "systems/stm32g474re.yaml",
+      "chip": "stm32g474re",
+      "role": "twin"
+    },
+    {
+      "id": "stm32h563",
+      "system": "systems/stm32h563.yaml",
+      "chip": "stm32h563",
+      "role": "twin"
+    },
+    {
+      "id": "stm32h735",
+      "system": "systems/stm32h735.yaml",
+      "chip": "stm32h735",
+      "role": "twin"
+    },
+    {
+      "id": "stm32l073",
+      "system": "systems/stm32l073.yaml",
+      "chip": "stm32l073",
+      "role": "twin"
+    },
+    {
+      "id": "stm32l476",
+      "system": "systems/stm32l476.yaml",
+      "chip": "stm32l476",
+      "role": "twin"
+    },
+    {
+      "id": "stm32wb55",
+      "system": "systems/stm32wb55.yaml",
+      "chip": "stm32wb55",
+      "role": "twin"
+    },
+    {
+      "id": "stm32wba52",
+      "system": "systems/stm32wba52.yaml",
+      "chip": "stm32wba52",
+      "role": "twin"
+    }
+  ]
+}

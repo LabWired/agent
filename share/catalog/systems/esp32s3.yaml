@@ -1,0 +1,5 @@
+# LabWired agent twin system — thin wrapper around sim-bundled chip "esp32s3".
+name: "agent-esp32s3"
+chip: "esp32s3"
+external_devices: []
+board_io: []
