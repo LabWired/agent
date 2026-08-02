@@ -758,6 +758,36 @@ test("a configured evidence root nested under the workspace is rejected before a
   }
 });
 
+test("a configured evidence root whose ancestor resolves into the workspace is rejected", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("workspace-evidence-alias");
+  const aliasParent = join(await workspace("workspace-evidence-alias-parent"), "agent-root");
+  try {
+    try {
+      await symlink(workdir, aliasParent, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    await withEnv({ LABWIRED_EVIDENCE_HOME: join(aliasParent, "evidence") }, async () => {
+      await assert.rejects(
+        runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+          verify: false,
+          workspacePath: workdir,
+        }),
+        /evidence.*workspace|workspace.*evidence/i,
+      );
+    });
+    assert.equal(existsSync(join(workdir, "evidence")), false);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+    await rm(dirname(aliasParent), { recursive: true, force: true });
+  }
+});
+
 test("an agent-store test.yaml symlink planted after queued cannot be followed or promoted", async (t) => {
   const [target] = listTargets();
   const workdir = await workspace("script-symlink");
