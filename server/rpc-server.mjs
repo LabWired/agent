@@ -456,6 +456,7 @@ function initialize(params = {}) {
       serial: true,
       targetGraphV1: true,
       targetRunStateContextV1: true,
+      desktopSafetyV1: true,
       modes: ["act", "plan", "debug", "verify"],
     },
   };

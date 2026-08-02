@@ -122,6 +122,17 @@ async function createFakeLabwired() {
   return { directory, executable, marker };
 }
 
+test("recognized desktop clients advertise desktop safety capability", async () => {
+  await withRpc(desktopEnvironment(), async (rpc) => {
+    const initialized = await rpc.request("initialize", {
+      workspacePath: REPOSITORY_ROOT,
+      clientName: "labwired-editor",
+    });
+    assert.ok(initialized.result, JSON.stringify(initialized));
+    assert.equal(initialized.result.capabilities?.desktopSafetyV1, true);
+  });
+});
+
 test("desktop sessions default to explicit confirmation for every physical flash target", async () => {
   const fake = await createFakeLabwired();
   try {
