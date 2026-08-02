@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const AGENT_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -80,7 +80,10 @@ export async function runTarget(request) {
     phase: "queued",
   };
   const script = testScript(input.fixture);
-  const bundle = await createAgentEvidenceBundle(run.runId);
+  const bundle = await createAgentEvidenceBundle(
+    [input.workspacePath, input.workspaceLexicalPath],
+    run.runId,
+  );
   const bundleScriptPath = join(bundle.path, "test.yaml");
   let stagingPath = null;
   let queued = false;
@@ -188,7 +191,12 @@ async function validateRequest(request) {
     throw new Error(`workspacePath does not exist: ${workspacePath}`);
   }
   if (!workspaceInfo.isDirectory()) throw new Error(`workspacePath must be a directory: ${workspacePath}`);
-  return { fixture: request.fixture, verify: request.verify, workspacePath };
+  return {
+    fixture: request.fixture,
+    verify: request.verify,
+    workspacePath: await realpath(workspacePath),
+    workspaceLexicalPath: workspacePath,
+  };
 }
 
 function agentEvidenceHome() {
@@ -202,10 +210,12 @@ function agentEvidenceHome() {
   return join(homedir(), ".labwired", "evidence");
 }
 
-async function createAgentEvidenceBundle(runId) {
+async function createAgentEvidenceBundle(workspacePaths, runId) {
   const configuredHome = agentEvidenceHome();
+  await assertEvidenceHomeOutsideWorkspace(configuredHome, workspacePaths);
   await mkdir(configuredHome, { recursive: true, mode: 0o700 });
   const evidenceHome = await realpath(configuredHome);
+  await assertEvidenceHomeOutsideWorkspace(evidenceHome, workspacePaths);
   const runsPath = await ensureSafeDirectory(join(evidenceHome, "runs"), evidenceHome);
   const bundlePath = join(runsPath, runId);
   try {
@@ -221,6 +231,32 @@ async function createAgentEvidenceBundle(runId) {
   const bundle = { evidenceHome, path: canonicalBundle, runId };
   await assertSafeBundle(bundle);
   return bundle;
+}
+
+async function assertEvidenceHomeOutsideWorkspace(evidenceHome, workspacePaths) {
+  const prospectiveEvidenceHome = await canonicalProspectivePath(evidenceHome);
+  for (const workspacePath of workspacePaths) {
+    if (pathsOverlap(workspacePath, evidenceHome) || pathsOverlap(workspacePath, prospectiveEvidenceHome)) {
+      throw new Error("agent evidence root must not overlap the target workspace");
+    }
+  }
+}
+
+async function canonicalProspectivePath(targetPath) {
+  const missingSegments = [];
+  let candidate = targetPath;
+  while (true) {
+    try {
+      const canonicalAncestor = await realpath(candidate);
+      return resolve(canonicalAncestor, ...missingSegments);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      const parent = dirname(candidate);
+      if (parent === candidate) throw error;
+      missingSegments.unshift(basename(candidate));
+      candidate = parent;
+    }
+  }
 }
 
 async function ensureSafeDirectory(path, evidenceHome) {
@@ -239,11 +275,22 @@ async function ensureSafeDirectory(path, evidenceHome) {
 }
 
 function assertPathInside(rootPath, candidatePath) {
-  const pathFromWorkspace = relative(rootPath, candidatePath);
-  if (pathFromWorkspace === "" || pathFromWorkspace === ".") return;
-  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`) || isAbsolute(pathFromWorkspace)) {
+  if (!pathIsInside(rootPath, candidatePath)) {
     throw unsafePathError(candidatePath);
   }
+}
+
+function pathsOverlap(firstPath, secondPath) {
+  return pathIsInside(firstPath, secondPath) || pathIsInside(secondPath, firstPath);
+}
+
+function pathIsInside(rootPath, candidatePath) {
+  const pathFromRoot = relative(rootPath, candidatePath);
+  return !(
+    pathFromRoot === ".." ||
+    pathFromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(pathFromRoot)
+  );
 }
 
 async function assertSafeRegularFile(path) {
@@ -305,7 +352,10 @@ function transition(run, phase, onState) {
 function reportState(onState, run) {
   if (!onState) return;
   try {
-    onState(clone(run));
+    const delivery = onState(clone(run));
+    if (delivery && typeof delivery.then === "function") {
+      void Promise.resolve(delivery).catch(() => {});
+    }
   } catch {
     // State delivery is best-effort. A broken renderer/transport must not
     // change the run's logical phase or prevent its terminal response.

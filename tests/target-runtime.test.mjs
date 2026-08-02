@@ -567,6 +567,35 @@ test("a persistently failing state sink cannot change the target lifecycle", asy
   }
 });
 
+test("an asynchronously rejecting state sink cannot leak an unhandled rejection", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("async-state-sink");
+  const phases = [];
+  const unhandled = [];
+  const captureUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", captureUnhandled);
+  try {
+    const response = await runTarget({
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+      verify: false,
+      workspacePath: workdir,
+      onState: async (run) => {
+        phases.push(run.phase);
+        throw new Error("async state sink unavailable");
+      },
+    });
+    await delay(0);
+    assert.equal(response.run.phase, "completed");
+    assert.deepEqual(phases, ["queued", "running", "evaluating", "completed"]);
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off("unhandledRejection", captureUnhandled);
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("a timed-out simulator reaches one failed terminal lifecycle", async () => {
   const [target] = listTargets();
   const workdir = await workspace("timeout");
@@ -666,6 +695,66 @@ test("workspace .labwired symlinks cannot control agent-owned evidence", async (
   } finally {
     await rm(workdir, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a default evidence root nested under the workspace is rejected before any write", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("workspace-home");
+  const outside = await workspace("workspace-home-outside");
+  let rpc = null;
+  try {
+    try {
+      await symlink(outside, join(workdir, ".labwired"), process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    rpc = startRpcServer({
+      env: {
+        ...process.env,
+        HOME: workdir,
+        LABWIRED_EVIDENCE_HOME: "",
+        LABWIRED_CLI: fakeSimulator,
+        LABWIRED_SIM: "",
+      },
+    });
+    const initialized = await rpc.request(1, "initialize", { workspacePath: workdir });
+    assert.equal(initialized.error, undefined);
+    const rejected = await rpc.request(2, "target/verify", {
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+    });
+    assert.ok(rejected.error, "workspace-owned default evidence root must reject");
+    assert.match(rejected.error.message, /evidence.*workspace|workspace.*evidence/i);
+    assert.equal(existsSync(join(outside, "evidence")), false);
+  } finally {
+    await rpc?.stop();
+    await rm(workdir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a configured evidence root nested under the workspace is rejected before any write", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("workspace-evidence-home");
+  try {
+    await withEnv({ LABWIRED_EVIDENCE_HOME: join(workdir, "agent-evidence") }, async () => {
+      await assert.rejects(
+        runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+          verify: false,
+          workspacePath: workdir,
+        }),
+        /evidence.*workspace|workspace.*evidence/i,
+      );
+    });
+    assert.equal(existsSync(join(workdir, "agent-evidence")), false);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
   }
 });
 
