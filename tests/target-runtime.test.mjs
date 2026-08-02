@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, symlinkSync, unlinkSync } from "node:fs";
+import { chmod, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import test, { after, before } from "node:test";
@@ -39,6 +39,55 @@ async function workspace(label) {
   return mkdtemp(join(tmpdir(), `labwired-target-${label}-`));
 }
 
+function delay(ms) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+}
+
+async function waitFor(condition, { timeoutMs = 2_000, intervalMs = 10 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await condition()) return true;
+    await delay(intervalMs);
+  }
+  return false;
+}
+
+async function waitForChildExit(child, timeoutMs = 2_000) {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return new Promise((resolveExit) => {
+    const timer = setTimeout(() => resolveExit(false), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolveExit(true);
+    });
+  });
+}
+
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+function terminateTestProcess(pid) {
+  if (!Number.isInteger(pid) || pid <= 0 || !processIsAlive(pid)) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    return;
+  }
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // The runner may already have exited.
+  }
+}
+
 async function evidenceRunIds(workdir) {
   try {
     return (await readdir(join(workdir, ".labwired", "evidence"))).sort();
@@ -72,9 +121,10 @@ async function assertDurableRunBundle(workdir, response, { claim = false } = {})
   return directory;
 }
 
-function startRpcServer() {
+function startRpcServer({ env = process.env } = {}) {
   const child = spawn(process.execPath, ["server/rpc-server.mjs"], {
     cwd: REPOSITORY_ROOT,
+    env,
     stdio: ["pipe", "pipe", "pipe"],
   });
   const messages = [];
@@ -101,13 +151,17 @@ function startRpcServer() {
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
   });
+  function send(id, method, params) {
+    const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }), "utf8");
+    child.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+    child.stdin.write(body);
+  }
   return {
     child,
     messages,
+    send,
     async request(id, method, params) {
-      const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }), "utf8");
-      child.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
-      child.stdin.write(body);
+      send(id, method, params);
       const deadline = Date.now() + 10_000;
       while (Date.now() < deadline) {
         const response = messages.find((message) => message.id === id);
@@ -116,16 +170,15 @@ function startRpcServer() {
       }
       throw new Error(`timed out waiting for RPC ${method}: ${stderr}`);
     },
+    async endInput() {
+      if (child.exitCode !== null || child.signalCode !== null) return true;
+      child.stdin.end();
+      return waitForChildExit(child);
+    },
     async stop() {
       if (child.exitCode !== null || child.signalCode !== null) return;
       child.kill("SIGTERM");
-      await new Promise((resolveStop) => {
-        const timer = setTimeout(resolveStop, 1_000);
-        child.once("exit", () => {
-          clearTimeout(timer);
-          resolveStop();
-        });
-      });
+      await waitForChildExit(child, 1_000);
     },
   };
 }
@@ -148,9 +201,16 @@ const outputDir = valueAfter("--output-dir");
 const scriptPath = valueAfter("--script");
 const script = await readFile(scriptPath, "utf8");
 const mode = process.env.LABWIRED_TARGET_TEST_RESULT_MODE || "";
+const childPidFile = process.env.LABWIRED_TARGET_CHILD_PID_FILE || "";
+if (mode === "forever") {
+  if (childPidFile) await writeFile(childPidFile, String(process.pid), "utf8");
+  setInterval(() => {}, 1_000);
+}
 let result = "";
 let uart = "LABWIRED_OK";
-if (mode === "status-passed") {
+if (mode === "pass-nonzero") {
+  result = '{"status":"pass","assertions":[{"id":"uart-marker","passed":true}]}';
+} else if (mode === "status-passed") {
   result = '{"status":"passed","assertions":[{"id":"uart-marker","passed":true}]}';
 } else if (mode === "bare-passed") {
   result = '{"passed":true,"assertions":[{"id":"uart-marker","passed":true}]}';
@@ -167,6 +227,7 @@ if (result) await writeFile(outputDir + "/result.json", result + "\\n", "utf8");
 await writeFile(outputDir + "/uart.log", uart + "\\n", "utf8");
 await writeFile(outputDir + "/run-manifest.json", '{"runner":"fake"}\\n', "utf8");
 console.log("fake labwired-sim run");
+if (mode === "pass-nonzero") process.exitCode = 17;
 `,
     "utf8",
   );
@@ -404,6 +465,30 @@ test("only exact raw status pass can mint model_verified", async () => {
   }
 });
 
+test("a nonzero simulator exit cannot promote otherwise passing output", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("nonzero-pass");
+  try {
+    await withEnv({ LABWIRED_TARGET_TEST_RESULT_MODE: "pass-nonzero" }, async () => {
+      const response = await runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: true,
+        workspacePath: workdir,
+      });
+      assert.equal(response.result.exitCode, 17);
+      assert.equal(response.result.status, "failed");
+      assert.equal(response.run.phase, "failed");
+      assert.equal(response.evidence.status, "failed");
+      const bundle = await assertDurableRunBundle(workdir, response, { claim: true });
+      assert.equal(JSON.parse(await readFile(join(bundle, "result.json"), "utf8")).status, "failed");
+    });
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("missing simulator result is replaced by a structured failed result artifact", async () => {
   const [target] = listTargets();
   const workdir = await workspace("missing-result");
@@ -449,6 +534,53 @@ test("runTarget reports the approved run lifecycle with immutable snapshots", as
   }
 });
 
+test("a timed-out simulator reaches one failed terminal lifecycle", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("timeout");
+  const childPidFile = join(workdir, "simulator.pid");
+  const updates = [];
+  let runPromise = null;
+  let childPid = 0;
+  try {
+    await withEnv(
+      {
+        LABWIRED_TARGET_TEST_RESULT_MODE: "forever",
+        LABWIRED_TARGET_CHILD_PID_FILE: childPidFile,
+        LABWIRED_TARGET_TIMEOUT_MS: "75",
+      },
+      async () => {
+        runPromise = runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+          verify: true,
+          workspacePath: workdir,
+          onState: (run) => updates.push(run),
+        });
+        assert.equal(await waitFor(() => existsSync(childPidFile)), true);
+        childPid = Number(await readFile(childPidFile, "utf8"));
+        assert.equal(processIsAlive(childPid), true);
+
+        const response = await Promise.race([runPromise, delay(1_000).then(() => null)]);
+        assert.ok(response, "target runtime must return after its configured timeout");
+        assert.equal(response.result.exitCode, 124);
+        assert.equal(response.result.status, "failed");
+        assert.equal(response.evidence.status, "failed");
+        assert.equal(response.run.phase, "failed");
+        assert.deepEqual(
+          updates.map((run) => run.phase),
+          ["queued", "running", "evaluating", "failed"],
+        );
+        assert.equal(await waitFor(() => !processIsAlive(childPid)), true);
+      },
+    );
+  } finally {
+    terminateTestProcess(childPid);
+    if (runPromise) await Promise.race([runPromise.catch(() => undefined), delay(1_000)]);
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("simulator resolution skips an agent launcher and preserves the simulator fallback", async () => {
   const [target] = listTargets();
   const workdir = await workspace("agent-launcher");
@@ -469,6 +601,145 @@ test("simulator resolution skips an agent launcher and preserves the simulator f
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
+});
+
+test("workspace .labwired symlinks are rejected before a target bundle is created", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("workspace-symlink");
+  const outside = await workspace("workspace-symlink-outside");
+  const updates = [];
+  try {
+    try {
+      await symlink(outside, join(workdir, ".labwired"), process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    await assert.rejects(
+      runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+        onState: (run) => updates.push(run),
+      }),
+      /symlink|unsafe/i,
+    );
+    assert.deepEqual(updates, []);
+    assert.equal(existsSync(join(outside, "evidence")), false);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a test.yaml symlink planted after queued cannot be followed or promoted", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("script-symlink");
+  const externalTarget = join(workdir, "external-target.txt");
+  const probeLink = join(workdir, "symlink-probe");
+  const updates = [];
+  const sentinel = "do-not-touch";
+  try {
+    await writeFile(externalTarget, sentinel, "utf8");
+    try {
+      await symlink(externalTarget, probeLink, "file");
+      await rm(probeLink, { force: true });
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    await assert.rejects(
+      runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: true,
+        workspacePath: workdir,
+        onState: (run) => {
+          updates.push(run);
+          if (run.phase === "queued") {
+            const scriptPath = join(evidenceDirectory(workdir, run), "test.yaml");
+            unlinkSync(scriptPath);
+            symlinkSync(externalTarget, scriptPath, "file");
+          }
+        },
+      }),
+      /symlink|unsafe/i,
+    );
+    assert.equal(await readFile(externalTarget, "utf8"), sentinel);
+    assert.deepEqual(
+      updates.map((run) => run.phase),
+      ["queued", "running", "evaluating", "failed"],
+    );
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("post-queued artifact write errors always publish one failed terminal state", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("artifact-io-error");
+  const externalTarget = join(workdir, "external-run-log.txt");
+  const probeLink = join(workdir, "symlink-probe");
+  const updates = [];
+  const sentinel = "do-not-touch";
+  try {
+    await writeFile(externalTarget, sentinel, "utf8");
+    try {
+      await symlink(externalTarget, probeLink, "file");
+      await rm(probeLink, { force: true });
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    await assert.rejects(
+      runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+        onState: (run) => {
+          updates.push(run);
+          if (run.phase === "queued") {
+            symlinkSync(externalTarget, join(evidenceDirectory(workdir, run), "run.log"), "file");
+          }
+        },
+      }),
+      /symlink|unsafe/i,
+    );
+    assert.equal(await readFile(externalTarget, "utf8"), sentinel);
+    assert.deepEqual(
+      updates.map((run) => run.phase),
+      ["queued", "running", "evaluating", "failed"],
+    );
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("Windows prefix simulator candidates include native executables and command shims", async () => {
+  const targetRuntime = await import("../server/target-runtime.mjs");
+  assert.equal(typeof targetRuntime.simulatorCandidates, "function");
+  assert.deepEqual(
+    targetRuntime.simulatorCandidates({
+      prefixHome: "C:\\LabWired",
+      platform: "win32",
+      env: {},
+    }).slice(0, 8),
+    [
+      "C:\\LabWired\\tools\\sim\\labwired-sim.exe",
+      "C:\\LabWired\\tools\\sim\\labwired-sim.cmd",
+      "C:\\LabWired\\tools\\sim\\labwired-sim.bat",
+      "C:\\LabWired\\tools\\sim\\labwired-sim",
+      "C:\\LabWired\\bin\\labwired-sim.exe",
+      "C:\\LabWired\\bin\\labwired-sim.cmd",
+      "C:\\LabWired\\bin\\labwired-sim.bat",
+      "C:\\LabWired\\bin\\labwired-sim",
+    ],
+  );
 });
 
 test("target RPC requires a valid explicitly initialized workspace", async () => {
@@ -579,6 +850,48 @@ test("failed simulator startup emits the complete RPC lifecycle without claim pr
   }
 });
 
+test("RPC shutdown cancels an active target simulator child", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("rpc-shutdown");
+  const childPidFile = join(workdir, "simulator.pid");
+  let rpc = null;
+  let childPid = 0;
+  try {
+    rpc = startRpcServer({
+      env: {
+        ...process.env,
+        LABWIRED_CLI: fakeSimulator,
+        LABWIRED_SIM: "",
+        LABWIRED_TARGET_TEST_RESULT_MODE: "forever",
+        LABWIRED_TARGET_CHILD_PID_FILE: childPidFile,
+        LABWIRED_TARGET_TIMEOUT_MS: "120000",
+      },
+    });
+    const initialized = await rpc.request(1, "initialize", { workspacePath: workdir });
+    assert.equal(initialized.error, undefined);
+
+    rpc.send(2, "target/run", {
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+    });
+    assert.equal(await waitFor(() => existsSync(childPidFile)), true);
+    childPid = Number(await readFile(childPidFile, "utf8"));
+    assert.equal(processIsAlive(childPid), true);
+
+    assert.equal(await rpc.endInput(), true, "RPC server should exit after stdin EOF");
+    assert.equal(
+      await waitFor(() => !processIsAlive(childPid)),
+      true,
+      "RPC shutdown must terminate the simulator child",
+    );
+  } finally {
+    await rpc?.stop();
+    terminateTestProcess(childPid);
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("RPC owns the initialized workspace and emits exact target notifications", async () => {
   const [target] = listTargets();
   const workdir = await workspace("rpc");
@@ -662,6 +975,17 @@ test("normal and npm package metadata include the target runtime contract", asyn
   ]) {
     assert.ok(packageMetadata.files.includes(entry), `package files should include ${entry}`);
   }
+});
+
+test("GitHub Actions runs the portable target runtime contract on Ubuntu and Windows", async () => {
+  const workflow = await readFile(
+    join(REPOSITORY_ROOT, ".github", "workflows", "target-runtime.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /ubuntu-latest/);
+  assert.match(workflow, /windows-latest/);
+  assert.match(workflow, /node --test tests\/target-runtime\.test\.mjs/);
+  assert.doesNotMatch(workflow, /tests\/all\.sh/);
 });
 
 test(

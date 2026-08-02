@@ -31,6 +31,11 @@ const state = {
   clientName: "unknown",
 };
 
+/** Target executions own cancellable simulator children while the RPC process lives. */
+const activeTargetControllers = new Set();
+let activeTargetExecutions = 0;
+let shutdownRequested = false;
+
 /** @type {import('node:child_process').ChildProcessWithoutNullStreams | null} */
 let chatChild = null;
 
@@ -426,18 +431,29 @@ async function targetExecute(params = {}, verify) {
       "target workspace requires initialize with an explicit existing absolute workspacePath",
     );
   }
-  const response = await runTarget({
-    targetId: request.targetId,
-    manifestDigest: request.manifestDigest,
-    fixture: request.fixture,
-    verify,
-    workspacePath: state.targetWorkspacePath,
-    onState: (run) => notify("target/runState", { run }),
-  });
-  if (response.evidence) {
-    notify("evidence/append", { node: response.evidence });
+  if (shutdownRequested) throw new Error("target RPC is shutting down");
+  const controller = new AbortController();
+  activeTargetControllers.add(controller);
+  activeTargetExecutions += 1;
+  try {
+    const response = await runTarget({
+      targetId: request.targetId,
+      manifestDigest: request.manifestDigest,
+      fixture: request.fixture,
+      verify,
+      workspacePath: state.targetWorkspacePath,
+      signal: controller.signal,
+      onState: (run) => notify("target/runState", { run }),
+    });
+    if (response.evidence) {
+      notify("evidence/append", { node: response.evidence });
+    }
+    return response;
+  } finally {
+    activeTargetControllers.delete(controller);
+    activeTargetExecutions -= 1;
+    finishShutdownIfIdle();
   }
-  return response;
 }
 
 async function toolRun(params) {
@@ -1469,5 +1485,19 @@ process.stderr.write(
 );
 
 process.stdin.on("data", onData);
-process.stdin.on("end", () => process.exit(0));
+process.stdin.on("end", () => requestShutdown("stdin closed"));
+process.once("SIGTERM", () => requestShutdown("SIGTERM"));
+process.once("SIGINT", () => requestShutdown("SIGINT"));
 process.stdin.resume();
+
+function requestShutdown(reason) {
+  if (shutdownRequested) return;
+  shutdownRequested = true;
+  for (const controller of activeTargetControllers) controller.abort(reason);
+  process.stdin.pause();
+  finishShutdownIfIdle();
+}
+
+function finishShutdownIfIdle() {
+  if (shutdownRequested && activeTargetExecutions === 0) process.exit(0);
+}

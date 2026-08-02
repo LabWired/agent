@@ -1,15 +1,31 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { access, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const AGENT_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const TARGET_ID = "gate1-esp32c3";
 const MARKER = "LABWIRED_OK";
 const ORACLE_REF = "labwired.gate1-esp32c3/v1#uart:LABWIRED_OK";
+const DEFAULT_TIMEOUT_MS = 120_000;
+const MIN_TIMEOUT_MS = 25;
+const MAX_TIMEOUT_MS = 600_000;
+const FORCE_KILL_DELAY_MS = 500;
+const SETTLE_AFTER_KILL_MS = 1_500;
 const FIXTURES = Object.freeze({
   fixed: join(AGENT_ROOT, "fixtures", "gate1-live", "firmware", "gate1-fixed.elf"),
   broken: join(AGENT_ROOT, "fixtures", "gate1-live", "firmware", "gate1-broken.elf"),
@@ -48,65 +64,94 @@ export function listTargets() {
 /**
  * Run a bundled Gate1 fixture against the bundled ESP32-C3 system. Callers can
  * choose only the fixed/broken fixture; neither firmware nor system paths are
- * accepted from a request.
+ * accepted from a request. Simulator work happens in a private staging
+ * directory; only verified, no-follow writes enter the workspace bundle.
  */
 export async function runTarget(request) {
   const onState = typeof request?.onState === "function" ? request.onState : null;
   const input = await validateRequest(request);
-  const runId = randomUUID();
   const run = {
-    runId,
+    runId: randomUUID(),
     targetId: TARGET_ID,
     manifestDigest: TARGET_DIGEST,
     phase: "queued",
   };
-  const bundleDir = join(input.workspacePath, ".labwired", "evidence", runId);
-  const scriptPath = join(bundleDir, "test.yaml");
-  const runLogPath = join(bundleDir, "run.log");
+  const script = testScript(input.fixture);
+  const bundle = await createSafeBundle(input.workspacePath, run.runId);
+  const bundleScriptPath = join(bundle.path, "test.yaml");
+  let stagingPath = null;
+  let queued = false;
+  let terminal = false;
 
-  await mkdir(bundleDir, { recursive: true });
-  reportState(onState, run);
-  await writeFile(scriptPath, testScript(input.fixture), "utf8");
-  transition(run, "running", onState);
-
-  let runner = { code: 1, stdout: "", stderr: "" };
-  let runnerError = null;
   try {
-    await ensureTrustedInputs(input.fixture);
-    const simulator = await resolveSimulator();
-    runner = await runSimulator(simulator, scriptPath, bundleDir);
+    // Prepare the durable artifact before exposing the run ID to a client.
+    await writeNewFile(bundleScriptPath, script);
+    stagingPath = await mkdtemp(join(tmpdir(), "labwired-target-stage-"));
+    const stagingScriptPath = join(stagingPath, "test.yaml");
+    await writeFile(stagingScriptPath, script, { encoding: "utf8", mode: 0o600 });
+
+    reportState(onState, run);
+    queued = true;
+    transition(run, "running", onState);
+    // Re-check after the event: a renderer/process must not redirect an artifact.
+    await assertSafeRegularFile(bundleScriptPath);
+
+    let runner = failedRunner("simulator did not start");
+    try {
+      await ensureTrustedInputs(input.fixture);
+      const simulator = await resolveSimulator();
+      runner = await runSimulator(simulator, stagingScriptPath, stagingPath, {
+        signal: request?.signal,
+        timeoutMs: targetTimeoutMs(),
+      });
+    } catch (error) {
+      runner = failedRunner(error instanceof Error ? error.message : String(error));
+    }
+
+    const parsed = await parseRunArtifacts(stagingPath, runner);
+    transition(run, "evaluating", onState);
+    await assertSafeRegularFile(bundleScriptPath);
+    await writeNewFile(join(bundle.path, "run.log"), runLogText(runner));
+    await writeNewFile(join(bundle.path, "result.json"), parsed.resultBytes);
+    await copyStagedArtifactIfPresent(stagingPath, bundle.path, "uart.log");
+    await copyStagedArtifactIfPresent(stagingPath, bundle.path, "run-manifest.json");
+
+    const result = {
+      status: parsed.status,
+      assertions: parsed.assertions,
+      uart: parsed.uart,
+      exitCode: runner.code,
+    };
+    const resultRef = {
+      path: workspaceRelativePath(bundle.workspacePath, join(bundle.path, "result.json")),
+      sha256: sha256(parsed.resultBytes),
+    };
+
+    if (!input.verify) {
+      transition(run, parsed.status === "pass" ? "completed" : "failed", onState);
+      terminal = true;
+      return { run: clone(run), result, resultRef };
+    }
+
+    const evidence = await createEvidenceNode({
+      bundlePath: bundle.path,
+      workspacePath: bundle.workspacePath,
+      run,
+      status: proofStatus(parsed),
+    });
+    await writeNewFile(join(bundle.path, "claim.json"), `${JSON.stringify(evidence, null, 2)}\n`);
+    transition(run, evidence.status === "model_verified" ? "completed" : "failed", onState);
+    terminal = true;
+    return { run: clone(run), result, resultRef, evidence };
   } catch (error) {
-    runnerError = error instanceof Error ? error.message : String(error);
+    if (queued && !terminal) {
+      if (run.phase !== "evaluating" && run.phase !== "failed") transition(run, "evaluating", onState);
+      if (run.phase !== "failed") transition(run, "failed", onState);
+    }
+    throw error;
+  } finally {
+    if (stagingPath) await rm(stagingPath, { recursive: true, force: true });
   }
-  await writeFile(runLogPath, runLogText(runner, runnerError), "utf8");
-
-  const parsed = await parseRunArtifacts(bundleDir, runner, runnerError);
-  transition(run, "evaluating", onState);
-  const result = {
-    status: parsed.status,
-    assertions: parsed.assertions,
-    uart: parsed.uart,
-    exitCode: runner.code,
-  };
-  const resultRef = {
-    path: workspaceRelativePath(input.workspacePath, join(bundleDir, "result.json")),
-    sha256: sha256(parsed.resultBytes),
-  };
-
-  if (!input.verify) {
-    transition(run, parsed.status === "pass" ? "completed" : "failed", onState);
-    return { run: clone(run), result, resultRef };
-  }
-
-  const evidence = await createEvidenceNode({
-    bundleDir,
-    workspacePath: input.workspacePath,
-    run,
-    status: proofStatus(parsed),
-  });
-  await writeFile(join(bundleDir, "claim.json"), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-  transition(run, evidence.status === "model_verified" ? "completed" : "failed", onState);
-  return { run: clone(run), result, resultRef, evidence };
 }
 
 async function validateRequest(request) {
@@ -116,9 +161,7 @@ async function validateRequest(request) {
   if (typeof request.targetId !== "string" || request.targetId.length === 0) {
     throw new Error("targetId is required");
   }
-  if (request.targetId !== TARGET_ID) {
-    throw new Error(`Unknown targetId: ${request.targetId}`);
-  }
+  if (request.targetId !== TARGET_ID) throw new Error(`Unknown targetId: ${request.targetId}`);
   if (typeof request.manifestDigest !== "string" || request.manifestDigest.length === 0) {
     throw new Error("manifestDigest is required");
   }
@@ -128,9 +171,7 @@ async function validateRequest(request) {
   if (request.fixture !== "fixed" && request.fixture !== "broken") {
     throw new Error("fixture must be fixed or broken");
   }
-  if (typeof request.verify !== "boolean") {
-    throw new Error("verify must be a boolean");
-  }
+  if (typeof request.verify !== "boolean") throw new Error("verify must be a boolean");
   if (typeof request.workspacePath !== "string" || !isAbsolute(request.workspacePath)) {
     throw new Error("workspacePath must be an absolute path");
   }
@@ -141,10 +182,93 @@ async function validateRequest(request) {
   } catch {
     throw new Error(`workspacePath does not exist: ${workspacePath}`);
   }
-  if (!workspaceInfo.isDirectory()) {
-    throw new Error(`workspacePath must be a directory: ${workspacePath}`);
-  }
+  if (!workspaceInfo.isDirectory()) throw new Error(`workspacePath must be a directory: ${workspacePath}`);
   return { fixture: request.fixture, verify: request.verify, workspacePath };
+}
+
+async function createSafeBundle(workspacePath, runId) {
+  const canonicalWorkspace = await realpath(workspacePath);
+  const labwiredPath = await ensureSafeDirectory(join(canonicalWorkspace, ".labwired"), canonicalWorkspace);
+  const evidencePath = await ensureSafeDirectory(join(labwiredPath, "evidence"), canonicalWorkspace);
+  const bundlePath = join(evidencePath, runId);
+  try {
+    await mkdir(bundlePath, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code === "EEXIST") throw unsafePathError(bundlePath);
+    throw error;
+  }
+  const info = await lstat(bundlePath);
+  if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(bundlePath);
+  const canonicalBundle = await realpath(bundlePath);
+  assertPathInside(canonicalWorkspace, canonicalBundle);
+  return { workspacePath: canonicalWorkspace, path: canonicalBundle };
+}
+
+async function ensureSafeDirectory(path, workspacePath) {
+  try {
+    const info = await lstat(path);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await mkdir(path, { mode: 0o700 });
+    const info = await lstat(path);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
+  }
+  const canonicalPath = await realpath(path);
+  assertPathInside(workspacePath, canonicalPath);
+  return canonicalPath;
+}
+
+function assertPathInside(workspacePath, candidatePath) {
+  const pathFromWorkspace = relative(workspacePath, candidatePath);
+  if (pathFromWorkspace === "" || pathFromWorkspace === ".") return;
+  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`) || isAbsolute(pathFromWorkspace)) {
+    throw unsafePathError(candidatePath);
+  }
+}
+
+async function assertSafeRegularFile(path) {
+  let info;
+  try {
+    info = await lstat(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") throw unsafePathError(path);
+    throw error;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(path);
+}
+
+async function writeNewFile(path, data) {
+  const noFollow = Number.isInteger(fsConstants.O_NOFOLLOW) ? fsConstants.O_NOFOLLOW : 0;
+  const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow;
+  let handle;
+  try {
+    handle = await open(path, flags, 0o600);
+    await handle.writeFile(data, "utf8");
+  } catch (error) {
+    if (error?.code === "EEXIST" || error?.code === "ELOOP") throw unsafePathError(path);
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
+async function copyStagedArtifactIfPresent(stagingPath, bundlePath, name) {
+  const sourcePath = join(stagingPath, name);
+  let info;
+  try {
+    info = await lstat(sourcePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(sourcePath);
+  await writeNewFile(join(bundlePath, name), await readFile(sourcePath));
+  return true;
+}
+
+function unsafePathError(path) {
+  return new Error(`unsafe artifact path (symlink or unexpected file): ${path}`);
 }
 
 function transition(run, phase, onState) {
@@ -178,17 +302,27 @@ function testScript(fixture) {
   ].join("\n");
 }
 
-function runLogText(runner, runnerError) {
-  return [runner.stdout, runner.stderr, runnerError ? `error: ${runnerError}\n` : ""]
-    .filter(Boolean)
-    .join(runner.stdout && (runner.stderr || runnerError) ? "\n" : "");
+function failedRunner(error) {
+  return { code: 1, stdout: "", stderr: "", error, timedOut: false, aborted: false };
 }
 
-async function parseRunArtifacts(bundleDir, runner, runnerError) {
-  const resultPath = join(bundleDir, "result.json");
+function runLogText(runner) {
+  return [
+    runner.stdout,
+    runner.stderr,
+    runner.error ? `error: ${runner.error}\n` : "",
+    runner.timedOut ? "error: simulator timed out\n" : "",
+    runner.aborted ? "error: simulator cancelled\n" : "",
+  ]
+    .filter(Boolean)
+    .join(runner.stdout && (runner.stderr || runner.error || runner.timedOut || runner.aborted) ? "\n" : "");
+}
+
+async function parseRunArtifacts(stagingPath, runner) {
+  const resultPath = join(stagingPath, "result.json");
   let resultBytes = "";
   let raw = null;
-  let fallbackReason = runnerError;
+  let fallbackReason = runner.error || "";
   try {
     resultBytes = await readFile(resultPath, "utf8");
     raw = JSON.parse(resultBytes);
@@ -202,22 +336,40 @@ async function parseRunArtifacts(bundleDir, runner, runnerError) {
       error: fallbackReason || "simulator omitted a structured result.json",
       exitCode: runner.code,
     };
-    resultBytes = `${JSON.stringify(raw, null, 2)}\n`;
-    await writeFile(resultPath, resultBytes, "utf8");
   }
+  if (raw.status !== "pass" || runner.code !== 0 || runner.timedOut || runner.aborted) {
+    raw = {
+      ...raw,
+      status: "failed",
+      error:
+        raw.error ||
+        runner.error ||
+        (runner.timedOut
+          ? "simulator timed out"
+          : runner.aborted
+            ? "simulator cancelled"
+            : runner.code !== 0
+              ? `simulator exited with code ${runner.code}`
+              : "simulator did not report status pass"),
+      exitCode: runner.code,
+    };
+  }
+  resultBytes = `${JSON.stringify(raw, null, 2)}\n`;
 
   let uart = "";
   try {
-    uart = await readFile(join(bundleDir, "uart.log"), "utf8");
+    const uartInfo = await lstat(join(stagingPath, "uart.log"));
+    if (uartInfo.isFile() && !uartInfo.isSymbolicLink()) {
+      uart = await readFile(join(stagingPath, "uart.log"), "utf8");
+    }
   } catch {
-    // The runner may fail before UART begins; retain the durable result artifact.
+    // A failed runner can omit UART output; the failed result remains durable.
   }
   return {
-    raw,
     resultBytes,
     assertions: normalizeAssertions(raw),
     uart,
-    status: raw.status === "pass" ? "pass" : "failed",
+    status: raw.status === "pass" && runner.code === 0 && !runner.timedOut && !runner.aborted ? "pass" : "failed",
   };
 }
 
@@ -242,10 +394,10 @@ function proofStatus(parsed) {
     : "failed";
 }
 
-async function createEvidenceNode({ bundleDir, workspacePath, run, status }) {
+async function createEvidenceNode({ bundlePath, workspacePath, run, status }) {
   const artifactFiles = ["test.yaml", "result.json"];
   for (const file of ["uart.log", "run-manifest.json"]) {
-    if (await fileExists(join(bundleDir, file))) artifactFiles.push(file);
+    if (await safeRegularFileExists(join(bundlePath, file))) artifactFiles.push(file);
   }
   artifactFiles.push("run.log", "claim.json");
   return {
@@ -257,40 +409,60 @@ async function createEvidenceNode({ bundleDir, workspacePath, run, status }) {
     status,
     tool: "target/verify",
     oracleRef: ORACLE_REF,
-    artifactRefs: artifactFiles.map((file) => workspaceRelativePath(workspacePath, join(bundleDir, file))),
+    artifactRefs: artifactFiles.map((file) => workspaceRelativePath(workspacePath, join(bundlePath, file))),
     ts: new Date().toISOString(),
   };
 }
 
+async function safeRegularFileExists(path) {
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 function workspaceRelativePath(workspacePath, artifactPath) {
   const artifactRef = relative(workspacePath, artifactPath).split(sep).join("/");
-  if (!artifactRef || artifactRef === ".." || artifactRef.startsWith("../")) {
-    throw new Error("artifact path escaped workspace");
+  if (!artifactRef || artifactRef === ".." || artifactRef.startsWith("../") || isAbsolute(artifactRef)) {
+    throw unsafePathError(artifactPath);
   }
   return artifactRef;
 }
 
-async function fileExists(path) {
-  try {
-    await access(path, fsConstants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
+function targetTimeoutMs(env = process.env) {
+  const configured = Number(env.LABWIRED_TARGET_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_TIMEOUT_MS;
+  return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, Math.trunc(configured)));
 }
 
-async function resolveSimulator() {
-  const prefixHome = process.env.LABWIRED_HOME || join(homedir(), ".labwired");
-  const candidates = [
-    process.env.LABWIRED_CLI,
-    process.env.LABWIRED_SIM,
-    join(prefixHome, "tools", "sim", "labwired-sim"),
-    join(prefixHome, "bin", "labwired-sim"),
+/** Exposed for platform-independent Windows-prefix coverage. */
+export function simulatorCandidates({
+  prefixHome = process.env.LABWIRED_HOME || join(homedir(), ".labwired"),
+  platform = process.platform,
+  env = process.env,
+} = {}) {
+  const pathApi = platform === "win32" ? win32 : { join };
+  const suffixes = platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  const prefixBases = [
+    pathApi.join(prefixHome, "tools", "sim", "labwired-sim"),
+    pathApi.join(prefixHome, "bin", "labwired-sim"),
+  ];
+  return [
+    env.LABWIRED_CLI,
+    env.LABWIRED_SIM,
+    ...prefixBases.flatMap((base) => suffixes.map((suffix) => `${base}${suffix}`)),
     "labwired-sim",
     "labwired-cli",
     "labwired",
   ].filter(Boolean);
-  for (const candidate of candidates) {
+}
+
+async function resolveSimulator() {
+  for (const candidate of simulatorCandidates()) {
     const executablePath = await resolveExecutable(candidate);
     if (!executablePath || (await isAgentLauncher(executablePath))) continue;
     return executablePath;
@@ -336,10 +508,19 @@ async function isAgentLauncher(executablePath) {
   if (/LABWIRED_AGENT_HOME|Firmware Agent|opencode-ai|OpenCode shell/.test(head)) return true;
   const candidateRoot = resolve(dirname(executablePath), "..");
   return (
-    (await fileExists(join(candidateRoot, "lib", "resolve-sim.sh"))) &&
-    ((await fileExists(join(candidateRoot, "branding", "banner.txt"))) ||
-      (await fileExists(join(candidateRoot, "skills"))))
+    (await safePathExists(join(candidateRoot, "lib", "resolve-sim.sh"))) &&
+    ((await safePathExists(join(candidateRoot, "branding", "banner.txt"))) ||
+      (await safePathExists(join(candidateRoot, "skills"))))
   );
+}
+
+async function safePathExists(path) {
+  try {
+    await access(path, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readHead(path) {
@@ -357,7 +538,7 @@ async function readHead(path) {
   }
 }
 
-function runSimulator(simulator, scriptPath, outputDir) {
+function runSimulator(simulator, scriptPath, outputDir, { signal, timeoutMs } = {}) {
   const args = [
     "test",
     "--script",
@@ -367,20 +548,51 @@ function runSimulator(simulator, scriptPath, outputDir) {
     "--no-uart-stdout",
     "--run-manifest",
   ];
-  return new Promise((resolveRun, rejectRun) => {
+  return new Promise((resolveRun) => {
     const child = spawnSimulatorProcess(simulator, args);
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    let aborted = false;
+    let forceKillTimer = null;
+    let settleTimer = null;
+    const finish = (code, error = "") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(forceKillTimer);
+      clearTimeout(settleTimer);
+      signal?.removeEventListener("abort", onAbort);
+      resolveRun({
+        code: timedOut ? 124 : aborted ? 130 : code ?? 1,
+        stdout,
+        stderr,
+        error,
+        timedOut,
+        aborted,
+      });
+    };
+    const stop = (reason) => {
+      if (settled) return;
+      if (reason === "timeout") timedOut = true;
+      else aborted = true;
+      terminateSimulatorProcess(child, "SIGTERM");
+      forceKillTimer = setTimeout(() => terminateSimulatorProcess(child, "SIGKILL"), FORCE_KILL_DELAY_MS);
+      settleTimer = setTimeout(() => finish(reason === "timeout" ? 124 : 130, `simulator ${reason}`), SETTLE_AFTER_KILL_MS);
+    };
+    const onAbort = () => stop("cancelled");
+    const timeoutTimer = setTimeout(() => stop("timeout"), timeoutMs || targetTimeoutMs());
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    child.once("error", rejectRun);
-    child.once("close", (code) => {
-      resolveRun({ code: code ?? 1, stdout, stderr });
-    });
+    child.once("error", (error) => finish(1, error instanceof Error ? error.message : String(error)));
+    child.once("close", (code) => finish(code));
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -389,10 +601,44 @@ function spawnSimulatorProcess(simulator, args) {
     const command = [simulator, ...args].map(quoteWindowsCommandPart).join(" ");
     return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", command], {
       cwd: AGENT_ROOT,
+      detached: false,
       shell: false,
+      windowsHide: true,
     });
   }
-  return spawn(simulator, args, { cwd: AGENT_ROOT, shell: false });
+  return spawn(simulator, args, {
+    cwd: AGENT_ROOT,
+    detached: process.platform !== "win32",
+    shell: false,
+    windowsHide: true,
+  });
+}
+
+function terminateSimulatorProcess(child, signal) {
+  if (!child?.pid) return;
+  if (process.platform === "win32") {
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      return;
+    } catch {
+      // Fall back to the direct child below.
+    }
+  } else {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // The child can exit between the pid check and the group kill.
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // Already gone.
+  }
 }
 
 function quoteWindowsCommandPart(value) {
