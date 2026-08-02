@@ -26,6 +26,7 @@ const MIN_TIMEOUT_MS = 25;
 const MAX_TIMEOUT_MS = 600_000;
 const FORCE_KILL_DELAY_MS = 500;
 const SETTLE_AFTER_KILL_MS = 1_500;
+const EVIDENCE_URI_PREFIX = "labwired-evidence://runs";
 const FIXTURES = Object.freeze({
   fixed: join(AGENT_ROOT, "fixtures", "gate1-live", "firmware", "gate1-fixed.elf"),
   broken: join(AGENT_ROOT, "fixtures", "gate1-live", "firmware", "gate1-broken.elf"),
@@ -65,7 +66,9 @@ export function listTargets() {
  * Run a bundled Gate1 fixture against the bundled ESP32-C3 system. Callers can
  * choose only the fixed/broken fixture; neither firmware nor system paths are
  * accepted from a request. Simulator work happens in a private staging
- * directory; only verified, no-follow writes enter the workspace bundle.
+ * directory. Durable evidence belongs to the agent-owned evidence store, not
+ * the project workspace: a project must never choose an ancestor of an
+ * authoritative artifact write.
  */
 export async function runTarget(request) {
   const onState = typeof request?.onState === "function" ? request.onState : null;
@@ -77,7 +80,7 @@ export async function runTarget(request) {
     phase: "queued",
   };
   const script = testScript(input.fixture);
-  const bundle = await createSafeBundle(input.workspacePath, run.runId);
+  const bundle = await createAgentEvidenceBundle(run.runId);
   const bundleScriptPath = join(bundle.path, "test.yaml");
   let stagingPath = null;
   let queued = false;
@@ -93,7 +96,8 @@ export async function runTarget(request) {
     queued = true;
     reportState(onState, run);
     transition(run, "running", onState);
-    // Re-check after the event: a renderer/process must not redirect an artifact.
+    // The project can change while a run is active, but it is not an artifact
+    // write target. Evidence stays inside the agent-owned store.
     await assertSafeBundle(bundle);
     await assertSafeRegularFile(bundleScriptPath);
 
@@ -125,7 +129,7 @@ export async function runTarget(request) {
       exitCode: runner.code,
     };
     const resultRef = {
-      path: workspaceRelativePath(bundle.workspacePath, join(bundle.path, "result.json")),
+      path: evidenceArtifactRef(bundle, "result.json"),
       sha256: sha256(parsed.resultBytes),
     };
 
@@ -187,11 +191,23 @@ async function validateRequest(request) {
   return { fixture: request.fixture, verify: request.verify, workspacePath };
 }
 
-async function createSafeBundle(workspacePath, runId) {
-  const canonicalWorkspace = await realpath(workspacePath);
-  const labwiredPath = await ensureSafeDirectory(join(canonicalWorkspace, ".labwired"), canonicalWorkspace);
-  const evidencePath = await ensureSafeDirectory(join(labwiredPath, "evidence"), canonicalWorkspace);
-  const bundlePath = join(evidencePath, runId);
+function agentEvidenceHome() {
+  const configured = process.env.LABWIRED_EVIDENCE_HOME;
+  if (configured !== undefined && configured !== "") {
+    if (!isAbsolute(configured)) {
+      throw new Error("LABWIRED_EVIDENCE_HOME must be an absolute agent startup path");
+    }
+    return resolve(configured);
+  }
+  return join(homedir(), ".labwired", "evidence");
+}
+
+async function createAgentEvidenceBundle(runId) {
+  const configuredHome = agentEvidenceHome();
+  await mkdir(configuredHome, { recursive: true, mode: 0o700 });
+  const evidenceHome = await realpath(configuredHome);
+  const runsPath = await ensureSafeDirectory(join(evidenceHome, "runs"), evidenceHome);
+  const bundlePath = join(runsPath, runId);
   try {
     await mkdir(bundlePath, { mode: 0o700 });
   } catch (error) {
@@ -201,13 +217,13 @@ async function createSafeBundle(workspacePath, runId) {
   const info = await lstat(bundlePath);
   if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(bundlePath);
   const canonicalBundle = await realpath(bundlePath);
-  assertPathInside(canonicalWorkspace, canonicalBundle);
-  const bundle = { workspacePath: canonicalWorkspace, path: canonicalBundle };
+  assertPathInside(evidenceHome, canonicalBundle);
+  const bundle = { evidenceHome, path: canonicalBundle, runId };
   await assertSafeBundle(bundle);
   return bundle;
 }
 
-async function ensureSafeDirectory(path, workspacePath) {
+async function ensureSafeDirectory(path, evidenceHome) {
   try {
     const info = await lstat(path);
     if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
@@ -218,12 +234,12 @@ async function ensureSafeDirectory(path, workspacePath) {
     if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
   }
   const canonicalPath = await realpath(path);
-  assertPathInside(workspacePath, canonicalPath);
+  assertPathInside(evidenceHome, canonicalPath);
   return canonicalPath;
 }
 
-function assertPathInside(workspacePath, candidatePath) {
-  const pathFromWorkspace = relative(workspacePath, candidatePath);
+function assertPathInside(rootPath, candidatePath) {
+  const pathFromWorkspace = relative(rootPath, candidatePath);
   if (pathFromWorkspace === "" || pathFromWorkspace === ".") return;
   if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`) || isAbsolute(pathFromWorkspace)) {
     throw unsafePathError(candidatePath);
@@ -246,7 +262,7 @@ async function assertSafeBundle(bundle) {
   if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(bundle.path);
   const canonicalPath = await realpath(bundle.path);
   if (canonicalPath !== bundle.path) throw unsafePathError(bundle.path);
-  assertPathInside(bundle.workspacePath, canonicalPath);
+  assertPathInside(bundle.evidenceHome, canonicalPath);
 }
 
 async function writeBundleFile(bundle, name, data) {
@@ -287,7 +303,13 @@ function transition(run, phase, onState) {
 }
 
 function reportState(onState, run) {
-  if (onState) onState(clone(run));
+  if (!onState) return;
+  try {
+    onState(clone(run));
+  } catch {
+    // State delivery is best-effort. A broken renderer/transport must not
+    // change the run's logical phase or prevent its terminal response.
+  }
 }
 
 async function ensureTrustedInputs(fixture) {
@@ -435,7 +457,7 @@ async function createEvidenceNode({ bundle, run, status }) {
     status,
     tool: "target/verify",
     oracleRef: ORACLE_REF,
-    artifactRefs: artifactFiles.map((file) => workspaceRelativePath(bundle.workspacePath, join(bundle.path, file))),
+    artifactRefs: artifactFiles.map((file) => evidenceArtifactRef(bundle, file)),
     ts: new Date().toISOString(),
   };
 }
@@ -451,12 +473,9 @@ async function safeRegularFileExists(path) {
   }
 }
 
-function workspaceRelativePath(workspacePath, artifactPath) {
-  const artifactRef = relative(workspacePath, artifactPath).split(sep).join("/");
-  if (!artifactRef || artifactRef === ".." || artifactRef.startsWith("../") || isAbsolute(artifactRef)) {
-    throw unsafePathError(artifactPath);
-  }
-  return artifactRef;
+function evidenceArtifactRef(bundle, file) {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(file)) throw unsafePathError(file);
+  return `${EVIDENCE_URI_PREFIX}/${bundle.runId}/${file}`;
 }
 
 function targetTimeoutMs(env = process.env) {

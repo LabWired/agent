@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { after, before } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +14,7 @@ const ORACLE_REF = "labwired.gate1-esp32c3/v1#uart:LABWIRED_OK";
 const originalSimulatorEnv = {
   LABWIRED_CLI: process.env.LABWIRED_CLI,
   LABWIRED_SIM: process.env.LABWIRED_SIM,
+  LABWIRED_EVIDENCE_HOME: process.env.LABWIRED_EVIDENCE_HOME,
 };
 
 let fakeRoot = "";
@@ -88,36 +89,42 @@ function terminateTestProcess(pid) {
   }
 }
 
-async function evidenceRunIds(workdir) {
+function agentEvidenceHome() {
+  const configured = process.env.LABWIRED_EVIDENCE_HOME;
+  assert.ok(configured, "target tests require an isolated agent evidence home");
+  return configured;
+}
+
+async function evidenceRunIds() {
   try {
-    return (await readdir(join(workdir, ".labwired", "evidence"))).sort();
+    return (await readdir(join(agentEvidenceHome(), "runs"))).sort();
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     throw error;
   }
 }
 
-function evidenceDirectory(workdir, run) {
-  return join(workdir, ".labwired", "evidence", run.runId);
+function evidenceDirectory(run) {
+  return join(agentEvidenceHome(), "runs", run.runId);
 }
 
-function relativeEvidencePath(run, file) {
-  return `.labwired/evidence/${run.runId}/${file}`;
+function evidenceArtifactRef(run, file) {
+  return `labwired-evidence://runs/${run.runId}/${file}`;
 }
 
-async function assertDurableRunBundle(workdir, response, { claim = false } = {}) {
-  const directory = evidenceDirectory(workdir, response.run);
+async function assertDurableRunBundle(response, { claim = false } = {}) {
+  const directory = evidenceDirectory(response.run);
   const required = ["test.yaml", "result.json", "uart.log", "run-manifest.json", "run.log"];
   if (claim) required.push("claim.json");
   for (const file of required) {
     assert.equal(existsSync(join(directory, file)), true, `${file} should persist in the run bundle`);
   }
   assert.deepEqual(response.resultRef, {
-    path: relativeEvidencePath(response.run, "result.json"),
+    path: evidenceArtifactRef(response.run, "result.json"),
     sha256: response.resultRef.sha256,
   });
   assert.match(response.resultRef.sha256, /^[a-f0-9]{64}$/);
-  assert.equal(isAbsolute(response.resultRef.path), false);
+  assert.match(response.resultRef.path, /^labwired-evidence:\/\//);
   return directory;
 }
 
@@ -244,11 +251,13 @@ if (mode === "pass-nonzero") process.exitCode = 17;
   }
   setEnv("LABWIRED_CLI", fakeSimulator);
   setEnv("LABWIRED_SIM", undefined);
+  setEnv("LABWIRED_EVIDENCE_HOME", join(fakeRoot, "evidence"));
 });
 
 after(async () => {
   setEnv("LABWIRED_CLI", originalSimulatorEnv.LABWIRED_CLI);
   setEnv("LABWIRED_SIM", originalSimulatorEnv.LABWIRED_SIM);
+  setEnv("LABWIRED_EVIDENCE_HOME", originalSimulatorEnv.LABWIRED_EVIDENCE_HOME);
   await rm(fakeRoot, { recursive: true, force: true });
 });
 
@@ -373,7 +382,7 @@ test("ordinary runs persist a bundle but omit proof evidence", async () => {
     assert.equal(response.run.manifestDigest, target.digest);
     assert.equal(response.run.phase, "completed");
     assert.equal(response.result.status, "pass");
-    await assertDurableRunBundle(workdir, response);
+    await assertDurableRunBundle(response);
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
@@ -390,7 +399,7 @@ test("verification returns an immutable typed twin EvidenceNode", async () => {
       verify: true,
       workspacePath: workdir,
     });
-    const directory = await assertDurableRunBundle(workdir, response, { claim: true });
+    const directory = await assertDurableRunBundle(response, { claim: true });
     const expectedRefs = [
       "test.yaml",
       "result.json",
@@ -398,7 +407,7 @@ test("verification returns an immutable typed twin EvidenceNode", async () => {
       "run-manifest.json",
       "run.log",
       "claim.json",
-    ].map((file) => relativeEvidencePath(response.run, file));
+    ].map((file) => evidenceArtifactRef(response.run, file));
 
     assert.equal(response.run.phase, "completed");
     assert.equal(response.result.status, "pass");
@@ -436,7 +445,7 @@ test("failed observations keep both run phase and verification evidence failed",
     assert.equal(response.run.phase, "failed");
     assert.equal(response.result.status, "failed");
     assert.equal(response.evidence.status, "failed");
-    await assertDurableRunBundle(workdir, response, { claim: true });
+    await assertDurableRunBundle(response, { claim: true });
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
@@ -481,7 +490,7 @@ test("a nonzero simulator exit cannot promote otherwise passing output", async (
       assert.equal(response.result.status, "failed");
       assert.equal(response.run.phase, "failed");
       assert.equal(response.evidence.status, "failed");
-      const bundle = await assertDurableRunBundle(workdir, response, { claim: true });
+      const bundle = await assertDurableRunBundle(response, { claim: true });
       assert.equal(JSON.parse(await readFile(join(bundle, "result.json"), "utf8")).status, "failed");
     });
   } finally {
@@ -501,7 +510,7 @@ test("missing simulator result is replaced by a structured failed result artifac
         verify: false,
         workspacePath: workdir,
       });
-      const directory = await assertDurableRunBundle(workdir, response);
+      const directory = await assertDurableRunBundle(response);
       assert.equal(response.result.status, "failed");
       assert.equal(JSON.parse(await readFile(join(directory, "result.json"), "utf8")).status, "failed");
     });
@@ -534,26 +543,25 @@ test("runTarget reports the approved run lifecycle with immutable snapshots", as
   }
 });
 
-test("a queued-state sink failure still reaches a terminal failed lifecycle", async () => {
+test("a persistently failing state sink cannot change the target lifecycle", async () => {
   const [target] = listTargets();
   const workdir = await workspace("queued-state-sink");
   const phases = [];
   try {
-    await assert.rejects(
-      runTarget({
-        targetId: target.targetId,
-        manifestDigest: target.digest,
-        fixture: "fixed",
-        verify: false,
-        workspacePath: workdir,
-        onState: (run) => {
-          phases.push(run.phase);
-          if (run.phase === "queued") throw new Error("queued state sink unavailable");
-        },
-      }),
-      /queued state sink unavailable/i,
-    );
-    assert.deepEqual(phases, ["queued", "evaluating", "failed"]);
+    const response = await runTarget({
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+      verify: false,
+      workspacePath: workdir,
+      onState: (run) => {
+        phases.push(run.phase);
+        throw new Error("state sink unavailable");
+      },
+    });
+    assert.equal(response.run.phase, "completed");
+    assert.equal(response.result.status, "pass");
+    assert.deepEqual(phases, ["queued", "running", "evaluating", "completed"]);
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
@@ -628,7 +636,7 @@ test("simulator resolution skips an agent launcher and preserves the simulator f
   }
 });
 
-test("workspace .labwired symlinks are rejected before a target bundle is created", async (t) => {
+test("workspace .labwired symlinks cannot control agent-owned evidence", async (t) => {
   const [target] = listTargets();
   const workdir = await workspace("workspace-symlink");
   const outside = await workspace("workspace-symlink-outside");
@@ -640,18 +648,20 @@ test("workspace .labwired symlinks are rejected before a target bundle is create
       t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
       return;
     }
-    await assert.rejects(
-      runTarget({
-        targetId: target.targetId,
-        manifestDigest: target.digest,
-        fixture: "fixed",
-        verify: false,
-        workspacePath: workdir,
-        onState: (run) => updates.push(run),
-      }),
-      /symlink|unsafe/i,
+    const response = await runTarget({
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+      verify: true,
+      workspacePath: workdir,
+      onState: (run) => updates.push(run),
+    });
+    assert.equal(response.run.phase, "completed");
+    await assertDurableRunBundle(response, { claim: true });
+    assert.deepEqual(
+      updates.map((run) => run.phase),
+      ["queued", "running", "evaluating", "completed"],
     );
-    assert.deepEqual(updates, []);
     assert.equal(existsSync(join(outside, "evidence")), false);
   } finally {
     await rm(workdir, { recursive: true, force: true });
@@ -659,7 +669,7 @@ test("workspace .labwired symlinks are rejected before a target bundle is create
   }
 });
 
-test("a test.yaml symlink planted after queued cannot be followed or promoted", async (t) => {
+test("an agent-store test.yaml symlink planted after queued cannot be followed or promoted", async (t) => {
   const [target] = listTargets();
   const workdir = await workspace("script-symlink");
   const externalTarget = join(workdir, "external-target.txt");
@@ -685,7 +695,7 @@ test("a test.yaml symlink planted after queued cannot be followed or promoted", 
         onState: (run) => {
           updates.push(run);
           if (run.phase === "queued") {
-            const scriptPath = join(evidenceDirectory(workdir, run), "test.yaml");
+            const scriptPath = join(evidenceDirectory(run), "test.yaml");
             unlinkSync(scriptPath);
             symlinkSync(externalTarget, scriptPath, "file");
           }
@@ -703,7 +713,7 @@ test("a test.yaml symlink planted after queued cannot be followed or promoted", 
   }
 });
 
-test("a replaced run bundle cannot redirect later artifacts outside the workspace", async (t) => {
+test("a replaced agent-store bundle is rejected before later artifacts are written", async (t) => {
   const [target] = listTargets();
   const workdir = await workspace("bundle-replacement");
   const outside = await workspace("bundle-replacement-outside");
@@ -726,7 +736,7 @@ test("a replaced run bundle cannot redirect later artifacts outside the workspac
         onState: (run) => {
           updates.push(run);
           if (run.phase === "queued") {
-            const bundle = evidenceDirectory(workdir, run);
+            const bundle = evidenceDirectory(run);
             rmSync(bundle, { recursive: true, force: true });
             mkdirSync(outside, { recursive: true });
             writeFileSync(join(outside, "test.yaml"), "safe replacement", "utf8");
@@ -747,7 +757,7 @@ test("a replaced run bundle cannot redirect later artifacts outside the workspac
   }
 });
 
-test("post-queued artifact write errors always publish one failed terminal state", async (t) => {
+test("agent-store artifact write errors always publish one failed terminal state", async (t) => {
   const [target] = listTargets();
   const workdir = await workspace("artifact-io-error");
   const externalTarget = join(workdir, "external-run-log.txt");
@@ -773,7 +783,7 @@ test("post-queued artifact write errors always publish one failed terminal state
         onState: (run) => {
           updates.push(run);
           if (run.phase === "queued") {
-            symlinkSync(externalTarget, join(evidenceDirectory(workdir, run), "run.log"), "file");
+            symlinkSync(externalTarget, join(evidenceDirectory(run), "run.log"), "file");
           }
         },
       }),
@@ -820,14 +830,14 @@ test("target RPC requires a valid explicitly initialized workspace", async () =>
     manifestDigest: target.digest,
     fixture: "fixed",
   };
-  const beforeEvidence = await evidenceRunIds(REPOSITORY_ROOT);
+  const beforeEvidence = await evidenceRunIds();
   try {
     uninitialized = await rpc.request(1, "target/run", request);
     assert.ok(uninitialized.error, "target/run before initialize must reject");
     assert.match(uninitialized.error.message, /target workspace.*initialize/i);
     assert.deepEqual(stateNotifications(rpc.messages, 0), []);
     assert.equal(rpc.messages.some((message) => message.method === "evidence/append"), false);
-    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+    assert.deepEqual(await evidenceRunIds(), beforeEvidence);
 
     const initializedWithoutWorkspace = await rpc.request(2, "initialize", {});
     assert.equal(initializedWithoutWorkspace.error, undefined);
@@ -840,7 +850,7 @@ test("target RPC requires a valid explicitly initialized workspace", async () =>
       rpc.messages.slice(beforeVerify).some((message) => message.method === "evidence/append"),
       false,
     );
-    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+    assert.deepEqual(await evidenceRunIds(), beforeEvidence);
 
     const initializedWithInvalidWorkspace = await rpc.request(4, "initialize", {
       workspacePath: "relative-workspace",
@@ -855,10 +865,10 @@ test("target RPC requires a valid explicitly initialized workspace", async () =>
       rpc.messages.slice(beforeInvalidRun).some((message) => message.method === "evidence/append"),
       false,
     );
-    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+    assert.deepEqual(await evidenceRunIds(), beforeEvidence);
   } finally {
     if (uninitialized?.result?.run) {
-      await rm(evidenceDirectory(REPOSITORY_ROOT, uninitialized.result.run), {
+      await rm(evidenceDirectory(uninitialized.result.run), {
         recursive: true,
         force: true,
       });
