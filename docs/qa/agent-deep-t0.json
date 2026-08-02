@@ -1,0 +1,12 @@
+### Error
+ReferenceError: PLACEHOLDER is not defined
+    at eval (eval at <anonymous> (eval at evaluate (:303:30)), <anonymous>:17:12)
+    at eval (eval at evaluate (:303:30), <anonymous>:4:50)
+    at UtilityScript.evaluate (<anonymous>:305:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+### Page
+- Page URL: https://app.labwired.com/p/f2d1e39c093bbafd5fd26d9c095c490a/edit
+- Page Title: LabWired Playground — The easy way to build hardware
+- Console: 2 errors, 0 warnings
+### Events
+- New console entries: .playwright-mcp/console-2026-07-29T17-10-44-890Z.log#L2-L4

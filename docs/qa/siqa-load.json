@@ -1,0 +1,18 @@
+### Result
+{
+  "href": "https://app.labwired.com/?lab=esp32c3-oled-lab&siqa=1785360696510",
+  "signedIn": true,
+  "email": "shylenkoa@gmail.com",
+  "userId": "user_3DqakRYYx8RmlNMggznGdcRYcfd",
+  "sendMessage": true,
+  "feedback": true,
+  "hasTa": true,
+  "starters": [
+    "LED blink",
+    "Serial hello"
+  ]
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => {\n    const signedIn = !!(window.Clerk?.user || document.querySelector(\'.cl-userButtonTrigger\'));\n    const email = window.Clerk?.user?.primaryEmailAddress?.emailAddress\n      || window.Clerk?.user?.emailAddresses?.[0]?.emailAddress || null;\n    return {\n      href: location.href.slice(0, 140),\n      signedIn,\n      email,\n      userId: window.Clerk?.user?.id || null,\n      sendMessage: !!document.querySelector(\'button[aria-label="Send message"]\'),\n      feedback: !!document.querySelector(\'button[aria-label="Feedback"]\'),\n      hasTa: !!document.querySelector(\'textarea[aria-label="Message the Architect"]\'),\n      starters: [...document.querySelectorAll(\'button\')].filter(b => /LED blink|Serial hello/i.test((b.textContent||\'\').trim())).map(b => b.textContent.trim()),\n    };\n  }');
+```

@@ -1,0 +1,52 @@
+id: 1
+data: {"type":"data-build-progress","data":{"phase":"understand","status":"active","detail":"Reading request…"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":1,"turnId":"turn_curl_1"}}
+
+id: 2
+data: {"type":"data-build-progress","data":{"phase":"understand","status":"done"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":2,"turnId":"turn_curl_1"}}
+
+id: 3
+data: {"type":"data-build-progress","data":{"phase":"lookup","status":"active","detail":"Loading starter esp32-c3-led-blink…"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":3,"turnId":"turn_curl_1"}}
+
+id: 4
+data: {"type":"data-build-progress","data":{"phase":"lookup","status":"done","detail":"Loaded esp32-c3-led-blink"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":4,"turnId":"turn_curl_1"}}
+
+id: 5
+data: {"type":"data-build-progress","data":{"phase":"wire","status":"done","detail":"Loaded instantly from the curated starter \"ESP32-C3 LED blink\". Prove it works on the twin with run_and_verify (oracle) — or adapt with wire / edit_firmware. Do not rewrite from scratch. Do not claim working without proven."}}
+
+data: {"type":"data-resume-cursor","data":{"seq":5,"turnId":"turn_curl_1"}}
+
+id: 6
+data: {"type":"data-build-progress","data":{"phase":"verify","status":"active","detail":"Proving starter on twin…"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":6,"turnId":"turn_curl_1"}}
+
+id: 7
+data: {"type":"data-build-progress","data":{"phase":"verify","status":"done","detail":"Starter proven"}}
+
+data: {"type":"data-resume-cursor","data":{"seq":7,"turnId":"turn_curl_1"}}
+
+id: 8
+data: {"type":"data-starter-hydrate","data":{"id":"esp32-c3-led-blink","title":"ESP32-C3 LED blink","board":"esp32-c3-supermini","diagram":{"version":1,"board":"esp32-c3-supermini","parts":[{"id":"mcu","type":"esp32-c3-supermini","x":180,"y":180,"rotate":0,"attrs":{}},{"id":"led_red","type":"led","x":420,"y":180,"rotate":0,"attrs":{"color":"red","series_resistor_ohms":"220"}}],"wires":[{"from":{"part":"mcu","pin":"GPIO4"},"to":{"part":"led_red","pin":"A"},"color":"#cc2222"},{"from":{"part":"led_red","pin":"C"},"to":{"part":"mcu","pin":"GND"},"color":"#444444"}]},"firmware":[{"target":"mcu","language":"arduino","entryPath":"src/main.ino","source":"// ESP32 — external LED blink on GPIO4.\n// Wiring: GPIO4 -> 220 ohm resistor -> LED anode; LED cathode -> GND (active-high).\n#define LED_PIN 4\n\nvoid setup() {\n  pinMode(LED_PIN, OUTPUT);\n  digitalWrite(LED_PIN, LOW);\n  Serial.begin(115200);\n  Serial.println(\"LED ready\");\n}\n\nvoid loop() {\n  digitalWrite(LED_PIN, HIGH);\n  Serial.println(\"LED ON\");\n  delay(500);\n  digitalWrite(LED_PIN, LOW);\n  delay(500);\n}\n"}],"proven":true,"message":"Loaded instantly from the curated starter \"ESP32-C3 LED blink\". Prove it works on the twin with run_and_verify (oracle) — or adapt with wire / edit_firmware. Do not rewrite from scratch. Do not claim working without proven."}}
+
+data: {"type":"data-resume-cursor","data":{"seq":8,"turnId":"turn_curl_1"}}
+
+id: 9
+data: {"type":"start","messageId":"1GQSQahwIGNkmxQa"}
+
+data: {"type":"data-resume-cursor","data":{"seq":9,"turnId":"turn_curl_1"}}
+
+id: 10
+data: {"type":"error","errorText":"The agent hit an error mid-run. Try again."}
+
+data: {"type":"data-resume-cursor","data":{"seq":10,"turnId":"turn_curl_1"}}
+
+
+HTTP=200

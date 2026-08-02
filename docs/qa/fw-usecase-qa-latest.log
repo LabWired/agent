@@ -1,0 +1,36 @@
+PASS  FW-ENV-01 — labwired doctor ok
+PASS  FW-ENV-02 — sim + skills present
+PASS  FW-ENV-03 — rpc initialize ok
+PASS  FW-CORE-01 — broken assert failed
+PASS  FW-CORE-02 — fixed assert model_verified
+PASS  FW-CORE-06 — wrong status rejected
+PASS  FW-CORE-03 — demo.sh OK
+PASS  FW-CORE-05 — score-verify fixed
+PASS  FW-CORE-04 — live-gate1.sh
+PASS  FW-SKILL-verify-firmware — SKILL.md present
+PASS  FW-SKILL-diagnose-firmware — SKILL.md present
+PASS  FW-SKILL-firmware-repair-loop — SKILL.md present
+PASS  FW-SKILL-scaffold-firmware — SKILL.md present
+PASS  FW-SKILL-board-bringup — SKILL.md present
+PASS  FW-SKILL-flash-firmware — SKILL.md present
+PASS  FW-SKILL-hw-promote — SKILL.md present
+PASS  FW-SKILL-inspect-evidence — SKILL.md present
+PASS  FW-SKILL-report-evidence — SKILL.md present
+PASS  FW-HW-01 — probe list
+PASS  FW-CORE-07 — rpc tool/run version
+PASS  FW-SAFE-01 — plan blocks flash
+PASS  FW-SAFE-01b — plan blocks hw_promote
+PASS  FW-SAFE-02 — verify blocks install_deps
+PASS  FW-SAFE-03 — act allows probe_list
+PASS  FW-HW-04 — serial/listPorts
+PASS  FW-HW-03 — flash gated in plan
+PASS  FW-HW-02 — virtual device listed
+PASS  FW-FIX-01 — diagnose fail-first skill
+PASS  FW-FIX-02 — repair budget skill
+PASS  FW-CORE-03b — same-oracle gate1 fixed reuses oracle.json (offline)
+PASS  FW-DBG-01 — debug tools listed
+PASS  FW-DBG-02 — plan blocks gdb start
+PASS  FW-HW-CLAIM-01 — hardware_observed claim shape
+PASS  FW-HW-CLAIM-02 — refuse model_verified from HW
+
+SUMMARY pass=34 fail=0 skip=0 → /Users/andrii/Projects/labwired-agent/docs/qa/fw-usecase-qa-latest.json

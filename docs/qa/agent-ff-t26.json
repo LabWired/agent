@@ -1,0 +1,18 @@
+### Result
+{
+  "i": 26,
+  "url": "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/connect.html?mcpRelayUrl=ws%3A%2F%2F%5B%3A%3A1%5",
+  "thinking": false,
+  "err": null,
+  "status": null,
+  "rows": [],
+  "agent": [],
+  "bodyHasProbe": false,
+  "verified": false,
+  "sendDisabled": null,
+  "ta": null
+}
+### Ran Playwright code
+```js
+await page.evaluate('() => ({\n    i: 26,\n    url: location.href.slice(0,100),\n    thinking: !!document.querySelector(\'.architect__thinking\'),\n    err: document.querySelector(\'.architect__errbubble\')?.innerText?.slice(0,200) || null,\n    status: document.querySelector(\'[aria-label="architect status"]\')?.textContent || null,\n    rows: [...document.querySelectorAll(\'.architect__row\')].map(r => r.innerText.slice(0,80)),\n    agent: (window.__lw?.fetch||[]).filter(f=>/\\/v1\\/agent/.test(f.u)),\n    bodyHasProbe: /HELLO_QA_PROBE/i.test(document.body.innerText),\n    verified: /Verified live/i.test(document.body.innerText),\n    sendDisabled: document.querySelector(\'button[aria-label="Send message"]\')?.disabled ?? null,\n    ta: document.querySelector(\'textarea[aria-label="Message the Architect"]\')?.value?.slice(0,80) || null,\n  })');
+```

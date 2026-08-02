@@ -12,6 +12,8 @@ source "$ROOT/lib/resolve-probe.sh"
 fail=0
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# Isolate from ambient install env (user shell may export LABWIRED_* tools paths)
+unset LABWIRED_CLI LABWIRED_SIM LABWIRED_PROBE_RS
 export LABWIRED_HOME="$TMP/prefix"
 
 labwired_prefix_ensure_dirs

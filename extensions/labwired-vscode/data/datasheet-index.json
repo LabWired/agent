@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "catalog-facts",
+      "kind": "catalog",
+      "path": "data/catalog-facts.json",
+      "title": "LabWired device catalog"
+    },
+    {
+      "id": "user-datasheets",
+      "kind": "pdf-dir",
+      "path": ".labwired/datasheets",
+      "title": "Project datasheets (drop PDFs here)"
+    }
+  ],
+  "note": "Local catalog is authoritative for parts. Drop PDFs into .labwired/datasheets for project-specific grounding; full PDF embedding is next."
+}

@@ -1,0 +1,198 @@
+### Page
+- Page URL: https://app.labwired.com/?lab=rp2040-pico&_cb=1785344212083
+- Page Title: LabWired Playground — The easy way to build hardware
+### Snapshot
+```yaml
+- generic [ref=f5e3]:
+  - banner [ref=f5e4]:
+    - generic [ref=f5e5]:
+      - link "LabWired" [ref=f5e6] [cursor=pointer]:
+        - /url: https://labwired.com
+      - generic [ref=f5e11]: ›
+      - generic [ref=f5e12]: Raspberry Pi Pico
+    - button "Search components, boards, and examples" [ref=f5e15] [cursor=pointer]:
+      - generic [ref=f5e16]: ⌘K
+      - generic [ref=f5e17]: Search components, boards, examples…
+    - generic [ref=f5e18]:
+      - generic "Editor mode" [ref=f5e19]:
+        - button "Edit" [pressed] [ref=f5e20] [cursor=pointer]
+        - button "Run" [ref=f5e21] [cursor=pointer]
+      - generic [ref=f5e22]:
+        - button "View" [ref=f5e24] [cursor=pointer]
+        - button "Tools" [ref=f5e26] [cursor=pointer]
+      - button "Open My Projects" [ref=f5e30] [cursor=pointer]:
+        - generic [ref=f5e31]: 📂
+        - generic [ref=f5e32]: My Projects
+      - button "Embed" [ref=f5e33] [cursor=pointer]
+      - button "Share" [ref=f5e34] [cursor=pointer]
+      - button "Feedback" [ref=f5e36] [cursor=pointer]
+      - group "Account menu" [ref=f5e606]:
+        - button "Open user menu" [ref=f5e608] [cursor=pointer]:
+          - img "Andrii Shylenko's logo" [ref=f5e611]
+  - main "Canvas" [ref=f5e41]:
+    - generic [ref=f5e43]:
+      - complementary "Build kit" [ref=f5e44]:
+        - separator "Resize build kit" [ref=f5e45]
+        - generic [ref=f5e46]:
+          - tablist "Build kit tabs" [ref=f5e47]:
+            - tab "Parts (2)" [selected] [ref=f5e48] [cursor=pointer]
+            - tab "Assembly (2)" [ref=f5e49] [cursor=pointer]
+            - tab "Pins" [ref=f5e50] [cursor=pointer]
+          - button "Close build kit" [ref=f5e51] [cursor=pointer]: ×
+        - tabpanel [ref=f5e52]:
+          - generic [ref=f5e53]:
+            - generic [ref=f5e54]:
+              - textbox "Search parts" [ref=f5e59]:
+                - /placeholder: Search parts, type, or pin…
+              - button "Export BOM" [ref=f5e60] [cursor=pointer]
+            - generic [ref=f5e63]:
+              - listbox "Parts" [ref=f5e64]:
+                - generic [ref=f5e65]:
+                  - button "Microcontroller 1" [expanded] [ref=f5e66] [cursor=pointer]:
+                    - generic [ref=f5e67]: ▾
+                    - generic [ref=f5e69]: Microcontroller
+                    - generic [ref=f5e70]: "1"
+                  - option "RPi Pico rpi-pico mcu runs code" [selected] [ref=f5e72] [cursor=pointer]:
+                    - img [ref=f5e74]:
+                      - generic [ref=f5e76]:
+                        - generic [ref=f5e86]: RASPBERRY PI PICO
+                        - generic [ref=f5e87]: BOOTSEL
+                        - generic [ref=f5e92]: RP2040
+                        - generic [ref=f5e106]: 12 MHz
+                        - generic [ref=f5e129]: GP0
+                        - generic [ref=f5e133]: GP1
+                        - generic [ref=f5e137]: GP2
+                        - generic [ref=f5e141]: GP3
+                        - generic [ref=f5e145]: GP4
+                        - generic [ref=f5e149]: GP5
+                        - generic [ref=f5e153]: GP6
+                        - generic [ref=f5e157]: GP7
+                        - generic [ref=f5e161]: GP8
+                        - generic [ref=f5e165]: GP9
+                        - generic [ref=f5e169]: GP10
+                        - generic [ref=f5e173]: GP11
+                        - generic [ref=f5e177]: GP12
+                        - generic [ref=f5e181]: GP13
+                        - generic [ref=f5e185]: GP14
+                        - generic [ref=f5e189]: GP15
+                        - generic [ref=f5e193]: GP16
+                        - generic [ref=f5e197]: GP17
+                        - generic [ref=f5e201]: GP18
+                        - generic [ref=f5e205]: GP19
+                        - generic [ref=f5e209]: GP20
+                        - generic [ref=f5e213]: GP21
+                        - generic [ref=f5e217]: GP22
+                        - generic [ref=f5e221]: GP23
+                        - generic [ref=f5e225]: GP24
+                        - generic [ref=f5e229]: GP25
+                        - generic [ref=f5e233]: GP26
+                        - generic [ref=f5e237]: GP27
+                        - generic [ref=f5e241]: GP28
+                        - generic [ref=f5e245]: 3V3
+                        - generic [ref=f5e248]: GND
+                    - generic [ref=f5e251]:
+                      - generic [ref=f5e252]: RPi Pico
+                      - generic [ref=f5e253]:
+                        - generic [ref=f5e254]: rpi-pico
+                        - generic [ref=f5e255]: mcu
+                    - generic [ref=f5e256]: runs code
+                - generic [ref=f5e259]:
+                  - button "Instruments 1" [expanded] [ref=f5e260] [cursor=pointer]:
+                    - generic [ref=f5e261]: ▾
+                    - generic [ref=f5e263]: Instruments
+                    - generic [ref=f5e264]: "1"
+                  - option "Note note note annotation" [ref=f5e266] [cursor=pointer]:
+                    - img [ref=f5e268]:
+                      - generic [ref=f5e269]: "A real RP2040 firmware image booting on the dual-core ARM Cortex-M0+ (Raspberry Pi Pico). It prints a smoke-test banner over UART — the same ELF the core suite verifies against a byte-exact serial oracle (RP2040_SMOKE_OK). Try: click Run, then open the Serial tab to watch the boot banner stream in."
+                    - generic [ref=f5e272]:
+                      - generic [ref=f5e273]: Note
+                      - generic [ref=f5e274]:
+                        - generic [ref=f5e275]: note
+                        - generic [ref=f5e276]: note
+                    - generic [ref=f5e277]: annotation
+              - complementary "RPi Pico detail" [ref=f5e280]:
+                - heading "RPi Pico" [level=3] [ref=f5e282]
+                - button "Focus on canvas" [ref=f5e284] [cursor=pointer]
+                - generic [ref=f5e285]: runs code
+                - generic [ref=f5e288]:
+                  - heading "Pinout · 31 pins" [level=4] [ref=f5e289]
+                  - paragraph [ref=f5e290]: No wires yet.
+        - generic [ref=f5e291]: Board rp2040 · 2 parts · 0 wires · 2 steps
+      - generic [ref=f5e292]:
+        - generic [ref=f5e293]:
+          - generic [ref=f5e298]:
+            - img [ref=f5e299]:
+              - generic [ref=f5e301]: "A real RP2040 firmware image booting on the dual-core ARM Cortex-M0+ (Raspberry Pi Pico). It prints a smoke-test banner over UART — the same ELF the core suite verifies against a byte-exact serial oracle (RP2040_SMOKE_OK). Try: click Run, then open the Serial tab to watch the boot banner stream in."
+              - button "Open Raspberry Pi Pico target properties" [ref=f5e306]:
+                - generic [ref=f5e309]:
+                  - generic [ref=f5e319]: RASPBERRY PI PICO
+                  - generic [ref=f5e320]: BOOTSEL
+                  - generic [ref=f5e325]: RP2040
+                  - generic [ref=f5e339]: 12 MHz
+                  - generic [ref=f5e362]: GP0
+                  - generic [ref=f5e366]: GP1
+                  - generic [ref=f5e370]: GP2
+                  - generic [ref=f5e374]: GP3
+                  - generic [ref=f5e378]: GP4
+                  - generic [ref=f5e382]: GP5
+                  - generic [ref=f5e386]: GP6
+                  - generic [ref=f5e390]: GP7
+                  - generic [ref=f5e394]: GP8
+                  - generic [ref=f5e398]: GP9
+                  - generic [ref=f5e402]: GP10
+                  - generic [ref=f5e406]: GP11
+                  - generic [ref=f5e410]: GP12
+                  - generic [ref=f5e414]: GP13
+                  - generic [ref=f5e418]: GP14
+                  - generic [ref=f5e422]: GP15
+                  - generic [ref=f5e426]: GP16
+                  - generic [ref=f5e430]: GP17
+                  - generic [ref=f5e434]: GP18
+                  - generic [ref=f5e438]: GP19
+                  - generic [ref=f5e442]: GP20
+                  - generic [ref=f5e446]: GP21
+                  - generic [ref=f5e450]: GP22
+                  - generic [ref=f5e454]: GP23
+                  - generic [ref=f5e458]: GP24
+                  - generic [ref=f5e462]: GP25
+                  - generic [ref=f5e466]: GP26
+                  - generic [ref=f5e470]: GP27
+                  - generic [ref=f5e474]: GP28
+                  - generic [ref=f5e478]: 3V3
+                  - generic [ref=f5e481]: GND
+            - button "Tidy layout" [ref=f5e547] [cursor=pointer]
+          - generic [ref=f5e550]:
+            - separator "Resize Architect" [ref=f5e551]
+            - generic [ref=f5e552]:
+              - generic [ref=f5e553]: ✦
+              - generic [ref=f5e554]: Architect
+              - generic [ref=f5e555]: Ready
+              - button "Collapse Architect agent" [ref=f5e558] [cursor=pointer]:
+                - generic [ref=f5e559]: ›
+            - generic [ref=f5e561]:
+              - generic [ref=f5e563]:
+                - paragraph [ref=f5e564]: Pick a starter below, or describe what to build. Done means Verified live on the twin.
+                - generic [ref=f5e565]:
+                  - button "LED blink" [ref=f5e566] [cursor=pointer]
+                  - button "Button + LED" [ref=f5e567] [cursor=pointer]
+                  - button "OLED hello" [ref=f5e568] [cursor=pointer]
+                  - button "Serial hello" [ref=f5e569] [cursor=pointer]
+                  - button "Prove it works" [ref=f5e570] [cursor=pointer]
+              - generic [ref=f5e572]:
+                - textbox "Message the Architect" [ref=f5e573]:
+                  - /placeholder: Describe a change, or ask a question…
+                - generic [ref=f5e574]:
+                  - generic [ref=f5e575]:
+                    - button "Attach files" [ref=f5e576] [cursor=pointer]
+                    - button "Generation history" [disabled] [ref=f5e579]: History
+                  - generic [ref=f5e580]:
+                    - button "Dictate" [ref=f5e581] [cursor=pointer]
+                    - button "Send message" [disabled] [ref=f5e585]: ↑
+        - button "About this lab" [ref=f5e587] [cursor=pointer]
+    - toolbar "System simulation controls" [ref=f5e595]:
+      - button "Pause system" [ref=f5e613] [cursor=pointer]:
+        - generic [ref=f5e617]: Pause
+      - button "Reset system" [ref=f5e599] [cursor=pointer]
+      - status [ref=f5e603]:
+        - generic [ref=f5e605]: Running
+```

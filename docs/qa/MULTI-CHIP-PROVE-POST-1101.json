@@ -1,0 +1,75 @@
+{
+  "started": "2026-07-30T07:04:43.820Z",
+  "goal": "post-1101 multichip twin prove",
+  "results": [
+    {
+      "id": "c3-led",
+      "chip": "esp32-c3",
+      "ok": true,
+      "verified": true,
+      "ticks": 5,
+      "agent": [
+        {
+          "status": 200,
+          "t": 1785395110156
+        }
+      ]
+    },
+    {
+      "id": "pico-led",
+      "chip": "rp2040",
+      "ok": true,
+      "verified": true,
+      "ticks": 5,
+      "agent": [
+        {
+          "status": 200,
+          "t": 1785395157844
+        }
+      ]
+    },
+    {
+      "id": "nrf-led",
+      "chip": "nrf52840",
+      "ok": true,
+      "verified": true,
+      "ticks": 5,
+      "agent": [
+        {
+          "status": 200,
+          "t": 1785395187341
+        }
+      ]
+    },
+    {
+      "id": "stm32-led",
+      "chip": "stm32f103",
+      "ok": true,
+      "verified": true,
+      "ticks": 7,
+      "agent": [
+        {
+          "status": 200,
+          "t": 1785395222487,
+          "hasFinish": true,
+          "provenTrue": true,
+          "oracleSource": null,
+          "autoMarkers": null,
+          "tools": [
+            "\"toolName\":\"search_similar_labs\"",
+            "\"toolName\":\"search_similar_labs\""
+          ],
+          "errHints": [],
+          "len": 10663
+        }
+      ]
+    }
+  ],
+  "ended": "2026-07-30T07:07:08.073Z",
+  "summary": {
+    "total": 4,
+    "verified": 4,
+    "soft": 0,
+    "fail": 0
+  }
+}

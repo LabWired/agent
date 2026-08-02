@@ -1,0 +1,128 @@
+{
+  "findings": [
+    {
+      "id": "BUG-004",
+      "title": "Pricing free vs Starter $9 messaging may conflict",
+      "status": "Open-Review"
+    }
+  ],
+  "landingSnippet": "LabWired\nThe easy way to build hardware\nPlayground\nAgent\nCI\nPro\nPricing\nBlog\nSign in\nOpen Playground →\nWhat do you\nwant to build?\n\nDesign circuits, run firmware, compare variants, and inspect the result in Playground.\n\nRunning · breakout\nlive\n\nNokia 5110 · Try it live →\n\nNok\nAttach\nBuild\n+ Nokia Breakout\n+ ESP32 OLED\n+ nRF52 BLE\n+ IO-Link station\n+ UDS ECU\n+ RP2040\n\nOPEN SOURCE\n\nw1ne/labwired-core\nMIT licensed\nARM · RISC-V · Xtensa\nMCP\nHow it works\n\nDescribe hardware. Run the firmware. See it in Playground.\n\n1\nDescribe it\n\nType what you want, pick a lab, or connect MCP.\n\n2\nRun it\n\nFirmware runs in the browser — display, UART, buses.\n\n3\nCheck the result\n\nSame setup can run in CI. Compare builds before you order a board.\n\nProjects\n\nSix working starters across MCUs, sensors, displays, wireless, and industrial buses.\n\nSee all boards →\nRUNNABLE\nESP32-C3 · I²C · OLED\nESP32-C3 OLED\n\nRun an Arduino clock and watch the modeled SSD1306 update.\n\nOpen in Playground\n→\nRUNNABLE\nSTM32L476 · SPI · ULTRASONIC\nNokia 5110 Breakout\n\nMove the ultrasonic input and steer a real firmware game.\n\nOpen in Playground\n→\nRUNNABLE\nNRF52840 · GPIO · BLE\nProximity + BLE\n\nChange distance and watch the alarm LED and BLE packets follow.\n\nOpen in Playground\n→\nRUNNABLE\nMULTI-BOARD · IO-LINK · ANALYZER\nIO-Link Master Station\n\nRun one master and two device firmwares in lockstep.\n\nOpen in Playground\n→\nRUNNABLE\nSTM32H5 · CAN-FD · UDS\nSTM32H5 UDS ECU\n\nInspect decoded diagnostic requests and positive ECU responses.\n\nOp",
+  "installLinks": [
+    "Install",
+    "curl -fsSL https://labwired.com/agent-install.sh | sh\nlabwired",
+    "npm i -g @labwired/agent",
+    "Install"
+  ],
+  "playTextPreview": "LabWired\n›\nESP32-C3 0.96\" OLED\n⌘K\nSearch components, boards, examples…\nEdit\nRun\nView\nTools\n📂\nMy Projects\nEmbed\nShare\nFeedback\nSign in\nParts (3)\nAssembly (4)\nPins\n×\nExport BOM\n▾\nMICROCONTROLLER\n1\nESP32-C3\nBOOT\nESP32-C3 SUPER MINI\n5V\nGND\n3V3\nGP4\nGP3\nGP2\nGP1\nGP0\nGP5\nGP6\nGP7\nGP8\nGP9\nGP10\nGP20\nGP21\nESP32-C3 Super Mini\nesp32-c3-supermini\nmcu\nruns code\n▾\nDISPLAYS\n1\n128 x 64 OLED\nSSD1306 · I²C 0x3C\nGND\nVCC\nSCL\nSDA\nOLED 128x64\noled-ssd1306\noled\nsimulated\n▾\nINSTRUMENTS\n1\nESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5.\nTry: Run and watch the Arduino sketch paint the clock.\nNote\nnote\nnote\nannotation\nESP32-C3 Super Mini\nFocus on canvas\nruns code\nPINOUT · 16 PINS\n3V3 → oled.VCC\nGND → oled.GND\nGPIO4 → oled.SDA\nGPIO5 → oled.SCL\nBoard esp32c3-oled-lab · 3 parts · 4 wires · 4 steps\nPower\nGround\nI²C\nESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5.\nTry: Run and watch the Arduino sketch paint the clock.\nESP32-C3\nBOOT\nESP32-C3 SUPER MINI\n5V\nGND\n3V3\nGP4\nGP3\nGP2\nGP1\nGP0\nGP5\nGP6\nGP7\nGP8\nGP9\nGP10\nGP20\nGP21\nSSD1306 · I²C 0x3C\nGND\nVCC\nSCL\nSDA\n✦\nArchitect\nReady\n›\n\nPick a starter below, or describe what to build. Done means Verified live on the twin.\n\nLED blink\nButton + LED\nOLED hello\nSerial hello\nProve it works\nHistory\n↑\nPause\nRunning",
+  "afterClickText": "LabWired\n›\nESP32-C3 0.96\" OLED\n⌘K\nSearch components, boards, examples…\nEdit\nRun\nView\nTools\n📂\nMy Projects\nEmbed\nShare\nFeedback\nSign in\n›\nBUILD KIT\nPower\nGround\nI²C\nESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5.\nTry: Run and watch the Arduino sketch paint the clock.\nESP32-C3\nBOOT\nESP32-C3 SUPER MINI\n5V\nGND\n3V3\nGP4\nGP3\nGP2\nGP1\nGP0\nGP5\nGP6\nGP7\nGP8\nGP9\nGP10\nGP20\nGP21\nSSD1306 · I²C 0x3C\nGND\nVCC\nSCL\nSDA\n✦\nReady\nARCHITECT\nPause\nRunning\nSign in to labwired.com\n\nWelcome back! Please sign in to continue\n\nor\n\nEmail address\nPassword\nContinue\nDon’t have an account?\nSign up\n\nSecured by",
+  "homeTextPreview": "LabWired\n›\nESP32-C3 0.96\" OLED\n⌘K\nSearch components, boards, examples…\nEdit\nRun\nView\nTools\n📂\nMy Projects\nEmbed\nShare\nFeedback\nSign in\nParts (3)\nAssembly (4)\nPins\n×\nExport BOM\n▾\nMICROCONTROLLER\n1\nESP32-C3\nBOOT\nESP32-C3 SUPER MINI\n5V\nGND\n3V3\nGP4\nGP3\nGP2\nGP1\nGP0\nGP5\nGP6\nGP7\nGP8\nGP9\nGP10\nGP20\nGP21\nESP32-C3 Super Mini\nesp32-c3-supermini\nmcu\nruns code\n▾\nDISPLAYS\n1\n128 x 64 OLED\nSSD1306 · I²C 0x3C\nGND\nVCC\nSCL\nSDA\nOLED 128x64\noled-ssd1306\noled\nsimulated\n▾\nINSTRUMENTS\n1\nESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5.\nTry: Run and watch the Arduino sketch paint the clock.\nNote\nnote\nnote\nannotation\nESP32-C3 Super Mini\nFocus on canvas\nruns code\nPINOUT · 16 PINS\n3V3 → oled.VCC\nGND → oled.GND\nGPIO4 → oled.SDA\nGPIO5 → oled.SCL\nBoard esp32c3-oled-lab · 3 parts · 4 wires · 4 steps\nPower\nGround\nI²C\nESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5.\nTry: Run and watch the Arduino sketch paint the clock.\nESP32-C3\nBOOT\nESP32-C3 SUPER MINI\n5V\nGND\n3V3\nGP4\nGP3\nGP2\nGP1\nGP0\nGP5\nGP6\nGP7\nGP8\nGP9\nGP10\nGP20\nGP21\n128 x 64 OLED\nSSD1306 · I²C 0x3C\nGND\nVCC\nSCL\nSDA\n✦\nArchitect\nReady\n›\n\nPick a starter below, or describe what to build. Done means Verified live on the twin.\n\nLED blink\nButton + LED\nOLED hello\nSerial hello\nProve it works\nHistory\n↑\nRun\nIdle",
+  "nokiaText": "LabWired\n›\nNokia 5110 Breakout\n⌘K\nSearch components, boards, examples…\nEdit\nRun\nView\nTools\n📂\nMy Projects\nEmbed\nShare\nFeedback\nSign in\nParts (5)\nAssembly (9)\nPins\n×\nExport BOM\n▾\nMICROCONTROLLER\n1\nST-LINK DEBUGGER\nST-LINK\nNUCLEO-L476RG\nSTM32L476\nCortex-M4 · LQFP64\nCN5\nCN6\nCN8\nCN9\nCN7\nCN10\nEDGE TARGETS ARE WIRING CONVENIENCES · MAPPED HOLES CARRY GPIO IDS\nUSER\nLD1 / LD2\nULTRA-LOW-POWER TARGET\nPA0\nPB0\nPC0\nPA1\nPB1\nPC1\nPA2\nPB2\nPC2\nPA3\nPB3\nPC3\nPA4\nPB4\nPC4\nPA5\nPB5\nPC5\nPA6\nPB6\nPC6\nPA7\nPB7\nPC7\nPA8\nPB8\nPC8\nPA9\nPB9\nPC9\nPA10\nPB10\nPC10\nPA11\nPB11\nPC11\nPA12\nPB12\nPC12\nPA13\nPB13\nPC13\nPA14\nPB14\nPC14\nPA15\nPB15\nPC15\n3V3\nGND\nNUCLEO-L476RG\nnucleo-l476rg\nmcu\nruns code\n▾\nSENSORS\n1\nHC-SR04 · 100cm\nHC-SR04\nultrasonic\ndist\nsimulated\n▾\nDISPLAYS\n1\nNOKIA 5110\nPCD8544 · SPI\nNokia 5110\npcd8544\nlcd\nsimulated\n▾\nINSTRUMENTS\n2\nNokia 5110 (PCD8544) LCD + ultrasonic sensor on the STM32L476 — a tiny Space-Invaders-style demo.\nTry: Run, then drag the distance sensor to steer.\nNote\nnote\nnote\nannotation\nLOGIC ANALYZER\nRAW\nCH0\nCH1\nCH2\nCH3\nPROBE INPUTS\nLogic Analyzer\nlogic-analyzer\nspi_probe\nannotation\nHC-SR04\nFocus on canvas\nsimulated\nSPECIFICATIONS\nDistance (cm)\n100\nPINOUT · 4 PINS\nECHO → mcu.PB10\nGND → mcu.GND\nTRIG → mcu.PA8\nVCC → mcu.VCC\nBoard stm32l476 · 5 parts · 13 wires · 9 steps\nPower\nGround\nReset\nSignal\nNokia 5110 (PCD8544) LCD + ultrasonic sensor on the STM32L476 — a tiny Space-Invaders-style demo.\nTry: Run, then drag the distance sensor to steer.\nST-LINK DEBUGGER\nST-LINK\nNUCLEO-L476RG\nSTM32L476\nCortex-M4 · LQFP64\nCN5\nCN6\nCN8\nCN9\nCN7\nCN10\nEDGE TARGETS ARE WIRING CONVENIENCES · MAPPED HOLES CARRY GPIO IDS\nUSER\nLD1 / LD2\nULTRA-LOW-POWER TARGET\nPA0\nPB0\nPC0\nPA1\nPB1\nPC1\nPA2\nPB2\nPC2\nPA3\nPB3\nPC3\nPA4\nPB4\nPC4\nPA5\nPB5\nPC5\nPA6\nPB6\nPC6\nPA7\nPB7\nPC7\nPA8\nPB8\nPC8\nPA9\nPB9\nPC9\nPA10\nPB10\nPC10\nPA11\nPB11\nPC11\nPA12\nPB12\nPC12\nPA13\nPB13\nPC13\nPA14\nPB14\nPC14\nPA15\nPB15\nPC15\n3V3\nGND\nPCD8544 · SPI\nHC-SR04 · 100cm\nLOGIC ANALYZER\nRAW\nCH0\nCH1\nCH2\nCH3\nPROBE INPUTS\nSPI ⌃\n✦\nArchitect\nReady\n›\n\nPick a starter below, or describe what t",
+  "valText": "LabWired\nThe easy way to build hardware\nPlayground\nLabs\nFor CI\nPro\nPricing\nBlog\nGitHub\nVALIDATION\nSupported devices, components, and Tier-1 CI proof.\n\nTwo public categories: the devices and components library (what you can place and simulate), and the Tier-1 validation matrix (what each chip family has proven in CI). Search filters the whole page.\n\nSearch the whole validation catalog\n\nFilters chip families, components library, and Tier-1 matrix rows.\n\nSUPPORTED DEVICES\nDevices and components we model\n\nSeparate from the Tier-1 CI matrix below: this is the live components library — every part type LabWired can place, wire, and simulate. Data comes from the same catalog board-config and playground use (not a hand-curated marketing subset).\n\nChip families\n13 families in catalog\nESP32 (Xtensa LX6)\nesp32\nESP32-C3 (RISC-V)\nesp32c3\nESP32-S3 (Xtensa LX7)\nesp32s3\nKW41Z / MKW41Z4\nmkw41z4\nnRF52840\nnrf52840\nnRF54L15\nnrf54l15\nRP2040\nrp2040\nSTM32F103\nstm32f103\nSTM32F401\nstm32f401\nSTM32F401CDU6\nstm32f401cdu6\nSTM32H563\nstm32h563\nSTM32H735\nstm32h735\nSTM32L476\nstm32l476\nComponents library\n133 parts · grouped by class\n\nMCU boards, sensors, bus devices, board I/O, instruments, and passives available on the canvas.\n\nMCU BOARDS\n13\nPART\tTYPE ID\tBUS\nESP32\tesp32\tMCU\nESP32-C3 Super Mini\tesp32-c3-supermini\tMCU\nESP32-S3-Zero\tesp32-s3-zero\tMCU\nkw41z-dev\tkw41z-dev\tMCU\nnRF52840 DK\tnrf52840-dk\tMCU\nnrf54l15\tnrf54l15\tMCU\nNUCLEO-F401RE\tnucleo-f401re\tMCU\nNUCLEO-H563ZI\tnucleo-h563zi\tMCU\nnucleo-l476rg\tnucleo-l476rg\tMCU\nRPi Pico\trpi-pico\tMCU\nSTM32 Black Pill\tstm32-blackpill\tMCU\nSTM32 Dev Board\tstm32-dev\tMCU\nstm32h735\tstm32h735\tMCU\nI²C DEVICES\n34\nPART\tTYPE ID\tBUS\nADS1115 16-bit ADC\tads1115\tI2C\nADXL345 Tilt\tadxl345\tI2C\nAHT20 Temp/Humidity\taht20\tI2C\nAS5600 Magnetic Encoder\tas5600\tI2C\nAT24C256 EEPROM\tat24c256\tI2C\nBME280 Weather\tbme280\tI2C\nbmi270\tbmi270\tI2C\nBMP280 Pressure\tbmp280\tI2C\nBNO055 IMU\tbno055\tI2C\ndrv2605\tdrv2605\tI2C\nDS3231 RTC\tds3231\tI2C\nFXOS8700\tfxos8700\tI2C\nINA219 Power Monitor\tina219\tI2C\nLCD1602 Ch",
+  "buttons": [
+    "⌘KSearch components, boards, examples…",
+    "Edit",
+    "Run",
+    "View",
+    "Tools",
+    "📂My Projects",
+    "Embed",
+    "Share",
+    "Feedback",
+    "Sign in",
+    "Parts (3)",
+    "Assembly (4)",
+    "Pins",
+    "×",
+    "Export BOM",
+    "▾Microcontroller1",
+    "▾Displays1",
+    "▾Instruments1",
+    "Focus on canvas",
+    "ESP32-C3BOOTESP32-C3 SUPER MINI5VGND3V3GP4GP3GP2GP1GP0GP5GP6GP7GP8GP9GP10GP20GP21",
+    "›",
+    "LED blink",
+    "Button + LED",
+    "OLED hello",
+    "Serial hello",
+    "Prove it works",
+    "History",
+    "↑",
+    "Pause"
+  ],
+  "homeButtons": [
+    "⌘KSearch components, boards, examples…",
+    "Edit",
+    "Run",
+    "View",
+    "Tools",
+    "📂My Projects",
+    "Embed",
+    "Share",
+    "Feedback",
+    "Sign in",
+    "Parts (3)",
+    "Assembly (4)",
+    "Pins",
+    "×",
+    "Export BOM",
+    "▾Microcontroller1",
+    "▾Displays1",
+    "▾Instruments1",
+    "Focus on canvas",
+    "ESP32-C3BOOTESP32-C3 SUPER MINI5VGND3V3GP4GP3GP2GP1GP0GP5GP6GP7GP8GP9GP10GP20GP21",
+    "›",
+    "LED blink",
+    "Button + LED",
+    "OLED hello",
+    "Serial hello",
+    "Prove it works",
+    "History",
+    "↑",
+    "Run"
+  ],
+  "textboxes": [
+    {
+      "tag": "INPUT",
+      "type": "file",
+      "placeholder": null,
+      "aria": null,
+      "id": null
+    },
+    {
+      "tag": "INPUT",
+      "type": "text",
+      "placeholder": "Search parts, type, or pin…",
+      "aria": "Search parts",
+      "id": null
+    },
+    {
+      "tag": "TEXTAREA",
+      "type": "textarea",
+      "placeholder": "Describe a change, or ask a question…",
+      "aria": "Message the Architect",
+      "id": null
+    },
+    {
+      "tag": "INPUT",
+      "type": "file",
+      "placeholder": null,
+      "aria": null,
+      "id": null
+    }
+  ],
+  "links": [
+    "LabWired"
+  ],
+  "clicked": {
+    "run": true,
+    "build": true,
+    "start": false,
+    "agent": true,
+    "compile": false,
+    "signIn": true
+  },
+  "promptTried": false,
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failedReqs": []
+}

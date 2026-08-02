@@ -1,0 +1,448 @@
+### Page
+- Page URL: https://app.labwired.com/?lab=nokia5110-invaders-lab&_cb=1785344032559
+- Page Title: LabWired Playground — The easy way to build hardware
+### Snapshot
+```yaml
+- generic [ref=f3e3]:
+  - banner [ref=f3e4]:
+    - generic [ref=f3e5]:
+      - link "LabWired" [ref=f3e6] [cursor=pointer]:
+        - /url: https://labwired.com
+      - generic [ref=f3e11]: ›
+      - generic [ref=f3e12]: Nokia 5110 Breakout
+    - button "Search components, boards, and examples" [ref=f3e15] [cursor=pointer]:
+      - generic [ref=f3e16]: ⌘K
+      - generic [ref=f3e17]: Search components, boards, examples…
+    - generic [ref=f3e18]:
+      - generic "Editor mode" [ref=f3e19]:
+        - button "Edit" [pressed] [ref=f3e20] [cursor=pointer]
+        - button "Run" [ref=f3e21] [cursor=pointer]
+      - generic [ref=f3e22]:
+        - button "View" [ref=f3e24] [cursor=pointer]
+        - button "Tools" [ref=f3e26] [cursor=pointer]
+      - button "Open My Projects" [ref=f3e30] [cursor=pointer]:
+        - generic [ref=f3e31]: 📂
+        - generic [ref=f3e32]: My Projects
+      - button "Embed" [ref=f3e33] [cursor=pointer]
+      - button "Share" [ref=f3e34] [cursor=pointer]
+      - button "Feedback" [ref=f3e36] [cursor=pointer]
+      - group "Account menu" [ref=f3e1250]:
+        - button "Open user menu" [ref=f3e1252] [cursor=pointer]:
+          - img "Andrii Shylenko's logo" [ref=f3e1255]
+  - main "Canvas" [ref=f3e41]:
+    - generic [ref=f3e43]:
+      - complementary "Build kit" [ref=f3e44]:
+        - separator "Resize build kit" [ref=f3e45]
+        - generic [ref=f3e46]:
+          - tablist "Build kit tabs" [ref=f3e47]:
+            - tab "Parts (5)" [selected] [ref=f3e48] [cursor=pointer]
+            - tab "Assembly (9)" [ref=f3e49] [cursor=pointer]
+            - tab "Pins" [ref=f3e50] [cursor=pointer]
+          - button "Close build kit" [ref=f3e51] [cursor=pointer]: ×
+        - tabpanel [ref=f3e52]:
+          - generic [ref=f3e53]:
+            - generic [ref=f3e54]:
+              - textbox "Search parts" [ref=f3e59]:
+                - /placeholder: Search parts, type, or pin…
+              - button "Export BOM" [ref=f3e60] [cursor=pointer]
+            - generic [ref=f3e63]:
+              - listbox "Parts" [ref=f3e64]:
+                - generic [ref=f3e65]:
+                  - button "Microcontroller 1" [expanded] [ref=f3e66] [cursor=pointer]:
+                    - generic [ref=f3e67]: ▾
+                    - generic [ref=f3e69]: Microcontroller
+                    - generic [ref=f3e70]: "1"
+                  - option "NUCLEO-L476RG nucleo-l476rg mcu runs code" [ref=f3e72] [cursor=pointer]:
+                    - img [ref=f3e74]:
+                      - generic [ref=f3e76]:
+                        - generic [ref=f3e82]:
+                          - generic [ref=f3e84]: ST-LINK DEBUGGER
+                          - generic [ref=f3e85]: ST-LINK
+                        - generic [ref=f3e99]:
+                          - generic [ref=f3e100]: NUCLEO-L476RG
+                          - generic [ref=f3e102]:
+                            - generic [ref=f3e114]: STM32L476
+                            - generic [ref=f3e115]: Cortex-M4 · LQFP64
+                        - generic [ref=f3e116]:
+                          - generic [ref=f3e117]: CN5
+                          - generic [ref=f3e130]: CN6
+                          - generic [ref=f3e141]: CN8
+                          - generic [ref=f3e150]: CN9
+                        - generic [ref=f3e161]:
+                          - generic [ref=f3e162]: CN7
+                          - generic [ref=f3e203]: CN10
+                        - generic [ref=f3e244]: EDGE TARGETS ARE WIRING CONVENIENCES · MAPPED HOLES CARRY GPIO IDS
+                        - generic [ref=f3e246]: USER
+                        - generic [ref=f3e249]: LD1 / LD2
+                        - generic [ref=f3e258]: ULTRA-LOW-POWER TARGET
+                        - generic [ref=f3e260]: PA0
+                        - generic [ref=f3e263]: PB0
+                        - generic [ref=f3e266]: PC0
+                        - generic [ref=f3e269]: PA1
+                        - generic [ref=f3e272]: PB1
+                        - generic [ref=f3e275]: PC1
+                        - generic [ref=f3e278]: PA2
+                        - generic [ref=f3e281]: PB2
+                        - generic [ref=f3e284]: PC2
+                        - generic [ref=f3e287]: PA3
+                        - generic [ref=f3e290]: PB3
+                        - generic [ref=f3e293]: PC3
+                        - generic [ref=f3e296]: PA4
+                        - generic [ref=f3e299]: PB4
+                        - generic [ref=f3e302]: PC4
+                        - generic [ref=f3e305]: PA5
+                        - generic [ref=f3e308]: PB5
+                        - generic [ref=f3e311]: PC5
+                        - generic [ref=f3e314]: PA6
+                        - generic [ref=f3e317]: PB6
+                        - generic [ref=f3e320]: PC6
+                        - generic [ref=f3e323]: PA7
+                        - generic [ref=f3e326]: PB7
+                        - generic [ref=f3e329]: PC7
+                        - generic [ref=f3e332]: PA8
+                        - generic [ref=f3e335]: PB8
+                        - generic [ref=f3e338]: PC8
+                        - generic [ref=f3e341]: PA9
+                        - generic [ref=f3e344]: PB9
+                        - generic [ref=f3e347]: PC9
+                        - generic [ref=f3e350]: PA10
+                        - generic [ref=f3e353]: PB10
+                        - generic [ref=f3e356]: PC10
+                        - generic [ref=f3e359]: PA11
+                        - generic [ref=f3e362]: PB11
+                        - generic [ref=f3e365]: PC11
+                        - generic [ref=f3e368]: PA12
+                        - generic [ref=f3e371]: PB12
+                        - generic [ref=f3e374]: PC12
+                        - generic [ref=f3e377]: PA13
+                        - generic [ref=f3e380]: PB13
+                        - generic [ref=f3e383]: PC13
+                        - generic [ref=f3e386]: PA14
+                        - generic [ref=f3e389]: PB14
+                        - generic [ref=f3e392]: PC14
+                        - generic [ref=f3e395]: PA15
+                        - generic [ref=f3e398]: PB15
+                        - generic [ref=f3e401]: PC15
+                        - generic [ref=f3e404]: 3V3
+                        - generic [ref=f3e407]: GND
+                    - generic [ref=f3e410]:
+                      - generic [ref=f3e411]: NUCLEO-L476RG
+                      - generic [ref=f3e412]:
+                        - generic [ref=f3e413]: nucleo-l476rg
+                        - generic [ref=f3e414]: mcu
+                    - generic [ref=f3e415]: runs code
+                - generic [ref=f3e418]:
+                  - button "Sensors 1" [expanded] [ref=f3e419] [cursor=pointer]:
+                    - generic [ref=f3e420]: ▾
+                    - generic [ref=f3e422]: Sensors
+                    - generic [ref=f3e423]: "1"
+                  - option "HC-SR04 ultrasonic dist simulated" [selected] [ref=f3e425] [cursor=pointer]:
+                    - img [ref=f3e427]:
+                      - generic [ref=f3e428]: HC-SR04 · 100cm
+                    - generic [ref=f3e448]:
+                      - generic [ref=f3e449]: HC-SR04
+                      - generic [ref=f3e450]:
+                        - generic [ref=f3e451]: ultrasonic
+                        - generic [ref=f3e452]: dist
+                    - generic [ref=f3e453]: simulated
+                - generic [ref=f3e456]:
+                  - button "Displays 1" [expanded] [ref=f3e457] [cursor=pointer]:
+                    - generic [ref=f3e458]: ▾
+                    - generic [ref=f3e460]: Displays
+                    - generic [ref=f3e461]: "1"
+                  - option "Nokia 5110 pcd8544 lcd simulated" [ref=f3e463] [cursor=pointer]:
+                    - img [ref=f3e465]:
+                      - generic [ref=f3e466]:
+                        - generic [ref=f3e471]: NOKIA 5110
+                        - generic [ref=f3e490]: PCD8544 · SPI
+                    - generic [ref=f3e506]:
+                      - generic [ref=f3e507]: Nokia 5110
+                      - generic [ref=f3e508]:
+                        - generic [ref=f3e509]: pcd8544
+                        - generic [ref=f3e510]: lcd
+                    - generic [ref=f3e511]: simulated
+                - generic [ref=f3e514]:
+                  - button "Instruments 2" [expanded] [ref=f3e515] [cursor=pointer]:
+                    - generic [ref=f3e516]: ▾
+                    - generic [ref=f3e518]: Instruments
+                    - generic [ref=f3e519]: "2"
+                  - generic [ref=f3e520]:
+                    - option "Note note note annotation" [ref=f3e521] [cursor=pointer]:
+                      - img [ref=f3e523]:
+                        - generic [ref=f3e524]: "Nokia 5110 (PCD8544) LCD + ultrasonic sensor on the STM32L476 — a tiny Space-Invaders-style demo. Try: Run, then drag the distance sensor to steer."
+                      - generic [ref=f3e527]:
+                        - generic [ref=f3e528]: Note
+                        - generic [ref=f3e529]:
+                          - generic [ref=f3e530]: note
+                          - generic [ref=f3e531]: note
+                      - generic [ref=f3e532]: annotation
+                    - option "Logic Analyzer logic-analyzer spi_probe annotation" [ref=f3e535] [cursor=pointer]:
+                      - img [ref=f3e537]:
+                        - generic [ref=f3e538]:
+                          - generic [ref=f3e542]: LOGIC ANALYZER
+                          - generic [ref=f3e543]: RAW
+                          - generic [ref=f3e544]: CH0
+                          - generic [ref=f3e548]: CH1
+                          - generic [ref=f3e552]: CH2
+                          - generic [ref=f3e556]: CH3
+                          - generic [ref=f3e560]: PROBE INPUTS
+                      - generic [ref=f3e573]:
+                        - generic [ref=f3e574]: Logic Analyzer
+                        - generic [ref=f3e575]:
+                          - generic [ref=f3e576]: logic-analyzer
+                          - generic [ref=f3e577]: spi_probe
+                      - generic [ref=f3e578]: annotation
+              - complementary "HC-SR04 detail" [ref=f3e581]:
+                - heading "HC-SR04" [level=3] [ref=f3e583]
+                - button "Focus on canvas" [ref=f3e585] [cursor=pointer]
+                - generic [ref=f3e586]: simulated
+                - generic [ref=f3e589]:
+                  - heading "Specifications" [level=4] [ref=f3e590]
+                  - generic [ref=f3e592]:
+                    - term [ref=f3e593]: Distance (cm)
+                    - definition [ref=f3e594]: "100"
+                - generic [ref=f3e595]:
+                  - heading "Pinout · 4 pins" [level=4] [ref=f3e596]
+                  - generic [ref=f3e597]:
+                    - generic [ref=f3e598]: ECHO → mcu.PB10
+                    - generic [ref=f3e599]: GND → mcu.GND
+                    - generic [ref=f3e600]: TRIG → mcu.PA8
+                    - generic [ref=f3e601]: VCC → mcu.VCC
+        - generic [ref=f3e602]: Board stm32l476 · 5 parts · 13 wires · 9 steps
+      - generic "Signal legend":
+        - generic "2 wires": Power
+        - generic "2 wires": Ground
+        - generic "1 wire": Reset
+        - generic "8 wires": Signal
+      - generic [ref=f3e603]:
+        - generic [ref=f3e604]:
+          - generic [ref=f3e609]:
+            - img [ref=f3e610]:
+              - generic [ref=f3e612]:
+                - 'generic "Power: Supply rail" [ref=f3e613]'
+                - 'generic "Ground: Common return rail" [ref=f3e615]'
+                - 'generic "SPI CLK: SPI digital signal" [ref=f3e617]'
+                - 'generic "SPI DIN: SPI digital signal" [ref=f3e619]'
+                - 'generic "GPIO / signal: Digital activity or unclassified signal" [ref=f3e621]'
+                - 'generic "SPI CE: SPI digital signal" [ref=f3e623]'
+                - 'generic "GPIO / signal: Digital activity or unclassified signal" [ref=f3e625]'
+                - 'generic "Power: Supply rail" [ref=f3e627]'
+                - 'generic "Ground: Common return rail" [ref=f3e629]'
+                - 'generic "GPIO / signal: Digital activity or unclassified signal" [ref=f3e631]'
+                - 'generic "GPIO / signal: Digital activity or unclassified signal" [ref=f3e633]'
+                - 'generic "Probe tap: Analyzer tap (SPI)" [ref=f3e635]'
+                - 'generic "Probe tap: Analyzer tap (SPI)" [ref=f3e637]'
+              - generic [ref=f3e639]: "Nokia 5110 (PCD8544) LCD + ultrasonic sensor on the STM32L476 — a tiny Space-Invaders-style demo. Try: Run, then drag the distance sensor to steer."
+              - button "Open Nokia 5110 Breakout target properties" [ref=f3e644]:
+                - generic [ref=f3e647]:
+                  - generic [ref=f3e653]:
+                    - generic [ref=f3e655]: ST-LINK DEBUGGER
+                    - generic [ref=f3e656]: ST-LINK
+                  - generic [ref=f3e670]:
+                    - generic [ref=f3e671]: NUCLEO-L476RG
+                    - generic [ref=f3e673]:
+                      - generic [ref=f3e685]: STM32L476
+                      - generic [ref=f3e686]: Cortex-M4 · LQFP64
+                  - generic [ref=f3e687]:
+                    - generic [ref=f3e688]: CN5
+                    - generic [ref=f3e701]: CN6
+                    - generic [ref=f3e712]: CN8
+                    - generic [ref=f3e721]: CN9
+                  - generic [ref=f3e732]:
+                    - generic [ref=f3e733]: CN7
+                    - generic [ref=f3e774]: CN10
+                  - generic [ref=f3e815]: EDGE TARGETS ARE WIRING CONVENIENCES · MAPPED HOLES CARRY GPIO IDS
+                  - generic [ref=f3e817]: USER
+                  - generic [ref=f3e820]: LD1 / LD2
+                  - generic [ref=f3e829]: ULTRA-LOW-POWER TARGET
+                  - generic [ref=f3e831]: PA0
+                  - generic [ref=f3e834]: PB0
+                  - generic [ref=f3e837]: PC0
+                  - generic [ref=f3e840]: PA1
+                  - generic [ref=f3e843]: PB1
+                  - generic [ref=f3e846]: PC1
+                  - generic [ref=f3e849]: PA2
+                  - generic [ref=f3e852]: PB2
+                  - generic [ref=f3e855]: PC2
+                  - generic [ref=f3e858]: PA3
+                  - generic [ref=f3e861]: PB3
+                  - generic [ref=f3e864]: PC3
+                  - generic [ref=f3e867]: PA4
+                  - generic [ref=f3e870]: PB4
+                  - generic [ref=f3e873]: PC4
+                  - generic [ref=f3e876]: PA5
+                  - generic [ref=f3e879]: PB5
+                  - generic [ref=f3e882]: PC5
+                  - generic [ref=f3e885]: PA6
+                  - generic [ref=f3e888]: PB6
+                  - generic [ref=f3e891]: PC6
+                  - generic [ref=f3e894]: PA7
+                  - generic [ref=f3e897]: PB7
+                  - generic [ref=f3e900]: PC7
+                  - generic [ref=f3e903]: PA8
+                  - generic [ref=f3e906]: PB8
+                  - generic [ref=f3e909]: PC8
+                  - generic [ref=f3e912]: PA9
+                  - generic [ref=f3e915]: PB9
+                  - generic [ref=f3e918]: PC9
+                  - generic [ref=f3e921]: PA10
+                  - generic [ref=f3e924]: PB10
+                  - generic [ref=f3e927]: PC10
+                  - generic [ref=f3e930]: PA11
+                  - generic [ref=f3e933]: PB11
+                  - generic [ref=f3e936]: PC11
+                  - generic [ref=f3e939]: PA12
+                  - generic [ref=f3e942]: PB12
+                  - generic [ref=f3e945]: PC12
+                  - generic [ref=f3e948]: PA13
+                  - generic [ref=f3e951]: PB13
+                  - generic [ref=f3e954]: PC13
+                  - generic [ref=f3e957]: PA14
+                  - generic [ref=f3e960]: PB14
+                  - generic [ref=f3e963]: PC14
+                  - generic [ref=f3e966]: PA15
+                  - generic [ref=f3e969]: PB15
+                  - generic [ref=f3e972]: PC15
+                  - generic [ref=f3e975]: 3V3
+                  - generic [ref=f3e978]: GND
+              - generic [ref=f3e1081]: PCD8544 · SPI
+              - generic [ref=f3e1137]: HC-SR04 · 100cm
+              - generic [ref=f3e1169]:
+                - generic [ref=f3e1173]: LOGIC ANALYZER
+                - generic [ref=f3e1174]: RAW
+                - generic [ref=f3e1175]: CH0
+                - generic [ref=f3e1179]: CH1
+                - generic [ref=f3e1183]: CH2
+                - generic [ref=f3e1187]: CH3
+                - generic [ref=f3e1191]: PROBE INPUTS
+              - button "Collapse SPI" [ref=f3e1214] [cursor=pointer]:
+                - generic [ref=f3e1217]: SPI ⌃
+            - button "Tidy layout" [ref=f3e1219] [cursor=pointer]
+          - generic [ref=f3e1258]:
+            - separator "Resize Architect" [ref=f3e1259]
+            - generic [ref=f3e1260]:
+              - generic [ref=f3e1261]: ✦
+              - generic [ref=f3e1262]: Architect
+              - generic [ref=f3e1263]: Ready
+              - button "Collapse Architect agent" [ref=f3e1266] [cursor=pointer]:
+                - generic [ref=f3e1267]: ›
+            - generic [ref=f3e1269]:
+              - generic [ref=f3e1271]:
+                - paragraph [ref=f3e1272]: Pick a starter below, or describe what to build. Done means Verified live on the twin.
+                - generic [ref=f3e1273]:
+                  - button "LED blink" [ref=f3e1274] [cursor=pointer]
+                  - button "Button + LED" [ref=f3e1275] [cursor=pointer]
+                  - button "OLED hello" [ref=f3e1276] [cursor=pointer]
+                  - button "Serial hello" [ref=f3e1277] [cursor=pointer]
+                  - button "Prove it works" [ref=f3e1278] [cursor=pointer]
+              - generic [ref=f3e1280]:
+                - textbox "Message the Architect" [active] [ref=f3e1281]:
+                  - /placeholder: Describe a change, or ask a question…
+                  - text: Build STM32L476 LED blink with serial LABWIRED_STM_OK
+                - generic [ref=f3e1282]:
+                  - generic [ref=f3e1283]:
+                    - button "Attach files" [ref=f3e1284] [cursor=pointer]
+                    - button "Generation history" [disabled] [ref=f3e1287]: History
+                  - generic [ref=f3e1288]:
+                    - button "Dictate" [ref=f3e1289] [cursor=pointer]
+                    - button "Send message" [ref=f3e1293] [cursor=pointer]: ↑
+        - button "About this lab" [ref=f3e1223] [cursor=pointer]
+    - dialog "Inspector window" [ref=f3e1230]:
+      - generic [ref=f3e1231]:
+        - generic [ref=f3e1232]: Logic Analyzer
+        - button "Close window" [ref=f3e1234] [cursor=pointer]: ×
+      - generic [ref=f3e1294]:
+        - generic [ref=f3e1295]:
+          - generic [ref=f3e1296]:
+            - button "Raw" [ref=f3e1297] [cursor=pointer]
+            - button "IO-Link" [disabled] [ref=f3e1298]
+            - button "UART" [disabled] [ref=f3e1299]
+            - button "UDS" [disabled] [ref=f3e1300]
+            - button "I²C" [disabled] [ref=f3e1301]
+            - button "SPI" [ref=f3e1302] [cursor=pointer]
+            - combobox "Protocol override" [ref=f3e1303]:
+              - option "Auto" [selected]
+              - option "Force I²C"
+              - option "Force SPI"
+              - option "Force UART"
+          - generic [ref=f3e1304]:
+            - generic [ref=f3e1305]: TRIGGERED
+            - generic [ref=f3e1306]: 172 samples
+            - generic [ref=f3e1307]: 12 Sa/s
+            - button "Stop" [ref=f3e1308] [cursor=pointer]
+            - button "Clear" [ref=f3e1309] [cursor=pointer]
+            - button "CSV" [ref=f3e1310] [cursor=pointer]
+            - button "JSON" [ref=f3e1311] [cursor=pointer]
+        - generic [ref=f3e1313]:
+          - generic [ref=f3e1314]:
+            - generic [ref=f3e1315]:
+              - generic [ref=f3e1316]: CH0
+              - generic [ref=f3e1317]: "0"
+            - generic "lcd.CLK, mcu.PA5" [ref=f3e1318]
+          - generic [ref=f3e1319]:
+            - generic [ref=f3e1320]:
+              - generic [ref=f3e1321]: CH1
+              - generic [ref=f3e1322]: "0"
+            - generic "lcd.DIN, mcu.PA7" [ref=f3e1323]
+          - generic [ref=f3e1324]:
+            - generic [ref=f3e1325]:
+              - generic [ref=f3e1326]: CH2
+              - generic [ref=f3e1327]: "-"
+            - generic "not connected" [ref=f3e1328]
+          - generic [ref=f3e1329]:
+            - generic [ref=f3e1330]:
+              - generic [ref=f3e1331]: CH3
+              - generic [ref=f3e1332]: "-"
+            - generic "not connected" [ref=f3e1333]
+        - generic [ref=f3e1334]:
+          - generic [ref=f3e1335]: Trigger
+          - generic [ref=f3e1336]:
+            - generic [ref=f3e1337]: Mode
+            - combobox "Trigger mode" [ref=f3e1338]:
+              - option "Off" [selected]
+              - option "Auto"
+              - option "Single"
+          - generic [ref=f3e1339]:
+            - generic [ref=f3e1340]: Channel
+            - combobox "Trigger channel" [ref=f3e1341]:
+              - option "CH0" [selected]
+              - option "CH1"
+              - option "CH2"
+              - option "CH3"
+          - generic [ref=f3e1342]:
+            - generic [ref=f3e1343]: Edge
+            - combobox "Trigger edge" [ref=f3e1344]:
+              - option "Rising" [selected]
+              - option "Falling"
+          - generic [ref=f3e1345]:
+            - generic [ref=f3e1346]: Pre
+            - combobox "Pre-trigger samples" [ref=f3e1347]:
+              - option "0"
+              - option "8" [selected]
+              - option "16"
+        - generic [ref=f3e1348]:
+          - generic [ref=f3e1349]:
+            - generic "pad probe — sampled straight off the MCU pad" [ref=f3e1350]:
+              - generic [ref=f3e1351]:
+                - generic "CH0 · PA5" [ref=f3e1352]
+                - generic [ref=f3e1353]: LOW
+              - generic [ref=f3e1354]: ~37 cyc · 5% duty · 4096 edges · ⚠ 12 dropped
+            - generic "pad probe — sampled straight off the MCU pad" [ref=f3e1355]:
+              - generic [ref=f3e1356]:
+                - generic "CH1 · PA7" [ref=f3e1357]
+                - generic [ref=f3e1358]: LOW
+              - generic [ref=f3e1359]: ~1.9 kcyc · 1% duty · 4096 edges · ⚠ 12 dropped
+          - img [ref=f3e1360]:
+            - generic "pad probe — sampled straight off the MCU pad" [ref=f3e1362]: CH0 · PA5
+            - generic "pad probe — sampled straight off the MCU pad" [ref=f3e1365]: CH1 · PA7
+          - generic [ref=f3e1367]:
+            - generic [ref=f3e1368]: showing last 256 cyc · engine cycles (no CPU clock exposed)
+            - generic [ref=f3e1369]: click the waveform to place A/B cursors
+      - generic "Resize window" [ref=f3e1237]
+    - toolbar "System simulation controls" [ref=f3e1239]:
+      - button "Pause system" [ref=f3e1370] [cursor=pointer]:
+        - generic [ref=f3e1374]: Pause
+      - button "Reset system" [ref=f3e1243] [cursor=pointer]
+      - status [ref=f3e1247]:
+        - generic [ref=f3e1249]: Running
+```

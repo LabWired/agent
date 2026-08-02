@@ -365,6 +365,27 @@ cmd_serial_capture() {
 }
 
 case "${1:-}" in
+  server)
+    shift
+    # Headless JSON-RPC for IDE clients (Electron, VS Code extension)
+    rpc="$ROOT/server/rpc-server.mjs"
+    if [[ ! -f "$rpc" ]]; then
+      fail "rpc-server.mjs missing at $rpc"
+    fi
+    if [[ "${1:-}" == "--rpc-stdio" || "${1:-}" == "" || "${1:-}" == "--stdio" ]]; then
+      shift || true
+      exec node "$rpc" "$@"
+    fi
+    # Optional: forward to opencode serve for HTTP
+    if [[ "${1:-}" == "--http" ]]; then
+      shift
+      if command -v opencode >/dev/null 2>&1; then
+        exec opencode serve "$@"
+      fi
+      fail "opencode not found for --http"
+    fi
+    exec node "$rpc" "$@"
+    ;;
   doctor)  shift; cmd_doctor "$@" ;;
   install-deps|deps)
     shift

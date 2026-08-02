@@ -1,0 +1,13 @@
+### Result
+{
+  "sent": "click",
+  "sendDisabled": false,
+  "value": "Add a UART print every 2s saying HELLO_QA_PROBE"
+}
+### Ran Playwright code
+```js
+await page.evaluate('async () => {\n  const ta = document.querySelector(\'textarea[aria-label="Message the Architect"]\');\n  if (!ta) return { err: \'no ta\' };\n  ta.focus();\n  // React 19-friendly value set\n  const proto = window.HTMLTextAreaElement.prototype;\n  const desc = Object.getOwnPropertyDescriptor(proto, \'value\');\n  desc.set.call(ta, \'Add a UART print every 2s saying HELLO_QA_PROBE\');\n  ta.dispatchEvent(new Event(\'input\', { bubbles: true }));\n  ta.dispatchEvent(new Event(\'change\', { bubbles: true }));\n  await new Promise(r => setTimeout(r, 200));\n  const send = document.querySelector(\'button[aria-label="Send message"]\');\n  const sendDisabled = !!send?.disabled;\n  if (send && !send.disabled) {\n    send.click();\n    return { sent: \'click\', sendDisabled, value: ta.value.slice(0,80) };\n  }\n  // try Enter key\n  ta.dispatchEvent(new KeyboardEvent(\'keydown\', { key: \'Enter\', code: \'Enter\', bubbles: true }));\n  return { sent: \'enter-attempt\', sendDisabled, value: ta.value.slice(0,80), sendExists: !!send };\n}');
+```
+### Page
+- Page URL: https://app.labwired.com/p/9929a3ec4d8e874c04991b197e7b3fec/edit
+- Page Title: LabWired Playground — The easy way to build hardware

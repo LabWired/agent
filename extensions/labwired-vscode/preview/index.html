@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>LabWired — Embedder clone foundation</title>
+  <style>
+    /* Tokens mirrored from Embedder webview :root */
+    :root {
+      --bg: #1e1e1e;
+      --bg-panel: #252526;
+      --bg-element: #2d2d2d;
+      --bg-hover: rgba(128,128,128,.16);
+      --text: #cccccc;
+      --text-muted: #9d9d9d;
+      --border: #3c3c3c;
+      --primary: #3794ff;
+      --warning: #cca700;
+      --success: #73c991;
+      --button-bg: #0e639c;
+      --button-hover: #1177bb;
+      --button-fg: #fff;
+      --brand: #0056b3;
+      --radius: 7px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --fs: 13px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      font-size: var(--fs);
+      background: #111;
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+    .page { max-width: 980px; margin: 0 auto; padding: 24px 16px 40px; }
+    .page > h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .page > p { color: var(--text-muted); font-size: 12.5px; margin-bottom: 16px; }
+    .ide {
+      display: grid;
+      grid-template-columns: 48px 320px 1fr;
+      grid-template-rows: 30px 1fr;
+      height: 580px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg);
+      box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    }
+    .titlebar {
+      grid-column: 1 / -1;
+      background: #323233;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 10px; font-size: 11px; color: #999;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .dots { display: flex; gap: 5px; }
+    .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+    .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+    .activity {
+      background: #333; border-right: 1px solid #1a1a1a;
+      display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 8px;
+    }
+    .act {
+      width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; opacity: .4;
+    }
+    .act.on { opacity: 1; background: rgba(0,86,179,.2); box-shadow: inset 2px 0 0 var(--brand); }
+    .sidebar {
+      background: var(--bg);
+      border-right: 1px solid #1a1a1a;
+      display: flex; flex-direction: column; min-width: 0;
+    }
+    .editor {
+      padding: 14px 16px; font-family: ui-monospace, Menlo, monospace;
+      font-size: 12.5px; line-height: 1.55; color: #d4d4d4;
+    }
+    .kw{color:#569cd6}.str{color:#ce9178}.cm{color:#6a9955}
+
+    /* Embedder-clone chat */
+    .tab-bar {
+      display: flex; align-items: center; border-bottom: 1px solid var(--border);
+      background: var(--bg-panel); min-height: 32px; padding: 0 4px;
+    }
+    .tab {
+      padding: 7px 10px; font-size: 11px; color: var(--text-muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab.on { color: var(--text); border-bottom-color: var(--brand); }
+    .message-list { flex: 1; overflow: auto; padding: 10px; }
+    .message { padding: 6px 0; }
+    .message-prefix {
+      font-size: 9px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--text-muted); margin-bottom: 3px;
+    }
+    .message.user .message-prefix { color: var(--brand); }
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; color: var(--text-muted);
+      padding: 40px 20px; gap: 4px;
+    }
+    .empty-state h2 { color: var(--text); font-size: 13px; font-weight: 600; }
+    .empty-state p { font-size: 12px; max-width: 220px; }
+    .quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+    .quick span {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 6px 12px; font-size: 12px; color: var(--text);
+    }
+    .composer { padding: 8px 8px 10px; background: var(--bg); }
+    .composer-shell {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg-panel); overflow: hidden;
+    }
+    .composer-shell.mode-plan { border-color: var(--primary); }
+    .ph { padding: 10px 12px 6px; color: #666; font-size: 13px; min-height: 52px; }
+    .footer {
+      display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px 8px;
+    }
+    .mode-pill {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 2px 8px; font-size: 10px; color: var(--text-muted); height: 22px;
+      display: inline-flex; align-items: center;
+    }
+    .composer-shell.mode-plan .mode-pill { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 60%, var(--border)); }
+    .spacer { flex: 1; }
+    .send {
+      background: var(--button-bg); color: var(--button-fg); border: none;
+      border-radius: var(--radius); font-size: 10px; font-weight: 500;
+      height: 22px; padding: 0 10px;
+    }
+    .note {
+      margin-top: 14px; padding: 12px; border: 1px solid #333; border-radius: 6px;
+      background: #1a1a1a; font-size: 12px; color: var(--text-muted); line-height: 1.5;
+    }
+    .note strong { color: var(--text); }
+    code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: #2a2a2a; padding: 1px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Embedder clone foundation → LabWired</h1>
+    <p>Layout & tokens match Embedder’s VS Code webview (composer-shell, mode pill, empty-state, message-list). Not marketing chrome.</p>
+
+    <div class="ide">
+      <div class="titlebar">
+        <div class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <span>esp32c3-serial</span>
+      </div>
+      <div class="activity">
+        <div class="act on">
+          <svg width="16" height="16" viewBox="0 0 32 32" fill="none">
+            <path d="M11 7V23H23" stroke="#0056b3" stroke-width="2.75" stroke-linecap="round"/>
+            <circle cx="11" cy="7" r="2.5" fill="#ccc"/>
+            <circle cx="23" cy="23" r="2.5" fill="#0056b3"/>
+          </svg>
+        </div>
+      </div>
+      <div class="sidebar">
+        <div class="tab-bar">
+          <span class="tab on">Chat</span>
+          <span class="tab">Chat 2</span>
+        </div>
+        <!-- empty state variant: comment message-list to see empty -->
+        <div class="message-list" style="display:none"></div>
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
+            <path d="M11 7V23H23" stroke="#0056b3" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="11" cy="7" r="2.5" fill="#ccc"/>
+            <circle cx="23" cy="23" r="2.5" fill="#0056b3"/>
+          </svg>
+          <h2>LabWired</h2>
+          <p>AI agent for firmware — plan, act, debug, verify on a virtual board.</p>
+          <div class="quick">
+            <span>Doctor</span>
+            <span>Smoke</span>
+            <span>Monitor</span>
+            <span>Evidence</span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="composer-shell mode-plan">
+            <div class="ph">Plan, search, build anything</div>
+            <div class="footer">
+              <span class="mode-pill">Plan</span>
+              <span class="spacer"></span>
+              <span class="send">Send</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="editor">
+        <div class="cm">// main.cpp</div>
+        <div><span class="kw">void</span> loop() {</div>
+        <div>  Serial.println(<span class="str">"LABWIRED_OK"</span>);</div>
+        <div>}</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>v0.3.0 installed.</strong> Reload Cursor → LabWired activity icon.<br/>
+      Composer: click <code>Act</code> pill to cycle Act → Plan → Debug → Verify (Embedder pattern).<br/>
+      Plan mode tints the shell border blue (like Embedder). <code>!</code> bash / <code>~</code> serial border hints when typing.
+    </div>
+  </div>
+</body>
+</html>
