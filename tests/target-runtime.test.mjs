@@ -1143,7 +1143,13 @@ test("failed simulator startup emits the complete RPC lifecycle without claim pr
           .slice(beforeVerify)
           .filter((message) => message.method === "evidence/append");
         assert.equal(evidenceNotifications.length, 1);
-        assert.deepEqual(Object.keys(evidenceNotifications[0].params), ["node"]);
+        assert.deepEqual(Object.keys(evidenceNotifications[0].params).sort(), ["context", "node"]);
+        assert.deepEqual(evidenceNotifications[0].params.context, {
+          requestId: 2,
+          action: "verify",
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+        });
         assert.equal(evidenceNotifications[0].params.node.status, "failed");
         assert.notEqual(evidenceNotifications[0].params.node.status, "model_verified");
       },
@@ -1258,8 +1264,14 @@ test("RPC owns the initialized workspace and emits exact target notifications", 
       .slice(beforeVerify)
       .filter((message) => message.method === "evidence/append");
     assert.equal(evidenceNotifications.length, 1);
-    assert.deepEqual(Object.keys(evidenceNotifications[0].params), ["node"]);
+    assert.deepEqual(Object.keys(evidenceNotifications[0].params).sort(), ["context", "node"]);
     assert.deepEqual(evidenceNotifications[0].params.node, verified.result.evidence);
+    assert.deepEqual(evidenceNotifications[0].params.context, {
+      requestId: 5,
+      action: "verify",
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+    });
     assert.equal(
       rpc.messages.slice(beforeVerify).some((message) => String(message.method || "").startsWith("chat/")),
       false,

@@ -332,14 +332,14 @@ async function handleMessage(msg) {
   if (id === undefined || !method) return;
 
   try {
-    const result = await dispatch(method, params);
+    const result = await dispatch(method, params, id);
     respond(id, result);
   } catch (e) {
     respondError(id, -32000, e?.message || String(e));
   }
 }
 
-async function dispatch(method, params) {
+async function dispatch(method, params, requestId) {
   switch (method) {
     case "initialize":
       return initialize(params);
@@ -365,9 +365,9 @@ async function dispatch(method, params) {
     case "target/list":
       return { targets: listTargets() };
     case "target/run":
-      return targetExecute(params, false);
+      return targetExecute(params, false, requestId);
     case "target/verify":
-      return targetExecute(params, true);
+      return targetExecute(params, true, requestId);
     case "chat/send":
       return chatSend(params);
     case "chat/stop":
@@ -421,7 +421,7 @@ function validTargetWorkspacePath(workspacePath) {
   }
 }
 
-async function targetExecute(params = {}, verify) {
+async function targetExecute(params = {}, verify, requestId) {
   const request = params && typeof params === "object" ? params : {};
   if (Object.prototype.hasOwnProperty.call(request, "workspacePath")) {
     throw new Error("workspacePath is not allowed for target RPC; use the initialized workspace");
@@ -445,8 +445,16 @@ async function targetExecute(params = {}, verify) {
       signal: controller.signal,
       onState: (run) => notify("target/runState", { run }),
     });
-    if (response.evidence) {
-      notify("evidence/append", { node: response.evidence });
+    if (verify && response.evidence) {
+      notify("evidence/append", {
+        node: response.evidence,
+        context: {
+          requestId,
+          action: "verify",
+          targetId: response.run.targetId,
+          manifestDigest: response.run.manifestDigest,
+        },
+      });
     }
     return response;
   } finally {
