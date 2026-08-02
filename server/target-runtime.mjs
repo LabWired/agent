@@ -235,10 +235,30 @@ async function createAgentEvidenceBundle(workspacePaths, runId) {
 
 async function assertEvidenceHomeOutsideWorkspace(evidenceHome, workspacePaths) {
   const prospectiveEvidenceHome = await canonicalProspectivePath(evidenceHome);
+  const canonicalAncestors = await canonicalExistingAncestors(evidenceHome);
   for (const workspacePath of workspacePaths) {
-    if (pathsOverlap(workspacePath, evidenceHome) || pathsOverlap(workspacePath, prospectiveEvidenceHome)) {
+    if (
+      pathIsInside(workspacePath, evidenceHome) ||
+      pathIsInside(workspacePath, prospectiveEvidenceHome) ||
+      canonicalAncestors.some((ancestor) => pathIsInside(workspacePath, ancestor))
+    ) {
       throw new Error("agent evidence root must not overlap the target workspace");
     }
+  }
+}
+
+async function canonicalExistingAncestors(targetPath) {
+  const ancestors = [];
+  let candidate = targetPath;
+  while (true) {
+    try {
+      ancestors.push(await realpath(candidate));
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) return ancestors;
+    candidate = parent;
   }
 }
 
@@ -278,10 +298,6 @@ function assertPathInside(rootPath, candidatePath) {
   if (!pathIsInside(rootPath, candidatePath)) {
     throw unsafePathError(candidatePath);
   }
-}
-
-function pathsOverlap(firstPath, secondPath) {
-  return pathIsInside(firstPath, secondPath) || pathIsInside(secondPath, firstPath);
 }
 
 function pathIsInside(rootPath, candidatePath) {

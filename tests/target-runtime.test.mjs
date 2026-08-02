@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { chmod, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { after, before } from "node:test";
@@ -620,7 +620,14 @@ test("a timed-out simulator reaches one failed terminal lifecycle", async () => 
           workspacePath: workdir,
           onState: (run) => updates.push(run),
         });
-        assert.equal(await waitFor(() => existsSync(childPidFile)), true);
+        const childStarted = await waitFor(() => existsSync(childPidFile));
+        if (!childStarted) {
+          const earlyOutcome = await Promise.race([
+            runPromise.then((response) => ({ response }), (error) => ({ error: String(error?.message || error) })),
+            delay(100).then(() => ({ pending: true })),
+          ]);
+          assert.fail(`timed-out fake simulator did not create its pid file: ${JSON.stringify(earlyOutcome)}`);
+        }
         childPid = Number(await readFile(childPidFile, "utf8"));
         assert.equal(processIsAlive(childPid), true);
 
@@ -733,6 +740,50 @@ test("a default evidence root nested under the workspace is rejected before any 
   } finally {
     await rpc?.stop();
     await rm(workdir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a default evidence root cannot bypass an aliased workspace through .labwired", async (t) => {
+  const [target] = listTargets();
+  const lexicalWorkdir = await workspace("workspace-home-alias");
+  const canonicalWorkdir = await realpath(lexicalWorkdir);
+  const homeAlias = canonicalWorkdir.replace(/^\/private\/var\//, "/var/");
+  const outside = await workspace("workspace-home-alias-outside");
+  let rpc = null;
+  try {
+    if (homeAlias === canonicalWorkdir) {
+      t.skip("this host has no /var to /private/var alias to exercise");
+      return;
+    }
+    try {
+      await symlink(outside, join(lexicalWorkdir, ".labwired"), process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    rpc = startRpcServer({
+      env: {
+        ...process.env,
+        HOME: homeAlias,
+        LABWIRED_EVIDENCE_HOME: "",
+        LABWIRED_CLI: fakeSimulator,
+        LABWIRED_SIM: "",
+      },
+    });
+    const initialized = await rpc.request(1, "initialize", { workspacePath: canonicalWorkdir });
+    assert.equal(initialized.error, undefined);
+    const rejected = await rpc.request(2, "target/verify", {
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+    });
+    assert.ok(rejected.error, "aliased workspace-owned default evidence root must reject");
+    assert.match(rejected.error.message, /evidence.*workspace|workspace.*evidence/i);
+    assert.equal(existsSync(join(outside, "evidence")), false);
+  } finally {
+    await rpc?.stop();
+    await rm(lexicalWorkdir, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
   }
 });
