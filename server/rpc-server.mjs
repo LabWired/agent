@@ -12,7 +12,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readdir } from "node:fs/promises";
@@ -22,9 +22,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
 const PROTOCOL = "0.5.0";
 
-/** @type {{ workspacePath: string, mode: string, autoConfirm: boolean, clientName: string }} */
+/** @type {{ workspacePath: string, targetWorkspacePath: string | null, mode: string, autoConfirm: boolean, clientName: string }} */
 const state = {
   workspacePath: process.cwd(),
+  targetWorkspacePath: null,
   mode: "act",
   autoConfirm: true,
   clientName: "unknown",
@@ -383,9 +384,11 @@ async function dispatch(method, params) {
   }
 }
 
-function initialize(params) {
-  if (params.workspacePath) state.workspacePath = String(params.workspacePath);
-  if (params.clientName) state.clientName = String(params.clientName);
+function initialize(params = {}) {
+  const requestedWorkspacePath = params?.workspacePath;
+  if (requestedWorkspacePath) state.workspacePath = String(requestedWorkspacePath);
+  state.targetWorkspacePath = validTargetWorkspacePath(requestedWorkspacePath);
+  if (params?.clientName) state.clientName = String(params.clientName);
   const labwired = findLabwired();
   return {
     protocolVersion: PROTOCOL,
@@ -403,17 +406,32 @@ function initialize(params) {
   };
 }
 
+function validTargetWorkspacePath(workspacePath) {
+  if (typeof workspacePath !== "string" || !isAbsolute(workspacePath)) return null;
+  const absolutePath = resolve(workspacePath);
+  try {
+    return fs.statSync(absolutePath).isDirectory() ? absolutePath : null;
+  } catch {
+    return null;
+  }
+}
+
 async function targetExecute(params = {}, verify) {
   const request = params && typeof params === "object" ? params : {};
   if (Object.prototype.hasOwnProperty.call(request, "workspacePath")) {
     throw new Error("workspacePath is not allowed for target RPC; use the initialized workspace");
+  }
+  if (!state.targetWorkspacePath) {
+    throw new Error(
+      "target workspace requires initialize with an explicit existing absolute workspacePath",
+    );
   }
   const response = await runTarget({
     targetId: request.targetId,
     manifestDigest: request.manifestDigest,
     fixture: request.fixture,
     verify,
-    workspacePath: state.workspacePath,
+    workspacePath: state.targetWorkspacePath,
     onState: (run) => notify("target/runState", { run }),
   });
   if (response.evidence) {

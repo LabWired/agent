@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import test, { after, before } from "node:test";
@@ -37,6 +37,15 @@ async function withEnv(values, action) {
 
 async function workspace(label) {
   return mkdtemp(join(tmpdir(), `labwired-target-${label}-`));
+}
+
+async function evidenceRunIds(workdir) {
+  try {
+    return (await readdir(join(workdir, ".labwired", "evidence"))).sort();
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 function evidenceDirectory(workdir, run) {
@@ -458,6 +467,114 @@ test("simulator resolution skips an agent launcher and preserves the simulator f
       assert.equal(response.result.status, "pass");
     });
   } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("target RPC requires a valid explicitly initialized workspace", async () => {
+  const [target] = listTargets();
+  const rpc = startRpcServer();
+  let uninitialized = null;
+  const request = {
+    targetId: target.targetId,
+    manifestDigest: target.digest,
+    fixture: "fixed",
+  };
+  const beforeEvidence = await evidenceRunIds(REPOSITORY_ROOT);
+  try {
+    uninitialized = await rpc.request(1, "target/run", request);
+    assert.ok(uninitialized.error, "target/run before initialize must reject");
+    assert.match(uninitialized.error.message, /target workspace.*initialize/i);
+    assert.deepEqual(stateNotifications(rpc.messages, 0), []);
+    assert.equal(rpc.messages.some((message) => message.method === "evidence/append"), false);
+    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+
+    const initializedWithoutWorkspace = await rpc.request(2, "initialize", {});
+    assert.equal(initializedWithoutWorkspace.error, undefined);
+    const beforeVerify = rpc.messages.length;
+    const withoutWorkspace = await rpc.request(3, "target/verify", request);
+    assert.ok(withoutWorkspace.error, "target/verify after empty initialize must reject");
+    assert.match(withoutWorkspace.error.message, /target workspace.*initialize/i);
+    assert.deepEqual(stateNotifications(rpc.messages, beforeVerify), []);
+    assert.equal(
+      rpc.messages.slice(beforeVerify).some((message) => message.method === "evidence/append"),
+      false,
+    );
+    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+
+    const initializedWithInvalidWorkspace = await rpc.request(4, "initialize", {
+      workspacePath: "relative-workspace",
+    });
+    assert.equal(initializedWithInvalidWorkspace.error, undefined);
+    const beforeInvalidRun = rpc.messages.length;
+    const invalidWorkspace = await rpc.request(5, "target/run", request);
+    assert.ok(invalidWorkspace.error, "target/run after invalid initialize must reject");
+    assert.match(invalidWorkspace.error.message, /target workspace.*initialize/i);
+    assert.deepEqual(stateNotifications(rpc.messages, beforeInvalidRun), []);
+    assert.equal(
+      rpc.messages.slice(beforeInvalidRun).some((message) => message.method === "evidence/append"),
+      false,
+    );
+    assert.deepEqual(await evidenceRunIds(REPOSITORY_ROOT), beforeEvidence);
+  } finally {
+    if (uninitialized?.result?.run) {
+      await rm(evidenceDirectory(REPOSITORY_ROOT, uninitialized.result.run), {
+        recursive: true,
+        force: true,
+      });
+    }
+    await rpc.stop();
+  }
+});
+
+test("failed simulator startup emits the complete RPC lifecycle without claim promotion", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("rpc-simulator-unavailable");
+  let rpc = null;
+  try {
+    await withEnv(
+      {
+        LABWIRED_CLI: join(workdir, "missing-labwired-sim"),
+        LABWIRED_SIM: undefined,
+        LABWIRED_HOME: workdir,
+        PATH: workdir,
+      },
+      async () => {
+        rpc = startRpcServer();
+        const initialized = await rpc.request(1, "initialize", { workspacePath: workdir });
+        assert.equal(initialized.error, undefined);
+
+        const beforeVerify = rpc.messages.length;
+        const verified = await rpc.request(2, "target/verify", {
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+        });
+        assert.equal(verified.error, undefined);
+        assert.equal(verified.result.run.phase, "failed");
+        assert.equal(verified.result.result.status, "failed");
+        assert.equal(verified.result.evidence.status, "failed");
+
+        const runStates = stateNotifications(rpc.messages, beforeVerify);
+        assert.deepEqual(
+          runStates.map((message) => message.params.run.phase),
+          ["queued", "running", "evaluating", "failed"],
+        );
+        assert.ok(
+          runStates.every((message) => Object.keys(message.params).length === 1 && message.params.run),
+        );
+
+        const evidenceNotifications = rpc.messages
+          .slice(beforeVerify)
+          .filter((message) => message.method === "evidence/append");
+        assert.equal(evidenceNotifications.length, 1);
+        assert.deepEqual(Object.keys(evidenceNotifications[0].params), ["node"]);
+        assert.equal(evidenceNotifications[0].params.node.status, "failed");
+        assert.notEqual(evidenceNotifications[0].params.node.status, "model_verified");
+      },
+    );
+  } finally {
+    await rpc?.stop();
     await rm(workdir, { recursive: true, force: true });
   }
 });

@@ -67,13 +67,13 @@ export async function runTarget(request) {
   await mkdir(bundleDir, { recursive: true });
   reportState(onState, run);
   await writeFile(scriptPath, testScript(input.fixture), "utf8");
+  transition(run, "running", onState);
 
   let runner = { code: 1, stdout: "", stderr: "" };
   let runnerError = null;
   try {
     await ensureTrustedInputs(input.fixture);
     const simulator = await resolveSimulator();
-    transition(run, "running", onState);
     runner = await runSimulator(simulator, scriptPath, bundleDir);
   } catch (error) {
     runnerError = error instanceof Error ? error.message : String(error);
