@@ -406,6 +406,7 @@ function initialize(params = {}) {
       chat: true,
       serial: true,
       targetGraphV1: true,
+      targetRunStateContextV1: true,
       modes: ["act", "plan", "debug", "verify"],
     },
   };

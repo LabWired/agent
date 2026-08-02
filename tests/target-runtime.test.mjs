@@ -1227,6 +1227,7 @@ test("RPC owns the initialized workspace and emits exact target notifications", 
     const initialized = await rpc.request(1, "initialize", { workspacePath: workdir });
     assert.equal(initialized.error, undefined);
     assert.equal(initialized.result.capabilities.targetGraphV1, true);
+    assert.equal(initialized.result.capabilities.targetRunStateContextV1, true);
 
     const listed = await rpc.request(2, "target/list", {});
     assert.equal(listed.error, undefined);
