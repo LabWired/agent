@@ -194,6 +194,21 @@ function stateNotifications(messages, start) {
   return messages.slice(start).filter((message) => message.method === "target/runState");
 }
 
+function assertRunStateContext(messages, requestId, action, target) {
+  assert.ok(
+    messages.every((message) => {
+      assert.deepEqual(Object.keys(message.params).sort(), ["context", "run"]);
+      assert.deepEqual(message.params.context, {
+        requestId,
+        action,
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+      });
+      return true;
+    }),
+  );
+}
+
 before(async () => {
   fakeRoot = await mkdtemp(join(tmpdir(), "labwired-target-fake-sim-"));
   fakeSimulatorProgram = join(fakeRoot, "labwired-sim.mjs");
@@ -1135,9 +1150,8 @@ test("failed simulator startup emits the complete RPC lifecycle without claim pr
           runStates.map((message) => message.params.run.phase),
           ["queued", "running", "evaluating", "failed"],
         );
-        assert.ok(
-          runStates.every((message) => Object.keys(message.params).length === 1 && message.params.run),
-        );
+
+        assertRunStateContext(runStates, 2, "verify", target);
 
         const evidenceNotifications = rpc.messages
           .slice(beforeVerify)
@@ -1240,7 +1254,7 @@ test("RPC owns the initialized workspace and emits exact target notifications", 
       runStates.map((message) => message.params.run.phase),
       ["queued", "running", "evaluating", "completed"],
     );
-    assert.ok(runStates.every((message) => Object.keys(message.params).length === 1 && message.params.run));
+    assertRunStateContext(runStates, 4, "run", target);
     assert.equal(
       rpc.messages.slice(beforeRun).filter((message) => message.method === "evidence/append").length,
       0,
@@ -1260,6 +1274,7 @@ test("RPC owns the initialized workspace and emits exact target notifications", 
       verifyStates.map((message) => message.params.run.phase),
       ["queued", "running", "evaluating", "completed"],
     );
+    assertRunStateContext(verifyStates, 5, "verify", target);
     const evidenceNotifications = rpc.messages
       .slice(beforeVerify)
       .filter((message) => message.method === "evidence/append");

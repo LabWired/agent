@@ -443,7 +443,15 @@ async function targetExecute(params = {}, verify, requestId) {
       verify,
       workspacePath: state.targetWorkspacePath,
       signal: controller.signal,
-      onState: (run) => notify("target/runState", { run }),
+      onState: (run) => notify("target/runState", {
+        run,
+        context: {
+          requestId,
+          action: verify ? "verify" : "run",
+          targetId: run.targetId,
+          manifestDigest: run.manifestDigest,
+        },
+      }),
     });
     if (verify && response.evidence) {
       notify("evidence/append", {
