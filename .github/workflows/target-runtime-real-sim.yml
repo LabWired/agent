@@ -1,0 +1,49 @@
+name: target-runtime-real-sim
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  real-gate1:
+    name: real Gate1 simulator compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download pinned LabWired simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_url="https://github.com/w1ne/labwired-core/releases/download/v0.21.0/labwired-v0.21.0-linux-x86_64.tar.gz"
+          asset_sha256="256e14cde25212002d48d9943ff1a566278d7bcbf3fde95a0d0ac44958270744"
+          archive="$RUNNER_TEMP/labwired-v0.21.0-linux-x86_64.tar.gz"
+          extract_dir="$RUNNER_TEMP/labwired-core-v0.21.0"
+          curl --fail --location --retry 3 --output "$archive" "$asset_url"
+          printf '%s  %s\n' "$asset_sha256" "$archive" | sha256sum --check --status
+          mkdir "$extract_dir"
+          tar -xzf "$archive" -C "$extract_dir"
+          mapfile -d '' -t simulators < <(find "$extract_dir" -type f -name labwired -executable -print0)
+          if [[ "${#simulators[@]}" -ne 1 ]]; then
+            printf 'expected exactly one executable labwired in the pinned archive\n' >&2
+            exit 1
+          fi
+          simulator="${simulators[0]}"
+          case "$simulator" in
+            "$extract_dir"/*) ;;
+            *)
+              printf 'simulator path escaped extraction directory\n' >&2
+              exit 1
+              ;;
+          esac
+          printf 'LABWIRED_SIM=%s\n' "$simulator" >> "$GITHUB_ENV"
+      - name: Run real Gate1 target contract
+        env:
+          LABWIRED_CLI: ""
+          LABWIRED_TARGET_REAL_SIM: "1"
+        run: node --test tests/target-runtime.test.mjs

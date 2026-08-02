@@ -388,6 +388,59 @@ test("ordinary runs persist a bundle but omit proof evidence", async () => {
   }
 });
 
+test("concurrent first runs create separate durable bundles in a cold agent evidence store", async () => {
+  const [target] = listTargets();
+  const evidenceParent = await workspace("cold-agent-evidence-parent");
+  const evidenceHome = join(evidenceParent, "evidence");
+  const workdirs = await Promise.all(
+    Array.from({ length: 12 }, (_, index) => workspace(`cold-agent-evidence-workspace-${index}`)),
+  );
+  const updates = workdirs.map(() => []);
+  try {
+    await withEnv({ LABWIRED_EVIDENCE_HOME: evidenceHome }, async () => {
+      const outcomes = await Promise.allSettled(
+        workdirs.map((workdir, index) =>
+          runTarget({
+            targetId: target.targetId,
+            manifestDigest: target.digest,
+            fixture: "fixed",
+            verify: true,
+            workspacePath: workdir,
+            onState: (run) => updates[index].push(run),
+          }),
+        ),
+      );
+      const rejected = outcomes
+        .filter((outcome) => outcome.status === "rejected")
+        .map((outcome) => String(outcome.reason?.message || outcome.reason));
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.status),
+        Array(workdirs.length).fill("fulfilled"),
+        `cold agent evidence store must not reject valid concurrent runs: ${rejected.join("; ")}`,
+      );
+      const responses = outcomes.map((outcome) => outcome.value);
+      assert.equal(new Set(responses.map((response) => response.run.runId)).size, workdirs.length);
+      for (const [index, response] of responses.entries()) {
+        assert.equal(response.run.phase, "completed");
+        assert.equal(response.result.status, "pass");
+        assert.equal(response.evidence.status, "model_verified");
+        await assertDurableRunBundle(response, { claim: true });
+        assert.deepEqual(
+          updates[index].map((run) => run.phase),
+          ["queued", "running", "evaluating", "completed"],
+        );
+      }
+      assert.deepEqual(
+        await evidenceRunIds(),
+        responses.map((response) => response.run.runId).sort(),
+      );
+    });
+  } finally {
+    await Promise.all(workdirs.map((workdir) => rm(workdir, { recursive: true, force: true })));
+    await rm(evidenceParent, { recursive: true, force: true });
+  }
+});
+
 test("verification returns an immutable typed twin EvidenceNode", async () => {
   const [target] = listTargets();
   const workdir = await workspace("verify");
@@ -722,6 +775,7 @@ test("a default evidence root nested under the workspace is rejected before any 
       env: {
         ...process.env,
         HOME: workdir,
+        USERPROFILE: workdir,
         LABWIRED_EVIDENCE_HOME: "",
         LABWIRED_CLI: fakeSimulator,
         LABWIRED_SIM: "",
@@ -1230,15 +1284,40 @@ test("normal and npm package metadata include the target runtime contract", asyn
   }
 });
 
-test("GitHub Actions runs the portable target runtime contract on Ubuntu and Windows", async () => {
+test("GitHub Actions runs the portable target runtime contract on Ubuntu, macOS, and Windows", async () => {
   const workflow = await readFile(
     join(REPOSITORY_ROOT, ".github", "workflows", "target-runtime.yml"),
     "utf8",
   );
   assert.match(workflow, /ubuntu-latest/);
+  assert.match(workflow, /macos-latest/);
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /node --test tests\/target-runtime\.test\.mjs/);
   assert.doesNotMatch(workflow, /tests\/all\.sh/);
+});
+
+test("GitHub Actions pins the owned Linux simulator release for real Gate1 verification", async () => {
+  const workflowPath = join(REPOSITORY_ROOT, ".github", "workflows", "target-runtime-real-sim.yml");
+  assert.equal(existsSync(workflowPath), true, "real Gate1 CI gate must be tracked");
+  const workflow = await readFile(workflowPath, "utf8");
+  const assetUrl =
+    "https://github.com/w1ne/labwired-core/releases/download/v0.21.0/labwired-v0.21.0-linux-x86_64.tar.gz";
+  const assetSha256 = "256e14cde25212002d48d9943ff1a566278d7bcbf3fde95a0d0ac44958270744";
+  assert.match(workflow, /^on:\n  push:\n  pull_request:/m);
+  assert.match(workflow, /runs-on:\s+ubuntu-latest/);
+  assert.equal((workflow.match(/https:\/\/github\.com\/w1ne\/labwired-core\/releases\/download\//g) || []).length, 1);
+  assert.ok(workflow.includes(assetUrl), "real gate must download the pinned owned Linux asset");
+  assert.ok(workflow.includes(assetSha256), "real gate must pin the release asset SHA-256");
+  assert.match(workflow, /sha256sum --check/);
+  assert.ok(workflow.indexOf(assetSha256) < workflow.indexOf("tar -xzf"), "verify before extraction");
+  assert.match(workflow, /find "\$extract_dir" -type f -name labwired -executable -print0/);
+  assert.match(workflow, /LABWIRED_SIM=/);
+  assert.match(workflow, /LABWIRED_CLI:\s*""/);
+  assert.match(workflow, /LABWIRED_TARGET_REAL_SIM:\s*"1"/);
+  assert.match(workflow, /node --test tests\/target-runtime\.test\.mjs/);
+  assert.doesNotMatch(workflow, /releases\/(?:latest|download\/latest)\b/i);
+  assert.doesNotMatch(workflow, /windows/i);
+  assert.doesNotMatch(workflow, /\bHOME\b/);
 });
 
 test(
@@ -1247,8 +1326,9 @@ test(
   async () => {
     const [target] = listTargets();
     const workdir = await workspace("real-sim");
+    const evidenceHome = await workspace("real-sim-evidence");
     try {
-      await withEnv(originalSimulatorEnv, async () => {
+      await withEnv({ ...originalSimulatorEnv, LABWIRED_EVIDENCE_HOME: evidenceHome }, async () => {
         const fixed = await runTarget({
           targetId: target.targetId,
           manifestDigest: target.digest,
@@ -1270,6 +1350,7 @@ test(
       });
     } finally {
       await rm(workdir, { recursive: true, force: true });
+      await rm(evidenceHome, { recursive: true, force: true });
     }
   },
 );

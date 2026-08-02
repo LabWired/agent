@@ -285,7 +285,11 @@ async function ensureSafeDirectory(path, evidenceHome) {
     if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
-    await mkdir(path, { mode: 0o700 });
+    try {
+      await mkdir(path, { mode: 0o700 });
+    } catch (mkdirError) {
+      if (mkdirError?.code !== "EEXIST") throw mkdirError;
+    }
     const info = await lstat(path);
     if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(path);
   }
