@@ -608,7 +608,8 @@ test("a timed-out simulator reaches one failed terminal lifecycle", async () => 
       {
         LABWIRED_TARGET_TEST_RESULT_MODE: "forever",
         LABWIRED_TARGET_CHILD_PID_FILE: childPidFile,
-        LABWIRED_TARGET_TIMEOUT_MS: "75",
+        // Allow the Node-based fake simulator to start and publish its PID before exercising timeout cleanup.
+        LABWIRED_TARGET_TIMEOUT_MS: "750",
       },
       async () => {
         runPromise = runTarget({
