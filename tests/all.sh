@@ -20,10 +20,24 @@ run() {
   fi
 }
 
+run_command() {
+  local name="$1"
+  shift
+  echo ""
+  echo "======== $name ========"
+  if "$@"; then
+    echo "PASS $name"
+  else
+    echo "FAIL $name"
+    fail=1
+  fi
+}
+
 run "harness"           "$ROOT/tests/harness.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "public-install"    "$ROOT/tests/public-install.sh"
 run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
+run_command "target-runtime" node --test "$ROOT/tests/target-runtime.test.mjs"
 run "demo"              "$ROOT/demo.sh"
 run "fw-usecase-qa"     "$ROOT/tests/fw-usecase-qa.sh"
 run "gap-ready-qa"      "$ROOT/tests/gap-ready-qa.sh"

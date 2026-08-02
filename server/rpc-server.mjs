@@ -405,22 +405,19 @@ function initialize(params) {
 
 async function targetExecute(params = {}, verify) {
   const request = params && typeof params === "object" ? params : {};
+  if (Object.prototype.hasOwnProperty.call(request, "workspacePath")) {
+    throw new Error("workspacePath is not allowed for target RPC; use the initialized workspace");
+  }
   const response = await runTarget({
     targetId: request.targetId,
     manifestDigest: request.manifestDigest,
     fixture: request.fixture,
     verify,
-    workspacePath: Object.prototype.hasOwnProperty.call(request, "workspacePath")
-      ? request.workspacePath
-      : state.workspacePath,
-    onState: (runState) => notify("target/runState", runState),
+    workspacePath: state.workspacePath,
+    onState: (run) => notify("target/runState", { run }),
   });
   if (response.evidence) {
-    notify("evidence/append", {
-      run: response.run,
-      resultRef: response.resultRef,
-      evidence: response.evidence,
-    });
+    notify("evidence/append", { node: response.evidence });
   }
   return response;
 }

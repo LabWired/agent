@@ -3,16 +3,64 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import test from "node:test";
+import { dirname, isAbsolute, join } from "node:path";
+import test, { after, before } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { listTargets, runTarget } from "../server/target-runtime.mjs";
 
 const REPOSITORY_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const ORACLE_REF = "labwired.gate1-esp32c3/v1#uart:LABWIRED_OK";
+const originalSimulatorEnv = {
+  LABWIRED_CLI: process.env.LABWIRED_CLI,
+  LABWIRED_SIM: process.env.LABWIRED_SIM,
+};
+
+let fakeRoot = "";
+let fakeSimulator = "";
+let fakeSimulatorProgram = "";
+
+function setEnv(name, value) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
+async function withEnv(values, action) {
+  const beforeValues = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
+  try {
+    for (const [name, value] of Object.entries(values)) setEnv(name, value);
+    return await action();
+  } finally {
+    for (const [name, value] of Object.entries(beforeValues)) setEnv(name, value);
+  }
+}
 
 async function workspace(label) {
   return mkdtemp(join(tmpdir(), `labwired-target-${label}-`));
+}
+
+function evidenceDirectory(workdir, run) {
+  return join(workdir, ".labwired", "evidence", run.runId);
+}
+
+function relativeEvidencePath(run, file) {
+  return `.labwired/evidence/${run.runId}/${file}`;
+}
+
+async function assertDurableRunBundle(workdir, response, { claim = false } = {}) {
+  const directory = evidenceDirectory(workdir, response.run);
+  const required = ["test.yaml", "result.json", "uart.log", "run-manifest.json", "run.log"];
+  if (claim) required.push("claim.json");
+  for (const file of required) {
+    assert.equal(existsSync(join(directory, file)), true, `${file} should persist in the run bundle`);
+  }
+  assert.deepEqual(response.resultRef, {
+    path: relativeEvidencePath(response.run, "result.json"),
+    sha256: response.resultRef.sha256,
+  });
+  assert.match(response.resultRef.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(isAbsolute(response.resultRef.path), false);
+  return directory;
 }
 
 function startRpcServer() {
@@ -47,12 +95,11 @@ function startRpcServer() {
   return {
     child,
     messages,
-    stderr: () => stderr,
     async request(id, method, params) {
       const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }), "utf8");
       child.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
       child.stdin.write(body);
-      const deadline = Date.now() + 20_000;
+      const deadline = Date.now() + 10_000;
       while (Date.now() < deadline) {
         const response = messages.find((message) => message.id === id);
         if (response) return response;
@@ -61,45 +108,135 @@ function startRpcServer() {
       throw new Error(`timed out waiting for RPC ${method}: ${stderr}`);
     },
     async stop() {
-      if (!child.killed) child.kill("SIGTERM");
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill("SIGTERM");
       await new Promise((resolveStop) => {
-        child.once("exit", resolveStop);
-        setTimeout(resolveStop, 1_000);
+        const timer = setTimeout(resolveStop, 1_000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolveStop();
+        });
       });
     },
   };
 }
 
-test("Gate1 virtual target exposes a stable signed manifest graph", () => {
+function stateNotifications(messages, start) {
+  return messages.slice(start).filter((message) => message.method === "target/runState");
+}
+
+before(async () => {
+  fakeRoot = await mkdtemp(join(tmpdir(), "labwired-target-fake-sim-"));
+  fakeSimulatorProgram = join(fakeRoot, "labwired-sim.mjs");
+  await writeFile(
+    fakeSimulatorProgram,
+    `#!/usr/bin/env node
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+
+const args = process.argv.slice(2);
+const valueAfter = (flag) => args[args.indexOf(flag) + 1] || "";
+const outputDir = valueAfter("--output-dir");
+const scriptPath = valueAfter("--script");
+const script = await readFile(scriptPath, "utf8");
+const mode = process.env.LABWIRED_TARGET_TEST_RESULT_MODE || "";
+let result = "";
+let uart = "LABWIRED_OK";
+if (mode === "status-passed") {
+  result = '{"status":"passed","assertions":[{"id":"uart-marker","passed":true}]}';
+} else if (mode === "bare-passed") {
+  result = '{"passed":true,"assertions":[{"id":"uart-marker","passed":true}]}';
+} else if (mode === "omit-result") {
+  result = "";
+} else if (script.includes("gate1-fixed.elf")) {
+  result = '{"status":"pass","assertions":[{"id":"uart-marker","passed":true}]}';
+} else {
+  result = '{"status":"failed","assertions":[{"id":"uart-marker","passed":false}]}';
+  uart = "BOOT";
+}
+await mkdir(outputDir, { recursive: true });
+if (result) await writeFile(outputDir + "/result.json", result + "\\n", "utf8");
+await writeFile(outputDir + "/uart.log", uart + "\\n", "utf8");
+await writeFile(outputDir + "/run-manifest.json", '{"runner":"fake"}\\n', "utf8");
+console.log("fake labwired-sim run");
+`,
+    "utf8",
+  );
+  if (process.platform === "win32") {
+    fakeSimulator = join(fakeRoot, "labwired-sim.cmd");
+    await writeFile(
+      fakeSimulator,
+      `@echo off\r\n"${process.execPath}" "${fakeSimulatorProgram}" %*\r\n`,
+      "utf8",
+    );
+  } else {
+    fakeSimulator = fakeSimulatorProgram;
+    await chmod(fakeSimulator, 0o755);
+  }
+  setEnv("LABWIRED_CLI", fakeSimulator);
+  setEnv("LABWIRED_SIM", undefined);
+});
+
+after(async () => {
+  setEnv("LABWIRED_CLI", originalSimulatorEnv.LABWIRED_CLI);
+  setEnv("LABWIRED_SIM", originalSimulatorEnv.LABWIRED_SIM);
+  await rm(fakeRoot, { recursive: true, force: true });
+});
+
+test("published Gate1 target is the approved digest wire contract", () => {
   const [target] = listTargets();
   const [again] = listTargets();
 
-  assert.equal(target.targetId, "gate1-esp32c3");
+  assert.deepEqual(Object.keys(target).sort(), [
+    "capabilities",
+    "chip",
+    "digest",
+    "displayName",
+    "graph",
+    "kind",
+    "manifestId",
+    "schemaVersion",
+    "targetId",
+  ]);
   assert.equal(target.schemaVersion, 1);
+  assert.equal(target.targetId, "gate1-esp32c3");
   assert.equal(target.manifestId, "labwired.gate1-esp32c3/v1");
-  assert.match(target.manifestDigest, /^sha256:[a-f0-9]{64}$/);
-  assert.equal(target.manifestDigest, again.manifestDigest);
+  assert.equal(target.displayName, "ESP32-C3 Gate1 UART proof");
   assert.equal(target.kind, "virtual");
   assert.equal(target.chip, "esp32c3");
+  assert.match(target.digest, /^[a-f0-9]{64}$/);
+  assert.equal(target.digest, again.digest);
+  assert.equal("manifestDigest" in target, false);
   assert.deepEqual(target.capabilities, ["run", "verify"]);
-  assert.deepEqual(
-    target.graph.nodes.map((node) => node.id),
-    ["cpu", "uart0", "oracle"],
-  );
   assert.deepEqual(target.graph.edges, [
     { from: "cpu", to: "uart0" },
     { from: "uart0", to: "oracle" },
   ]);
+  assert.deepEqual(
+    target.graph.nodes.map((node) => Object.keys(node).sort()),
+    [
+      ["id", "kind", "label"],
+      ["id", "kind", "label"],
+      ["id", "kind", "label"],
+    ],
+  );
+  assert.deepEqual(
+    target.graph.nodes.map((node) => [node.id, node.kind]),
+    [
+      ["cpu", "cpu"],
+      ["uart0", "uart"],
+      ["oracle", "oracle"],
+    ],
+  );
 });
 
-test("runTarget rejects invalid target requests before invoking a runner", async () => {
+test("runTarget validates the request digest and workspace before starting a run", async () => {
   const [target] = listTargets();
   const workdir = await workspace("validation");
   try {
     await assert.rejects(
       runTarget({
         targetId: "unknown-target",
-        manifestDigest: target.manifestDigest,
+        manifestDigest: target.digest,
         fixture: "fixed",
         verify: false,
         workspacePath: workdir,
@@ -118,7 +255,7 @@ test("runTarget rejects invalid target requests before invoking a runner", async
     await assert.rejects(
       runTarget({
         targetId: target.targetId,
-        manifestDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        manifestDigest: `sha256:${target.digest}`,
         fixture: "fixed",
         verify: false,
         workspacePath: workdir,
@@ -128,7 +265,7 @@ test("runTarget rejects invalid target requests before invoking a runner", async
     await assert.rejects(
       runTarget({
         targetId: target.targetId,
-        manifestDigest: target.manifestDigest,
+        manifestDigest: target.digest,
         fixture: "other",
         verify: false,
         workspacePath: workdir,
@@ -138,7 +275,7 @@ test("runTarget rejects invalid target requests before invoking a runner", async
     await assert.rejects(
       runTarget({
         targetId: target.targetId,
-        manifestDigest: target.manifestDigest,
+        manifestDigest: target.digest,
         fixture: "fixed",
         verify: false,
         workspacePath: "relative-workspace",
@@ -150,138 +287,182 @@ test("runTarget rejects invalid target requests before invoking a runner", async
   }
 });
 
-test("verification fails closed when the simulator result omits an explicit pass status", async () => {
-  const [target] = listTargets();
-  const workdir = await workspace("unstatused-result");
-  const simulator = join(workdir, "labwired-sim");
-  const previousCli = process.env.LABWIRED_CLI;
-  try {
-    await writeFile(
-      simulator,
-      `#!/bin/sh
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "--output-dir" ]; then out="$2"; shift 2; continue; fi
-  shift
-done
-mkdir -p "$out"
-printf '%s' '{"assertions":[{"passed":true}]}' > "$out/result.json"
-printf '%s\\n' 'LABWIRED_OK' > "$out/uart.log"
-printf '%s' '{}' > "$out/run-manifest.json"
-`,
-      "utf8",
-    );
-    await chmod(simulator, 0o755);
-    process.env.LABWIRED_CLI = simulator;
-
-    const response = await runTarget({
-      targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
-      fixture: "fixed",
-      verify: true,
-      workspacePath: workdir,
-    });
-
-    assert.equal(response.result.simulationStatus, "failed");
-    assert.equal(response.result.status, "failed");
-    assert.equal(response.evidence.claim.status, "failed");
-  } finally {
-    if (previousCli === undefined) delete process.env.LABWIRED_CLI;
-    else process.env.LABWIRED_CLI = previousCli;
-    await rm(workdir, { recursive: true, force: true });
-  }
-});
-
-test("ordinary target runs return real simulation results without an evidence bundle", async () => {
+test("ordinary runs persist a bundle but omit proof evidence", async () => {
   const [target] = listTargets();
   const workdir = await workspace("ordinary");
   try {
     const response = await runTarget({
       targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
+      manifestDigest: target.digest,
       fixture: "fixed",
       verify: false,
       workspacePath: workdir,
     });
 
-    assert.equal(response.run.targetId, target.targetId);
-    assert.equal(response.run.state, "terminal");
-    assert.equal(response.result.status, "passed");
-    assert.match(response.result.uart, /LABWIRED_OK/);
-    assert.match(response.resultRef, /^sha256:[a-f0-9]{64}$/);
-    assert.equal(response.evidence, null);
-    assert.equal(existsSync(join(workdir, ".labwired", "evidence")), false);
+    assert.deepEqual(Object.keys(response).sort(), ["result", "resultRef", "run"]);
+    assert.equal(response.run.manifestDigest, target.digest);
+    assert.equal(response.run.phase, "completed");
+    assert.equal(response.result.status, "pass");
+    await assertDurableRunBundle(workdir, response);
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
 });
 
-test("fixed Gate1 verification stores a model_verified twin evidence bundle", async () => {
+test("verification returns an immutable typed twin EvidenceNode", async () => {
   const [target] = listTargets();
-  const workdir = await workspace("fixed");
+  const workdir = await workspace("verify");
   try {
     const response = await runTarget({
       targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
+      manifestDigest: target.digest,
       fixture: "fixed",
       verify: true,
       workspacePath: workdir,
     });
+    const directory = await assertDurableRunBundle(workdir, response, { claim: true });
+    const expectedRefs = [
+      "test.yaml",
+      "result.json",
+      "uart.log",
+      "run-manifest.json",
+      "run.log",
+      "claim.json",
+    ].map((file) => relativeEvidencePath(response.run, file));
 
-    const evidenceDir = join(workdir, ".labwired", "evidence", response.run.runId);
-    assert.equal(response.run.state, "terminal");
-    assert.equal(response.result.status, "model_verified");
-    assert.ok(response.result.assertions.every((assertion) => assertion.passed === true));
-    assert.match(response.result.uart, /LABWIRED_OK/);
-    assert.match(response.resultRef, /^sha256:[a-f0-9]{64}$/);
-    assert.equal(response.evidence.type, "twin");
-    assert.equal(response.evidence.claim.status, "model_verified");
-    assert.equal(response.evidence.path, evidenceDir);
-    assert.equal(existsSync(join(evidenceDir, "result.json")), true);
-    assert.equal(existsSync(join(evidenceDir, "uart.log")), true);
-    assert.equal(existsSync(join(evidenceDir, "run-manifest.json")), true);
-    assert.equal(existsSync(join(evidenceDir, "claim.json")), true);
-    assert.equal(
-      JSON.parse(await readFile(join(evidenceDir, "claim.json"), "utf8")).status,
-      "model_verified",
+    assert.equal(response.run.phase, "completed");
+    assert.equal(response.result.status, "pass");
+    assert.equal(response.evidence.evidenceId.startsWith("evidence-"), true);
+    assert.deepEqual(response.evidence.parentIds, []);
+    assert.equal(response.evidence.runId, response.run.runId);
+    assert.equal(response.evidence.targetId, target.targetId);
+    assert.equal(response.evidence.path, "twin");
+    assert.equal(response.evidence.status, "model_verified");
+    assert.equal(response.evidence.tool, "target/verify");
+    assert.equal(response.evidence.oracleRef, ORACLE_REF);
+    assert.deepEqual(response.evidence.artifactRefs, expectedRefs);
+    assert.equal(Number.isNaN(Date.parse(response.evidence.ts)), false);
+    assert.deepEqual(
+      JSON.parse(await readFile(join(directory, "claim.json"), "utf8")),
+      response.evidence,
     );
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
 });
 
-test("broken Gate1 verification remains failed and records failed twin evidence", async () => {
+test("failed observations keep both run phase and verification evidence failed", async () => {
   const [target] = listTargets();
   const workdir = await workspace("broken");
   try {
     const response = await runTarget({
       targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
+      manifestDigest: target.digest,
       fixture: "broken",
       verify: true,
       workspacePath: workdir,
     });
 
-    assert.equal(response.run.state, "terminal");
+    assert.equal(response.run.phase, "failed");
     assert.equal(response.result.status, "failed");
-    assert.ok(response.result.assertions.some((assertion) => assertion.passed !== true));
-    assert.doesNotMatch(response.result.uart, /LABWIRED_OK/);
-    assert.equal(response.evidence.type, "twin");
-    assert.equal(response.evidence.claim.status, "failed");
-    assert.equal(
-      JSON.parse(
-        await readFile(
-          join(workdir, ".labwired", "evidence", response.run.runId, "claim.json"),
-          "utf8",
-        ),
-      ).status,
-      "failed",
-    );
+    assert.equal(response.evidence.status, "failed");
+    await assertDurableRunBundle(workdir, response, { claim: true });
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
 });
 
-test("RPC exposes direct target graph methods with state and evidence notifications", async () => {
+test("only exact raw status pass can mint model_verified", async () => {
+  const [target] = listTargets();
+  for (const mode of ["status-passed", "bare-passed"]) {
+    const workdir = await workspace(mode);
+    try {
+      await withEnv({ LABWIRED_TARGET_TEST_RESULT_MODE: mode }, async () => {
+        const response = await runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+          verify: true,
+          workspacePath: workdir,
+        });
+        assert.equal(response.result.status, "failed", `${mode} must not be observed as pass`);
+        assert.equal(response.evidence.status, "failed", `${mode} must not mint proof`);
+        assert.equal(response.run.phase, "failed");
+      });
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  }
+});
+
+test("missing simulator result is replaced by a structured failed result artifact", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("missing-result");
+  try {
+    await withEnv({ LABWIRED_TARGET_TEST_RESULT_MODE: "omit-result" }, async () => {
+      const response = await runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+      });
+      const directory = await assertDurableRunBundle(workdir, response);
+      assert.equal(response.result.status, "failed");
+      assert.equal(JSON.parse(await readFile(join(directory, "result.json"), "utf8")).status, "failed");
+    });
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("runTarget reports the approved run lifecycle with immutable snapshots", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("lifecycle");
+  const updates = [];
+  try {
+    const response = await runTarget({
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+      verify: true,
+      workspacePath: workdir,
+      onState: (run) => updates.push(run),
+    });
+    assert.deepEqual(
+      updates.map((run) => run.phase),
+      ["queued", "running", "evaluating", "completed"],
+    );
+    assert.ok(updates.every((run) => run.manifestDigest === target.digest));
+    assert.equal(response.run.phase, "completed");
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("simulator resolution skips an agent launcher and preserves the simulator fallback", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("agent-launcher");
+  const agentLauncher = join(workdir, "labwired");
+  try {
+    await writeFile(agentLauncher, "#!/bin/sh\n# LABWIRED_AGENT_HOME\nexit 91\n", "utf8");
+    await chmod(agentLauncher, 0o755);
+    await withEnv({ LABWIRED_CLI: agentLauncher, LABWIRED_SIM: fakeSimulator }, async () => {
+      const response = await runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+      });
+      assert.equal(response.result.status, "pass");
+    });
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("RPC owns the initialized workspace and emits exact target notifications", async () => {
   const [target] = listTargets();
   const workdir = await workspace("rpc");
   const rpc = startRpcServer();
@@ -294,58 +475,54 @@ test("RPC exposes direct target graph methods with state and evidence notificati
     assert.equal(listed.error, undefined);
     assert.deepEqual(listed.result.targets, [target]);
 
-    const invalidWorkspace = await rpc.request(9, "target/run", {
+    const rejected = await rpc.request(3, "target/run", {
       targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
-      fixture: "fixed",
-      workspacePath: "",
-    });
-    assert.match(invalidWorkspace.error.message, /workspacePath.*absolute/i);
-
-    const beforeRun = rpc.messages.length;
-    const run = await rpc.request(3, "target/run", {
-      targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
+      manifestDigest: target.digest,
       fixture: "fixed",
       workspacePath: workdir,
     });
+    assert.match(rejected.error.message, /workspacePath.*not allowed/i);
+
+    const beforeRun = rpc.messages.length;
+    const run = await rpc.request(4, "target/run", {
+      targetId: target.targetId,
+      manifestDigest: target.digest,
+      fixture: "fixed",
+    });
     assert.equal(run.error, undefined);
-    assert.equal(run.result.evidence, null);
+    assert.deepEqual(Object.keys(run.result).sort(), ["result", "resultRef", "run"]);
+    assert.equal(run.result.run.phase, "completed");
+    const runStates = stateNotifications(rpc.messages, beforeRun);
     assert.deepEqual(
-      rpc.messages
-        .slice(beforeRun)
-        .filter((message) => message.method === "target/runState")
-        .map((message) => message.params.state),
-      ["queued", "running", "terminal"],
+      runStates.map((message) => message.params.run.phase),
+      ["queued", "running", "evaluating", "completed"],
     );
+    assert.ok(runStates.every((message) => Object.keys(message.params).length === 1 && message.params.run));
     assert.equal(
       rpc.messages.slice(beforeRun).filter((message) => message.method === "evidence/append").length,
       0,
     );
 
     const beforeVerify = rpc.messages.length;
-    const verified = await rpc.request(4, "target/verify", {
+    const verified = await rpc.request(5, "target/verify", {
       targetId: target.targetId,
-      manifestDigest: target.manifestDigest,
+      manifestDigest: target.digest,
       fixture: "fixed",
-      workspacePath: workdir,
     });
     assert.equal(verified.error, undefined);
-    assert.equal(verified.result.result.status, "model_verified");
-    assert.ok(verified.result.run);
-    assert.match(verified.result.resultRef, /^sha256:[a-f0-9]{64}$/);
-    assert.equal(verified.result.evidence.type, "twin");
+    assert.equal(verified.result.result.status, "pass");
+    assert.equal(verified.result.evidence.status, "model_verified");
+    const verifyStates = stateNotifications(rpc.messages, beforeVerify);
     assert.deepEqual(
-      rpc.messages
-        .slice(beforeVerify)
-        .filter((message) => message.method === "target/runState")
-        .map((message) => message.params.state),
-      ["queued", "running", "terminal"],
+      verifyStates.map((message) => message.params.run.phase),
+      ["queued", "running", "evaluating", "completed"],
     );
-    assert.equal(
-      rpc.messages.slice(beforeVerify).filter((message) => message.method === "evidence/append").length,
-      1,
-    );
+    const evidenceNotifications = rpc.messages
+      .slice(beforeVerify)
+      .filter((message) => message.method === "evidence/append");
+    assert.equal(evidenceNotifications.length, 1);
+    assert.deepEqual(Object.keys(evidenceNotifications[0].params), ["node"]);
+    assert.deepEqual(evidenceNotifications[0].params.node, verified.result.evidence);
     assert.equal(
       rpc.messages.slice(beforeVerify).some((message) => String(message.method || "").startsWith("chat/")),
       false,
@@ -355,3 +532,50 @@ test("RPC exposes direct target graph methods with state and evidence notificati
     await rm(workdir, { recursive: true, force: true });
   }
 });
+
+test("normal and npm package metadata include the target runtime contract", async () => {
+  const allTests = await readFile(join(REPOSITORY_ROOT, "tests", "all.sh"), "utf8");
+  const packageMetadata = JSON.parse(await readFile(join(REPOSITORY_ROOT, "package.json"), "utf8"));
+  assert.match(allTests, /target-runtime/);
+  for (const entry of [
+    "server/",
+    "fixtures/gate1-live/firmware/gate1-fixed.elf",
+    "fixtures/gate1-live/firmware/gate1-broken.elf",
+    "share/catalog/systems/esp32c3.yaml",
+  ]) {
+    assert.ok(packageMetadata.files.includes(entry), `package files should include ${entry}`);
+  }
+});
+
+test(
+  "real labwired-sim proves fixed and broken Gate1 fixtures",
+  { skip: process.env.LABWIRED_TARGET_REAL_SIM !== "1" },
+  async () => {
+    const [target] = listTargets();
+    const workdir = await workspace("real-sim");
+    try {
+      await withEnv(originalSimulatorEnv, async () => {
+        const fixed = await runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "fixed",
+          verify: true,
+          workspacePath: workdir,
+        });
+        const broken = await runTarget({
+          targetId: target.targetId,
+          manifestDigest: target.digest,
+          fixture: "broken",
+          verify: true,
+          workspacePath: workdir,
+        });
+        assert.equal(fixed.result.status, "pass");
+        assert.equal(fixed.evidence.status, "model_verified");
+        assert.equal(broken.result.status, "failed");
+        assert.equal(broken.evidence.status, "failed");
+      });
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  },
+);
