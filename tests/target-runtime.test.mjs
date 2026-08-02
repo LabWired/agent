@@ -534,6 +534,31 @@ test("runTarget reports the approved run lifecycle with immutable snapshots", as
   }
 });
 
+test("a queued-state sink failure still reaches a terminal failed lifecycle", async () => {
+  const [target] = listTargets();
+  const workdir = await workspace("queued-state-sink");
+  const phases = [];
+  try {
+    await assert.rejects(
+      runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+        onState: (run) => {
+          phases.push(run.phase);
+          if (run.phase === "queued") throw new Error("queued state sink unavailable");
+        },
+      }),
+      /queued state sink unavailable/i,
+    );
+    assert.deepEqual(phases, ["queued", "evaluating", "failed"]);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("a timed-out simulator reaches one failed terminal lifecycle", async () => {
   const [target] = listTargets();
   const workdir = await workspace("timeout");
@@ -929,6 +954,9 @@ test("RPC shutdown cancels an active target simulator child", async () => {
       true,
       "RPC shutdown must terminate the simulator child",
     );
+    const shutdownResponse = rpc.messages.find((message) => message.id === 2);
+    assert.ok(shutdownResponse?.result, "RPC shutdown must flush the in-flight target response");
+    assert.equal(shutdownResponse.result.run.phase, "failed");
   } finally {
     await rpc?.stop();
     terminateTestProcess(childPid);

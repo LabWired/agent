@@ -1499,5 +1499,7 @@ function requestShutdown(reason) {
 }
 
 function finishShutdownIfIdle() {
-  if (shutdownRequested && activeTargetExecutions === 0) process.exit(0);
+  // Let the current JSON-RPC handler flush its response before Node exits.
+  // Calling process.exit() here races handleMessage() after dispatch() resolves.
+  if (shutdownRequested && activeTargetExecutions === 0) process.exitCode = 0;
 }

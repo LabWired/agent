@@ -90,8 +90,8 @@ export async function runTarget(request) {
     const stagingScriptPath = join(stagingPath, "test.yaml");
     await writeFile(stagingScriptPath, script, { encoding: "utf8", mode: 0o600 });
 
-    reportState(onState, run);
     queued = true;
+    reportState(onState, run);
     transition(run, "running", onState);
     // Re-check after the event: a renderer/process must not redirect an artifact.
     await assertSafeBundle(bundle);
@@ -271,15 +271,9 @@ async function writeNewFile(path, data) {
 
 async function copyStagedArtifactIfPresent(stagingPath, bundle, name) {
   const sourcePath = join(stagingPath, name);
-  let info;
-  try {
-    info = await lstat(sourcePath);
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-  if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(sourcePath);
-  await writeBundleFile(bundle, name, await readFile(sourcePath));
+  const contents = await readSafeArtifact(sourcePath, { optional: true });
+  if (contents === null) return false;
+  await writeBundleFile(bundle, name, contents);
   return true;
 }
 
@@ -340,7 +334,7 @@ async function parseRunArtifacts(stagingPath, runner) {
   let raw = null;
   let fallbackReason = runner.error || "";
   try {
-    resultBytes = await readFile(resultPath, "utf8");
+    resultBytes = await readSafeArtifact(resultPath, { encoding: "utf8" });
     raw = JSON.parse(resultBytes);
   } catch (error) {
     fallbackReason ||= error instanceof Error ? error.message : String(error);
@@ -374,10 +368,7 @@ async function parseRunArtifacts(stagingPath, runner) {
 
   let uart = "";
   try {
-    const uartInfo = await lstat(join(stagingPath, "uart.log"));
-    if (uartInfo.isFile() && !uartInfo.isSymbolicLink()) {
-      uart = await readFile(join(stagingPath, "uart.log"), "utf8");
-    }
+    uart = (await readSafeArtifact(join(stagingPath, "uart.log"), { optional: true, encoding: "utf8" })) || "";
   } catch {
     // A failed runner can omit UART output; the failed result remains durable.
   }
@@ -387,6 +378,24 @@ async function parseRunArtifacts(stagingPath, runner) {
     uart,
     status: raw.status === "pass" && runner.code === 0 && !runner.timedOut && !runner.aborted ? "pass" : "failed",
   };
+}
+
+async function readSafeArtifact(path, { optional = false, encoding } = {}) {
+  const noFollow = Number.isInteger(fsConstants.O_NOFOLLOW) ? fsConstants.O_NOFOLLOW : 0;
+  let handle;
+  try {
+    handle = await open(path, fsConstants.O_RDONLY | noFollow);
+    const info = await handle.stat();
+    if (!info.isFile()) throw unsafePathError(path);
+    const contents = await handle.readFile(encoding || undefined);
+    return contents;
+  } catch (error) {
+    if (optional && error?.code === "ENOENT") return null;
+    if (error?.code === "ELOOP") throw unsafePathError(path);
+    throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 function normalizeAssertions(raw) {
