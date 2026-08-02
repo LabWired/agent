@@ -22,13 +22,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
 const PROTOCOL = "0.5.0";
 
-/** @type {{ workspacePath: string, targetWorkspacePath: string | null, mode: string, autoConfirm: boolean, clientName: string }} */
+/** @type {{ workspacePath: string, targetWorkspacePath: string | null, mode: string, autoConfirm: boolean, clientName: string, desktopClient: boolean }} */
 const state = {
   workspacePath: process.cwd(),
   targetWorkspacePath: null,
   mode: "act",
-  autoConfirm: true,
+  autoConfirm: false,
   clientName: "unknown",
+  // Once marked desktop, never clear this flag: a later initialize call cannot
+  // re-enable unattended behavior by claiming to be standalone.
+  desktopClient:
+    process.env.LABWIRED_EDITOR === "1" || process.env.LABWIRED_VSCODE === "1",
 };
 
 /** Target executions own cancellable simulator children while the RPC process lives. */
@@ -135,6 +139,49 @@ function findLabwired() {
   }
   return null;
 }
+
+function isDesktopClientName(clientName) {
+  return /^(labwired-editor|labwired-desktop|labwired-vscode)$/i.test(String(clientName || ""));
+}
+
+function isDesktopClient() {
+  return state.desktopClient;
+}
+
+function isVirtualTarget(target) {
+  return ["virtual", "sim", "twin"].includes(String(target || "auto").toLowerCase());
+}
+
+function hasExplicitConfirmation(value) {
+  return ["1", "yes", "true"].includes(String(value || "").toLowerCase());
+}
+
+function canBypassPhysicalFlashConfirmation() {
+  return !isDesktopClient() && state.autoConfirm && process.env.LABWIRED_FLASH_AUTO === "1";
+}
+
+function physicalFlashNeedsConfirmation(target, confirmation) {
+  return (
+    !isVirtualTarget(target) &&
+    !hasExplicitConfirmation(confirmation) &&
+    !canBypassPhysicalFlashConfirmation()
+  );
+}
+
+const DESKTOP_READ_ONLY_SLASH_TOOLS = new Set([
+  "doctor",
+  "doctor_strict",
+  "version",
+  "help",
+  "probe_list",
+  "probe_doctor",
+  "probe_chips",
+  "score_verify",
+  "assert_status",
+  "debug_info",
+  "debug_read",
+  "plot_status",
+]);
 
 /**
  * Tool registry — argv after `labwired`. Keep in sync with extension tools/registry.
@@ -349,7 +396,7 @@ async function dispatch(method, params, requestId) {
     case "mode/get":
       return { mode: state.mode };
     case "autoConfirm/set":
-      state.autoConfirm = !!params.enabled;
+      state.autoConfirm = isDesktopClient() ? false : !!params.enabled;
       return { enabled: state.autoConfirm };
     case "tool/list":
       return {
@@ -394,6 +441,8 @@ function initialize(params = {}) {
   if (requestedWorkspacePath) state.workspacePath = String(requestedWorkspacePath);
   state.targetWorkspacePath = validTargetWorkspacePath(requestedWorkspacePath);
   if (params?.clientName) state.clientName = String(params.clientName);
+  if (isDesktopClientName(state.clientName)) state.desktopClient = true;
+  if (isDesktopClient()) state.autoConfirm = false;
   const labwired = findLabwired();
   return {
     protocolVersion: PROTOCOL,
@@ -524,25 +573,12 @@ async function toolRun(params) {
   // Physical flash requires explicit confirm=1 (or yes/true). Virtual target is auto-allowed.
   if (name === "probe_flash") {
     const target = String(toolParams.target || "auto").toLowerCase();
-    const confirm = String(toolParams.confirm || "").toLowerCase();
-    const confirmed = confirm === "1" || confirm === "yes" || confirm === "true";
-    const isVirtual = target === "virtual" || target === "sim" || target === "twin";
-    if (!isVirtual && !confirmed && !state.autoConfirm) {
+    if (physicalFlashNeedsConfirmation(target, toolParams.confirm)) {
       throw new Error(
         "probe_flash: physical flash requires confirm=1 (or target=virtual). " +
-          "Example: tool/run probe_flash { elf, chip, target:\"probe\", confirm:\"1\" }",
+          "Example: tool/run probe_flash { elf, chip, target:\"probe\", confirm:\"1\" }." +
+          (isDesktopClient() ? " LabWired desktop ignores LABWIRED_FLASH_AUTO." : ""),
       );
-    }
-    // Even with autoConfirm, require confirm for non-virtual unless LABWIRED_FLASH_AUTO=1
-    if (!isVirtual && !confirmed && process.env.LABWIRED_FLASH_AUTO !== "1") {
-      // Soft-gate when autoConfirm true: still require confirm for physical safety
-      if (target === "probe" || target === "auto" || target === "hardware") {
-        throw new Error(
-          "probe_flash: confirmation required for physical/auto target. " +
-            "Pass confirm=1 after user approval, or target=virtual for twin. " +
-            "Override only with LABWIRED_FLASH_AUTO=1 (dangerous).",
-        );
-      }
     }
   }
 
@@ -695,16 +731,16 @@ async function runSpecialTool(tool, params) {
     const marker = String(params.marker || "LABWIRED_OK");
     const baud = String(params.baud || "115200");
     const timeout = String(params.timeout || "8");
-    const confirm = String(params.confirm || "").toLowerCase();
-    const confirmed = confirm === "1" || confirm === "yes" || confirm === "true";
-    const isVirtual = target === "virtual" || target === "sim" || target === "twin";
+    const isVirtual = isVirtualTarget(target);
 
-    if (!isVirtual && !confirmed && process.env.LABWIRED_FLASH_AUTO !== "1") {
+    if (physicalFlashNeedsConfirmation(target, params.confirm)) {
       return {
         code: 2,
         stdout: "",
         stderr:
-          "hw_promote: physical target requires confirm=1 after user approval (or target=virtual).\n",
+          "hw_promote: physical target requires confirm=1 after user approval (or target=virtual)." +
+          (isDesktopClient() ? " LabWired desktop ignores LABWIRED_FLASH_AUTO." : "") +
+          "\n",
         extra: { status: "needs_confirm" },
       };
     }
@@ -1089,6 +1125,14 @@ async function chatSend(params) {
     const rest = (slash[2] || "").trim();
     const mapped = mapSlashToTool(cmd, rest);
     if (mapped) {
+      if (isDesktopClient() && !DESKTOP_READ_ONLY_SLASH_TOOLS.has(mapped.name)) {
+        const message =
+          `Desktop safety: /${cmd} would invoke mutating tool \`${mapped.name}\`; ` +
+          "run it from an explicitly confirmed workflow instead.";
+        notify("chat/textDelta", { text: message + "\n" });
+        notify("chat/done", { source: "safety", code: 2 });
+        return { source: "safety", tool: mapped.name, code: 2, message };
+      }
       notify("chat/textDelta", { text: `Running tool \`${mapped.name}\`…\n` });
       const out = await toolRun(mapped);
       const body =
@@ -1111,8 +1155,12 @@ async function chatSend(params) {
 
   const hint = [
     "No LLM backend available for freeform chat.",
-    "Set LABWIRED_MODEL_URL + LABWIRED_MODEL_KEY, install opencode, or use slash tools:",
-    "/doctor  /smoke  /version  /probe list  /gdb info  /plot  /help",
+    isDesktopClient()
+      ? "Set LABWIRED_MODEL_URL + LABWIRED_MODEL_KEY, or use read-only slash tools:"
+      : "Set LABWIRED_MODEL_URL + LABWIRED_MODEL_KEY, install opencode, or use slash tools:",
+    isDesktopClient()
+      ? "/doctor  /version  /probe list  /gdb info  /plot  /help"
+      : "/doctor  /smoke  /version  /probe list  /gdb info  /plot  /help",
   ].join("\n");
   notify("chat/textDelta", { text: hint + "\n" });
   notify("chat/done", { source: "fallback" });
@@ -1191,6 +1239,7 @@ function chatStop() {
 }
 
 function tryOpencode(prompt) {
+  if (isDesktopClient()) return Promise.resolve(null);
   return new Promise((resolveOc) => {
     const args = ["run", "--format", "json", "--agent", "labwired", "--auto", prompt];
     let settled = false;

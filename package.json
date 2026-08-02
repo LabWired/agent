@@ -59,6 +59,7 @@
     "postinstall": "node scripts/npm-install.js --postinstall || true",
     "test": "bash tests/all.sh",
     "test:target-runtime": "node --test tests/target-runtime.test.mjs",
+    "test:rpc-desktop-safety": "node --test tests/rpc-desktop-safety.test.mjs",
     "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh",
     "test:install": "bash tests/install-smoke.sh",
     "test:llm": "bash tests/llm-deepinfra.sh"

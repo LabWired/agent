@@ -46,4 +46,4 @@ jobs:
         env:
           LABWIRED_CLI: ""
           LABWIRED_TARGET_REAL_SIM: "1"
-        run: node --test tests/target-runtime.test.mjs
+        run: node --test tests/target-runtime.test.mjs tests/rpc-desktop-safety.test.mjs
