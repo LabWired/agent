@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readdir } from "node:fs/promises";
+import { listTargets, runTarget } from "./target-runtime.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
@@ -355,6 +356,12 @@ async function dispatch(method, params) {
       };
     case "tool/run":
       return toolRun(params);
+    case "target/list":
+      return { targets: listTargets() };
+    case "target/run":
+      return targetExecute(params, false);
+    case "target/verify":
+      return targetExecute(params, true);
     case "chat/send":
       return chatSend(params);
     case "chat/stop":
@@ -390,9 +397,32 @@ function initialize(params) {
       tools: true,
       chat: true,
       serial: true,
+      targetGraphV1: true,
       modes: ["act", "plan", "debug", "verify"],
     },
   };
+}
+
+async function targetExecute(params = {}, verify) {
+  const request = params && typeof params === "object" ? params : {};
+  const response = await runTarget({
+    targetId: request.targetId,
+    manifestDigest: request.manifestDigest,
+    fixture: request.fixture,
+    verify,
+    workspacePath: Object.prototype.hasOwnProperty.call(request, "workspacePath")
+      ? request.workspacePath
+      : state.workspacePath,
+    onState: (runState) => notify("target/runState", runState),
+  });
+  if (response.evidence) {
+    notify("evidence/append", {
+      run: response.run,
+      resultRef: response.resultRef,
+      evidence: response.evidence,
+    });
+  }
+  return response;
 }
 
 async function toolRun(params) {
