@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
@@ -675,6 +675,50 @@ test("a test.yaml symlink planted after queued cannot be followed or promoted", 
     );
   } finally {
     await rm(workdir, { recursive: true, force: true });
+  }
+});
+
+test("a replaced run bundle cannot redirect later artifacts outside the workspace", async (t) => {
+  const [target] = listTargets();
+  const workdir = await workspace("bundle-replacement");
+  const outside = await workspace("bundle-replacement-outside");
+  const updates = [];
+  try {
+    try {
+      await symlink(outside, join(workdir, "symlink-probe"), process.platform === "win32" ? "junction" : "dir");
+      await rm(join(workdir, "symlink-probe"), { recursive: true, force: true });
+    } catch (error) {
+      t.skip(`symlinks are unavailable on this host: ${error.code || error.message}`);
+      return;
+    }
+    await assert.rejects(
+      runTarget({
+        targetId: target.targetId,
+        manifestDigest: target.digest,
+        fixture: "fixed",
+        verify: false,
+        workspacePath: workdir,
+        onState: (run) => {
+          updates.push(run);
+          if (run.phase === "queued") {
+            const bundle = evidenceDirectory(workdir, run);
+            rmSync(bundle, { recursive: true, force: true });
+            mkdirSync(outside, { recursive: true });
+            writeFileSync(join(outside, "test.yaml"), "safe replacement", "utf8");
+            symlinkSync(outside, bundle, process.platform === "win32" ? "junction" : "dir");
+          }
+        },
+      }),
+      /symlink|unsafe/i,
+    );
+    assert.equal(existsSync(join(outside, "run.log")), false);
+    assert.deepEqual(
+      updates.map((run) => run.phase),
+      ["queued", "running", "evaluating", "failed"],
+    );
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   }
 });
 

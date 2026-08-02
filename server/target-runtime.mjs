@@ -94,6 +94,7 @@ export async function runTarget(request) {
     queued = true;
     transition(run, "running", onState);
     // Re-check after the event: a renderer/process must not redirect an artifact.
+    await assertSafeBundle(bundle);
     await assertSafeRegularFile(bundleScriptPath);
 
     let runner = failedRunner("simulator did not start");
@@ -110,11 +111,12 @@ export async function runTarget(request) {
 
     const parsed = await parseRunArtifacts(stagingPath, runner);
     transition(run, "evaluating", onState);
+    await assertSafeBundle(bundle);
     await assertSafeRegularFile(bundleScriptPath);
-    await writeNewFile(join(bundle.path, "run.log"), runLogText(runner));
-    await writeNewFile(join(bundle.path, "result.json"), parsed.resultBytes);
-    await copyStagedArtifactIfPresent(stagingPath, bundle.path, "uart.log");
-    await copyStagedArtifactIfPresent(stagingPath, bundle.path, "run-manifest.json");
+    await writeBundleFile(bundle, "run.log", runLogText(runner));
+    await writeBundleFile(bundle, "result.json", parsed.resultBytes);
+    await copyStagedArtifactIfPresent(stagingPath, bundle, "uart.log");
+    await copyStagedArtifactIfPresent(stagingPath, bundle, "run-manifest.json");
 
     const result = {
       status: parsed.status,
@@ -134,12 +136,11 @@ export async function runTarget(request) {
     }
 
     const evidence = await createEvidenceNode({
-      bundlePath: bundle.path,
-      workspacePath: bundle.workspacePath,
+      bundle,
       run,
       status: proofStatus(parsed),
     });
-    await writeNewFile(join(bundle.path, "claim.json"), `${JSON.stringify(evidence, null, 2)}\n`);
+    await writeBundleFile(bundle, "claim.json", `${JSON.stringify(evidence, null, 2)}\n`);
     transition(run, evidence.status === "model_verified" ? "completed" : "failed", onState);
     terminal = true;
     return { run: clone(run), result, resultRef, evidence };
@@ -201,7 +202,9 @@ async function createSafeBundle(workspacePath, runId) {
   if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(bundlePath);
   const canonicalBundle = await realpath(bundlePath);
   assertPathInside(canonicalWorkspace, canonicalBundle);
-  return { workspacePath: canonicalWorkspace, path: canonicalBundle };
+  const bundle = { workspacePath: canonicalWorkspace, path: canonicalBundle };
+  await assertSafeBundle(bundle);
+  return bundle;
 }
 
 async function ensureSafeDirectory(path, workspacePath) {
@@ -238,6 +241,19 @@ async function assertSafeRegularFile(path) {
   if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(path);
 }
 
+async function assertSafeBundle(bundle) {
+  const info = await lstat(bundle.path);
+  if (!info.isDirectory() || info.isSymbolicLink()) throw unsafePathError(bundle.path);
+  const canonicalPath = await realpath(bundle.path);
+  if (canonicalPath !== bundle.path) throw unsafePathError(bundle.path);
+  assertPathInside(bundle.workspacePath, canonicalPath);
+}
+
+async function writeBundleFile(bundle, name, data) {
+  await assertSafeBundle(bundle);
+  await writeNewFile(join(bundle.path, name), data);
+}
+
 async function writeNewFile(path, data) {
   const noFollow = Number.isInteger(fsConstants.O_NOFOLLOW) ? fsConstants.O_NOFOLLOW : 0;
   const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow;
@@ -253,7 +269,7 @@ async function writeNewFile(path, data) {
   }
 }
 
-async function copyStagedArtifactIfPresent(stagingPath, bundlePath, name) {
+async function copyStagedArtifactIfPresent(stagingPath, bundle, name) {
   const sourcePath = join(stagingPath, name);
   let info;
   try {
@@ -263,7 +279,7 @@ async function copyStagedArtifactIfPresent(stagingPath, bundlePath, name) {
     throw error;
   }
   if (!info.isFile() || info.isSymbolicLink()) throw unsafePathError(sourcePath);
-  await writeNewFile(join(bundlePath, name), await readFile(sourcePath));
+  await writeBundleFile(bundle, name, await readFile(sourcePath));
   return true;
 }
 
@@ -394,10 +410,11 @@ function proofStatus(parsed) {
     : "failed";
 }
 
-async function createEvidenceNode({ bundlePath, workspacePath, run, status }) {
+async function createEvidenceNode({ bundle, run, status }) {
+  await assertSafeBundle(bundle);
   const artifactFiles = ["test.yaml", "result.json"];
   for (const file of ["uart.log", "run-manifest.json"]) {
-    if (await safeRegularFileExists(join(bundlePath, file))) artifactFiles.push(file);
+    if (await safeRegularFileExists(join(bundle.path, file))) artifactFiles.push(file);
   }
   artifactFiles.push("run.log", "claim.json");
   return {
@@ -409,7 +426,7 @@ async function createEvidenceNode({ bundlePath, workspacePath, run, status }) {
     status,
     tool: "target/verify",
     oracleRef: ORACLE_REF,
-    artifactRefs: artifactFiles.map((file) => workspaceRelativePath(workspacePath, join(bundlePath, file))),
+    artifactRefs: artifactFiles.map((file) => workspaceRelativePath(bundle.workspacePath, join(bundle.path, file))),
     ts: new Date().toISOString(),
   };
 }
