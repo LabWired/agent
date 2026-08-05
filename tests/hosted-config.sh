@@ -30,7 +30,9 @@ assert opts.get("baseURL") == "https://api.labwired.com/v1", opts
 assert "{env:LABWIRED_ACCESS_TOKEN}" in str(opts.get("apiKey")), opts
 headers = opts.get("headers") or {}
 assert "{env:LABWIRED_PROJECT}" in str(headers.get("X-LabWired-Project", "")), headers
-assert "labwired-default" in (prov.get("models") or {}), prov
+models = prov.get("models") or {}
+assert "labwired-default" in models, prov
+assert "labwired-fast" in models, prov
 assert cfg.get("model") == "labwired/labwired-default", cfg.get("model")
 # Skills allowlist must include verify gate
 skills = (cfg.get("permission") or {}).get("skill") or {}
