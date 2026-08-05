@@ -28,6 +28,13 @@ irm https://labwired.com/install.ps1 | iex
 Then:
 
 ```bash
+labwired login    # device code → shared tools + hosted model
+labwired          # agent with labwired_* MCP tools
+```
+
+Local-only (no sign-in) still works with a local model / sim:
+
+```bash
 labwired
 ```
 

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "labwired": {
+      "type": "remote",
+      "url": "https://api.labwired.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LABWIRED_ACCESS_TOKEN}"
+      }
+    }
+  },
+  "permission": {
+    "skill": {
+      "verify-firmware": "allow",
+      "diagnose-firmware": "allow",
+      "inspect-evidence": "allow",
+      "board-bringup": "allow",
+      "scaffold-firmware": "allow",
+      "report-evidence": "allow",
+      "flash-firmware": "allow",
+      "firmware-repair-loop": "allow",
+      "hw-promote": "allow"
+    }
+  },
+  "provider": {
+    "labwired": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LabWired",
+      "options": {
+        "baseURL": "https://api.labwired.com/v1",
+        "apiKey": "{env:LABWIRED_ACCESS_TOKEN}",
+        "headers": {
+          "X-LabWired-Project": "{env:LABWIRED_PROJECT}"
+        }
+      },
+      "models": {
+        "labwired-default": {
+          "name": "LabWired · Default"
+        }
+      }
+    }
+  },
+  "model": "labwired/labwired-default",
+  "autoupdate": false,
+  "share": "disabled",
+  "agent": {
+    "labwired": {
+      "name": "LabWired Agent",
+      "description": "Write firmware and prove it on the shared LabWired twin (hosted tools + knowledge).",
+      "mode": "primary",
+      "color": "#0056b3"
+    }
+  },
+  "default_agent": "labwired"
+}

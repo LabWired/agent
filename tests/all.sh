@@ -22,9 +22,12 @@ run() {
 
 run "harness"           "$ROOT/tests/harness.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
+run "hosted-config"     "$ROOT/tests/hosted-config.sh"
 run "public-install"    "$ROOT/tests/public-install.sh"
 run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
 run "demo"              "$ROOT/demo.sh"
+run "fw-usecase-qa"     "$ROOT/tests/fw-usecase-qa.sh"
+run "gap-ready-qa"      "$ROOT/tests/gap-ready-qa.sh"
 
 # Optional heavier / network lanes
 if [[ "${LABWIRED_TEST_INSTALL_SMOKE:-1}" == "1" ]]; then

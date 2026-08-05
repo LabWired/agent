@@ -31,6 +31,10 @@ while [[ $# -gt 0 ]]; do
       PROFILE=airgap
       shift
       ;;
+    --hosted)
+      PROFILE=hosted
+      shift
+      ;;
     --minimal)
       export LABWIRED_MINIMAL=1
       shift
@@ -81,6 +85,7 @@ Portable, contained install (multi-platform):
   --with-pio         Also install PlatformIO (slower)
   --minimal          Agent kit only
   --airgap           Vendored MCP / LABWIRED_MCP_ENTRY
+  --hosted           Remote MCP + api.labwired.com model (labwired login)
   --prefix DIR       Portable root (USB, CI, /opt/labwired)
 
   curl -fsSL https://labwired.com/install | bash
@@ -198,11 +203,17 @@ say "installing LabWired config into $CFG_DIR"
 mkdir -p "$CFG_DIR/skills"
 if [[ "$PROFILE" == "airgap" && -f "$SRC/config/opencode.airgap.json" ]]; then
   cp "$SRC/config/opencode.airgap.json" "$CFG_DIR/opencode.json"
+elif [[ "$PROFILE" == "hosted" && -f "$SRC/config/opencode.hosted.json" ]]; then
+  cp "$SRC/config/opencode.hosted.json" "$CFG_DIR/opencode.json"
+  say "OpenCode provider: LabWired hosted (api.labwired.com) — run labwired login"
 elif [[ -n "${DEEPINFRA_API_KEY:-}" && -f "$SRC/config/opencode.deepinfra.json" ]]; then
   cp "$SRC/config/opencode.deepinfra.json" "$CFG_DIR/opencode.json"
   say "OpenCode provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
 else
   cp "$SRC/config/opencode.json" "$CFG_DIR/opencode.json"
+fi
+if [[ -f "$SRC/config/opencode.hosted.json" ]]; then
+  cp "$SRC/config/opencode.hosted.json" "$CFG_DIR/opencode.hosted.json"
 fi
 cp "$SRC/config/AGENTS.md"     "$CFG_DIR/AGENTS.md"
 cp -R "$SRC/skills/." "$CFG_DIR/skills/"
@@ -226,8 +237,10 @@ python3 - <<'PY'
 import json, os, pathlib
 cfg_path = pathlib.Path(os.environ["CFG_DIR"]) / "opencode.json"
 cfg = json.loads(cfg_path.read_text())
-cfg.setdefault("mcp", {}).setdefault("labwired", {})
-cfg["mcp"]["labwired"]["command"] = json.loads(os.environ["MCP_JSON"])
+lw = cfg.setdefault("mcp", {}).setdefault("labwired", {})
+# Hosted profile uses remote Streamable HTTP — do not inject a local command.
+if lw.get("type") != "remote":
+    lw["command"] = json.loads(os.environ["MCP_JSON"])
 cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
 say "wrote MCP command into $CFG_DIR/opencode.json"

@@ -111,7 +111,7 @@ Install must land:
 
 ### P2 — sells like a product
 
-- [ ] Free cloud path: hosted MCP + Playground without local sim  
+- [x] Free cloud path: hosted MCP + model gateway without local sim (`labwired login` + `config/opencode.hosted.json`)  
 - [ ] Pro: agent session in editor (VS Code / Studio) as default paid story  
 - [ ] Enterprise one-pager: air-gap install + on-prem model  
 - [ ] Pilot motion for regulated teams (BootLoop-style FDE optional)  
