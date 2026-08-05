@@ -16,6 +16,10 @@ workspaces/**/evidence/
 examples/**/evidence/
 fixtures/**/evidence/
 **/evidence/
+# Smoke run artifacts (keep coverage-latest.* tracked)
+fixtures/coverage/smoke/
+__pycache__/
+*.pyc
 *.elf
 *.bin
 !fixtures/**/*.bin

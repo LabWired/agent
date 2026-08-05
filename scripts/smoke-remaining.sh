@@ -2,6 +2,9 @@
 # Everything we can automate beyond Wave A (no video, no interactive browser login).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SMOKE_OUT="${LABWIRED_SMOKE_OUT:-$ROOT/fixtures/coverage/smoke}"
+mkdir -p "$SMOKE_OUT"
+export LABWIRED_SMOKE_OUT="$SMOKE_OUT"
 fail=0
 pass() { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fail=1; }
@@ -9,18 +12,18 @@ bad() { echo "FAIL $*"; fail=1; }
 echo "==> smoke-remaining (B/C automatable)"
 
 # Wave A still green
-if bash "$ROOT/scripts/smoke-wave-a.sh" >/tmp/lw-wa.txt 2>&1; then
+if bash "$ROOT/scripts/smoke-wave-a.sh" >"$SMOKE_OUT/wave-a.txt" 2>&1; then
   pass "smoke-wave-a"
 else
-  bad "smoke-wave-a"; tail -10 /tmp/lw-wa.txt
+  bad "smoke-wave-a"; tail -10 "$SMOKE_OUT/wave-a.txt"
 fi
 
 # Coverage ratchet
 chmod +x "$ROOT/scripts/coverage-ratchet.sh" 2>/dev/null || true
-if bash "$ROOT/scripts/coverage-ratchet.sh" >/tmp/lw-cov.txt 2>&1; then
-  pass "coverage-ratchet $(tail -1 /tmp/lw-cov.txt)"
+if bash "$ROOT/scripts/coverage-ratchet.sh" >"$SMOKE_OUT/coverage.txt" 2>&1; then
+  pass "coverage-ratchet $(tail -1 "$SMOKE_OUT/coverage.txt")"
 else
-  bad "coverage-ratchet"; cat /tmp/lw-cov.txt
+  bad "coverage-ratchet"; cat "$SMOKE_OUT/coverage.txt"
 fi
 if [[ -f "$ROOT/fixtures/coverage/coverage-latest.json" ]]; then
   pass "coverage-latest.json published under fixtures/coverage/"
@@ -31,14 +34,14 @@ fi
 # Evidence report on offline green
 if python3 "$ROOT/scripts/report-evidence.py" \
   --twin "$ROOT/fixtures/gate1/artifacts/fixed.verify.json" \
-  --out /tmp/lw-report.md \
+  --out "$SMOKE_OUT/report.md" \
   --require-evidence-on-green; then
   pass "report-evidence offline green"
 else
   bad "report-evidence"
 fi
-if grep -q 'twin_status:       model_verified' /tmp/lw-report.md \
-  && grep -q 'hardware_status:   not_run' /tmp/lw-report.md; then
+if grep -q 'twin_status:       model_verified' "$SMOKE_OUT/report.md" \
+  && grep -q 'hardware_status:   not_run' "$SMOKE_OUT/report.md"; then
   pass "dual-claim footer twin green / hw not_run"
 else
   bad "dual-claim footer"
@@ -48,30 +51,30 @@ fi
 if [[ -f "$ROOT/fixtures/gate1-live/evidence/fixed/result.json" ]]; then
   python3 "$ROOT/scripts/report-evidence.py" \
     --twin "$ROOT/fixtures/gate1-live/evidence/fixed/result.json" \
-    --out /tmp/lw-live-report.md || true
+    --out "$SMOKE_OUT/live-report.md" || true
   pass "report-evidence live-gate1 payload rendered"
 fi
 
 # LA capture compose
 if python3 "$ROOT/scripts/compose-from-capture.py" \
   --capture "$ROOT/fixtures/observability/sample-capture.json" \
-  --out /tmp/lw-la.json; then
+  --out "$SMOKE_OUT/la.json"; then
   pass "compose-from-capture sample LA"
 else
   bad "compose-from-capture"
 fi
-if grep -q 'edge.CH0' /tmp/lw-la.json; then
+if grep -q 'edge.CH0' "$SMOKE_OUT/la.json"; then
   pass "LA series edge.CH0 present"
 else
   bad "LA series missing"
 fi
 
 # Merge capture + uart
-printf 'LED ON\nLED OFF\n' >/tmp/lw-u.log
+printf 'LED ON\nLED OFF\n' >"$SMOKE_OUT/u.log"
 if python3 "$ROOT/scripts/compose-from-capture.py" \
   --capture "$ROOT/fixtures/observability/sample-capture.json" \
-  --uart /tmp/lw-u.log \
-  --out /tmp/lw-merge.json; then
+  --uart "$SMOKE_OUT/u.log" \
+  --out "$SMOKE_OUT/merge.json"; then
   pass "compose capture+uart merge"
 else
   bad "compose merge"
@@ -83,10 +86,10 @@ for d in GOLDEN_PATH.md REVERSE_STEP_DEMO.md; do
 done
 
 # Skills inventory
-if bash "$ROOT/tests/skills-inventory.sh" >/tmp/lw-si.txt 2>&1; then
+if bash "$ROOT/tests/skills-inventory.sh" >"$SMOKE_OUT/skills-inventory.txt" 2>&1; then
   pass "skills-inventory"
 else
-  bad "skills-inventory"; tail -8 /tmp/lw-si.txt
+  bad "skills-inventory"; tail -8 "$SMOKE_OUT/skills-inventory.txt"
 fi
 
 # Hosted MCP (optional — needs login session)

@@ -23,6 +23,7 @@ run() {
 run "harness"           "$ROOT/tests/harness.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "hosted-config"     "$ROOT/tests/hosted-config.sh"
+run "compose-helpers"   "$ROOT/tests/compose-helpers.sh"
 run "smoke-wave-a"      "$ROOT/scripts/smoke-wave-a.sh"
 run "smoke-remaining"   "$ROOT/scripts/smoke-remaining.sh"
 run "public-install"    "$ROOT/tests/public-install.sh"

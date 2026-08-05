@@ -207,10 +207,13 @@ cmd_doctor() {
     firmware-repair-loop hw-promote \
     compose-observability part-knowledge golden-path
   do
+    # Prefer OpenCode install dir; fall back to this kit's skills/ (checkout/doctor)
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
+    elif [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
+      say "ok  skill: $skill (kit)"
     else
-      printf '\033[31mFAIL\033[0m skill: missing %s/skills/%s — run ./install.sh\n' "$cfg" "$skill"
+      printf '\033[31mFAIL\033[0m skill: missing %s — run labwired (prepare) or ./install.sh\n' "$skill"
       ok=1
     fi
   done
