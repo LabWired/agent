@@ -1,0 +1,5002 @@
+{
+  "schema_version": 3,
+  "device_types": [
+    "74hc595",
+    "a4988",
+    "acs712",
+    "ads1115",
+    "adxl345",
+    "adxl345_spi",
+    "aht20",
+    "ams1117",
+    "as5600",
+    "at24c256",
+    "bg770a-cellular",
+    "bh1750",
+    "bme280",
+    "bmi270",
+    "bmp280",
+    "bno055",
+    "button",
+    "buzzer",
+    "can-diagnostic-tool",
+    "can-transceiver",
+    "capacitor",
+    "dht11",
+    "dht22",
+    "diode",
+    "dip-switch",
+    "drv2605",
+    "drv8825",
+    "ds18b20",
+    "ds3231",
+    "esp32",
+    "esp32-c3-supermini",
+    "esp32-s3-zero",
+    "flame-sensor",
+    "fxos8700",
+    "hall-sensor",
+    "hc-05",
+    "hc595-7seg",
+    "hx711",
+    "ili9341",
+    "ina219",
+    "inmp441",
+    "iolink-master",
+    "iolink-transceiver",
+    "ir-obstacle",
+    "irf520",
+    "joystick",
+    "keypad",
+    "kw41z-dev",
+    "l293d",
+    "l298n",
+    "lcd1602",
+    "ldr",
+    "led",
+    "led-matrix",
+    "lipo_charger",
+    "lm2596",
+    "logic-analyzer",
+    "logic-level-shifter",
+    "lora-sx1278",
+    "m12-5pin",
+    "max30102",
+    "max31855",
+    "max485",
+    "max98357",
+    "mcp2515",
+    "mcu",
+    "microphone",
+    "microsd",
+    "mlx90614",
+    "mlx90640",
+    "mp1584",
+    "mpu6050",
+    "mq-135",
+    "mq-2",
+    "mq-6",
+    "mt3608",
+    "neo6m-gps",
+    "neopixel",
+    "note",
+    "nrf24l01",
+    "nrf52840-dk",
+    "nrf54l15",
+    "ntc-thermistor",
+    "nucleo-f401re",
+    "nucleo-h563zi",
+    "nucleo-l476rg",
+    "oled-sh1107",
+    "oled-ssd1306",
+    "oled-ssd1306-128x32",
+    "pca9685",
+    "pcd8544",
+    "pcf8574",
+    "pir-sensor",
+    "pn532",
+    "potentiometer",
+    "rain-sensor",
+    "rc522",
+    "relay-4ch",
+    "resistor",
+    "rgb-led",
+    "rotary-encoder",
+    "rpi-pico",
+    "scd41",
+    "servo",
+    "seven-segment",
+    "sgp41",
+    "sht30",
+    "sht31",
+    "sim800l",
+    "slide-switch",
+    "sn74hc165",
+    "soil-moisture",
+    "sound-sensor",
+    "sps30",
+    "ssd1680_tricolor_290",
+    "stepper-28byj48",
+    "stm32-blackpill",
+    "stm32-dev",
+    "stm32h735",
+    "tb6612",
+    "text-annotation",
+    "tm1637-7seg",
+    "tmc2209",
+    "tmp102",
+    "tmp117",
+    "tp4056",
+    "transistor",
+    "ttp223",
+    "uc8151d_tricolor_290",
+    "uln2003",
+    "ultrasonic",
+    "veml7700",
+    "vibration-sensor",
+    "vl53l0x",
+    "vl53l1x",
+    "water-level",
+    "wifi-ap",
+    "xl6009"
+  ],
+  "peripheral_device_types": [
+    "74hc595",
+    "ads1115",
+    "adxl345",
+    "adxl345_spi",
+    "aht20",
+    "as5600",
+    "at24c256",
+    "bg770a-cellular",
+    "bh1750",
+    "bme280",
+    "bmi270",
+    "bmp280",
+    "bno055",
+    "drv2605",
+    "ds3231",
+    "fxos8700",
+    "hc-05",
+    "hc595-7seg",
+    "hx711",
+    "ili9341",
+    "ina219",
+    "iolink-master",
+    "lcd1602",
+    "ldr",
+    "led-matrix",
+    "lipo_charger",
+    "lora-sx1278",
+    "max30102",
+    "max31855",
+    "mcp2515",
+    "microsd",
+    "mlx90614",
+    "mlx90640",
+    "mpu6050",
+    "mq-6",
+    "neo6m-gps",
+    "neopixel",
+    "nrf24l01",
+    "ntc-thermistor",
+    "oled-sh1107",
+    "oled-ssd1306",
+    "oled-ssd1306-128x32",
+    "pca9685",
+    "pcd8544",
+    "pcf8574",
+    "pn532",
+    "potentiometer",
+    "rc522",
+    "scd41",
+    "seven-segment",
+    "sgp41",
+    "sht30",
+    "sht31",
+    "sim800l",
+    "sn74hc165",
+    "soil-moisture",
+    "sps30",
+    "ssd1680_tricolor_290",
+    "tm1637-7seg",
+    "tmp102",
+    "tmp117",
+    "uc8151d_tricolor_290",
+    "veml7700",
+    "vl53l0x",
+    "vl53l1x"
+  ],
+  "peripherals": [
+    {
+      "device_type": "74hc595",
+      "label": "74HC595 Shift Register (8-bit output)",
+      "transport": "spi",
+      "summary": "8-bit serial-in / parallel-out shift register over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "ads1115",
+      "label": "ADS1115 16-bit ADC",
+      "transport": "i2c",
+      "summary": "4-channel 16-bit I²C ADC (TI ADS1115).",
+      "kit": true
+    },
+    {
+      "device_type": "adxl345",
+      "label": "ADXL345 Tilt",
+      "transport": "i2c",
+      "summary": "3-axis ±2/4/8/16 g digital accelerometer over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "adxl345_spi",
+      "label": "ADXL345 accelerometer",
+      "transport": "spi",
+      "summary": "3-axis ±16 g accelerometer over SPI (full-resolution, 256 LSB/g).",
+      "kit": true
+    },
+    {
+      "device_type": "aht20",
+      "label": "AHT20 Temp/Humidity",
+      "transport": "i2c",
+      "summary": "Aosong AHT20 I²C temperature and humidity sensor.",
+      "kit": true
+    },
+    {
+      "device_type": "as5600",
+      "label": "AS5600 Magnetic Encoder",
+      "transport": "i2c",
+      "summary": "12-bit contactless magnetic rotary position sensor over I²C.",
+      "kit": true
+    },
+    {
+      "device_type": "at24c256",
+      "label": "AT24C256 EEPROM",
+      "transport": "i2c",
+      "summary": "I²C 32 KiB EEPROM shell (256-byte sim window).",
+      "kit": true
+    },
+    {
+      "device_type": "bg770a-cellular",
+      "label": "Quectel BG770A Cellular",
+      "transport": "uart",
+      "summary": "LTE-M / NB-IoT cellular modem with the full Quectel AT command surface.",
+      "kit": true
+    },
+    {
+      "device_type": "bh1750",
+      "label": "ROHM BH1750",
+      "transport": "i2c",
+      "summary": "Ambient-light sensor over I²C (single-byte opcodes).",
+      "kit": true
+    },
+    {
+      "device_type": "bme280",
+      "label": "BME280 Weather",
+      "transport": "i2c",
+      "summary": "Bosch BME280 temp + humidity + pressure sensor over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "bmi270",
+      "label": "bmi270",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "bmp280",
+      "label": "BMP280 Pressure",
+      "transport": "i2c",
+      "summary": "Bosch BMP280 I²C pressure + temperature sensor (no humidity).",
+      "kit": true
+    },
+    {
+      "device_type": "bno055",
+      "label": "BNO055 IMU",
+      "transport": "i2c",
+      "summary": "9-DoF absolute orientation sensor (Bosch BNO055) over I²C.",
+      "kit": true
+    },
+    {
+      "device_type": "drv2605",
+      "label": "drv2605",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "ds3231",
+      "label": "DS3231 RTC",
+      "transport": "i2c",
+      "summary": "I²C real-time clock with temperature-compensated crystal.",
+      "kit": true
+    },
+    {
+      "device_type": "fxos8700",
+      "label": "FXOS8700",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "hc-05",
+      "label": "HC-05 Bluetooth",
+      "transport": "uart",
+      "summary": "Bluetooth SPP module with AT command shell over UART.",
+      "kit": true
+    },
+    {
+      "device_type": "hc595-7seg",
+      "label": "74HC595 7-Segment (4-digit)",
+      "transport": "spi",
+      "summary": "4-digit 7-segment LED display driven by two chained 74HC595 shift registers over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "hx711",
+      "label": "HX711 Load Cell",
+      "transport": "gpio_group",
+      "summary": "24-bit load-cell amplifier (DT/SCK bit-bang).",
+      "kit": true
+    },
+    {
+      "device_type": "ili9341",
+      "label": "ILI9341 TFT",
+      "transport": "spi",
+      "summary": "240×320 RGB565 SPI TFT display.",
+      "kit": true
+    },
+    {
+      "device_type": "ina219",
+      "label": "INA219 Power Monitor",
+      "transport": "i2c",
+      "summary": "High-side current and bus voltage sensor over I²C.",
+      "kit": true
+    },
+    {
+      "device_type": "iolink-master",
+      "label": "IO-Link Master",
+      "transport": "uart",
+      "summary": "IO-Link master state machine over UART.",
+      "kit": true
+    },
+    {
+      "device_type": "lcd1602",
+      "label": "LCD1602 Character Display (I2C)",
+      "transport": "i2c",
+      "summary": "16×2 HD44780 character LCD behind a PCF8574 I2C backpack.",
+      "kit": true
+    },
+    {
+      "device_type": "ldr",
+      "label": "Photoresistor (LDR)",
+      "transport": "analog",
+      "summary": "CdS photoresistor + voltage divider on an ADC channel.",
+      "kit": true
+    },
+    {
+      "device_type": "led-matrix",
+      "label": "MAX7219 8×8 LED Matrix",
+      "transport": "spi",
+      "summary": "8×8 LED matrix driven by a MAX7219 serial display driver over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "lipo_charger",
+      "label": "LiPo battery + charger",
+      "transport": "analog",
+      "summary": "Single-cell LiPo pack + TP4056-class analog charger on an ADC channel.",
+      "kit": true
+    },
+    {
+      "device_type": "lora-sx1278",
+      "label": "LoRa SX1278 / RA-02",
+      "transport": "spi",
+      "summary": "Semtech SX1278 SPI LoRa register shell (no RF).",
+      "kit": true
+    },
+    {
+      "device_type": "max30102",
+      "label": "max30102",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "max31855",
+      "label": "MAX31855 thermocouple",
+      "transport": "spi",
+      "summary": "K-type thermocouple-to-digital converter over SPI (read-only 32-bit frame).",
+      "kit": true
+    },
+    {
+      "device_type": "mcp2515",
+      "label": "MCP2515 CAN",
+      "transport": "spi",
+      "summary": "SPI CAN controller register shell (no bus frames).",
+      "kit": true
+    },
+    {
+      "device_type": "microsd",
+      "label": "microSD (SPI)",
+      "transport": "spi",
+      "summary": "SPI SD card command shell (init + single-block read zeros).",
+      "kit": true
+    },
+    {
+      "device_type": "mlx90614",
+      "label": "Melexis MLX90614 IR Temp",
+      "transport": "i2c",
+      "summary": "Single-point IR (non-contact) thermometer over SMBus/I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "mlx90640",
+      "label": "mlx90640",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "mpu6050",
+      "label": "MPU6050 IMU",
+      "transport": "i2c",
+      "summary": "6-axis gyro + accelerometer over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "mq-6",
+      "label": "MQ-6 Gas Sensor",
+      "transport": "analog",
+      "summary": "Hanwei MQ-6 LPG/propane semiconductor gas sensor module (AOUT on ADC).",
+      "kit": true
+    },
+    {
+      "device_type": "neo6m-gps",
+      "label": "NEO-6M GPS",
+      "transport": "uart",
+      "summary": "GPS module streaming NMEA sentences over UART RX.",
+      "kit": true
+    },
+    {
+      "device_type": "neopixel",
+      "label": "NeoPixel Strip",
+      "transport": "spi",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "nrf24l01",
+      "label": "nRF24L01+",
+      "transport": "spi",
+      "summary": "2.4 GHz SPI transceiver register shell (no air link).",
+      "kit": true
+    },
+    {
+      "device_type": "ntc-thermistor",
+      "label": "NTC Thermistor",
+      "transport": "analog",
+      "summary": "10 kΩ NTC + voltage divider on an ADC channel.",
+      "kit": true
+    },
+    {
+      "device_type": "oled-sh1107",
+      "label": "SH1107 OLED",
+      "transport": "i2c",
+      "summary": "128×128 monochrome OLED display over I2C with a paged framebuffer.",
+      "kit": true
+    },
+    {
+      "device_type": "oled-ssd1306",
+      "label": "SSD1306 OLED",
+      "transport": "i2c",
+      "summary": "128×64 monochrome OLED display over I2C with a paged framebuffer.",
+      "kit": true
+    },
+    {
+      "device_type": "oled-ssd1306-128x32",
+      "label": "SSD1306 OLED 0.91″",
+      "transport": "i2c",
+      "summary": "0.91″ 128×32 monochrome OLED display over I2C with a paged framebuffer.",
+      "kit": true
+    },
+    {
+      "device_type": "pca9685",
+      "label": "NXP PCA9685 PWM/Servo",
+      "transport": "i2c",
+      "summary": "16-channel 12-bit I²C PWM / servo controller.",
+      "kit": true
+    },
+    {
+      "device_type": "pcd8544",
+      "label": "Nokia 5110 LCD",
+      "transport": "spi",
+      "summary": "Nokia 5110 (PCD8544) monochrome 84×48 LCD over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "pcf8574",
+      "label": "PCF8574 I/O Expander",
+      "transport": "i2c",
+      "summary": "NXP PCF8574 8-bit I²C quasi-bidirectional port expander.",
+      "kit": true
+    },
+    {
+      "device_type": "pn532",
+      "label": "PN532 NFC",
+      "transport": "i2c",
+      "summary": "NXP PN532 I²C NFC controller probe shell (no RF).",
+      "kit": true
+    },
+    {
+      "device_type": "potentiometer",
+      "label": "Potentiometer",
+      "transport": "analog",
+      "summary": "3-pin linear potentiometer on an ADC channel (rotary or slide).",
+      "kit": true
+    },
+    {
+      "device_type": "rc522",
+      "label": "RC522 RFID",
+      "transport": "spi",
+      "summary": "MFRC522 SPI RFID reader register shell (no RF).",
+      "kit": true
+    },
+    {
+      "device_type": "scd41",
+      "label": "Sensirion SCD41 CO₂",
+      "transport": "i2c",
+      "summary": "Photoacoustic CO₂ + temperature + humidity sensor over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "seven-segment",
+      "label": "7-Segment Display (single digit)",
+      "transport": "gpio_group",
+      "summary": "Bare single-digit 7-segment LED display driven straight from nine GPIO pins.",
+      "kit": true
+    },
+    {
+      "device_type": "sgp41",
+      "label": "Sensirion SGP41 VOC/NOx",
+      "transport": "i2c",
+      "summary": "MOx gas sensor returning raw VOC/NOx signals over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "sht30",
+      "label": "SHT30 Temp/Humidity",
+      "transport": "i2c",
+      "summary": "Sensirion SHT30 I²C temperature and humidity sensor.",
+      "kit": true
+    },
+    {
+      "device_type": "sht31",
+      "label": "Sensirion SHT31",
+      "transport": "i2c",
+      "summary": "Temperature + humidity sensor over I²C (Sensirion CRC-8).",
+      "kit": true
+    },
+    {
+      "device_type": "sim800l",
+      "label": "SIM800L GSM",
+      "transport": "uart",
+      "summary": "SIM800L UART AT command shell (no cellular RF).",
+      "kit": true
+    },
+    {
+      "device_type": "sn74hc165",
+      "label": "74HC165 Shift Register",
+      "transport": "spi",
+      "summary": "8-bit parallel-in / serial-out shift register over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "soil-moisture",
+      "label": "Soil Moisture Sensor",
+      "transport": "analog",
+      "summary": "Capacitive soil moisture probe module (AOUT on ADC; wetter → lower voltage).",
+      "kit": true
+    },
+    {
+      "device_type": "sps30",
+      "label": "Sensirion SPS30 PM",
+      "transport": "i2c",
+      "summary": "Laser particulate-matter sensor (PM1/2.5/4/10) over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "ssd1680_tricolor_290",
+      "label": "SSD1680 Tri-Color E-Paper",
+      "transport": "spi",
+      "summary": "2.9\" tri-color (black/white/red) SSD1680 e-paper over SPI.",
+      "kit": true
+    },
+    {
+      "device_type": "tm1637-7seg",
+      "label": "TM1637 7-Segment (4-digit)",
+      "transport": "gpio_group",
+      "summary": "4-digit 7-segment LED display with the TM1637 2-wire (CLK/DIO) driver.",
+      "kit": true
+    },
+    {
+      "device_type": "tmp102",
+      "label": "TI TMP102 Temperature",
+      "transport": "i2c",
+      "summary": "12-bit I²C temperature sensor (self-drifting demo).",
+      "kit": true
+    },
+    {
+      "device_type": "tmp117",
+      "label": "tmp117",
+      "transport": "i2c",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "uc8151d_tricolor_290",
+      "label": "E-Paper 2.9\" tri-color (UC8151D)",
+      "transport": "spi",
+      "summary": null,
+      "kit": false
+    },
+    {
+      "device_type": "veml7700",
+      "label": "Vishay VEML7700 Light",
+      "transport": "i2c",
+      "summary": "Ambient-light sensor (lux) over I2C.",
+      "kit": true
+    },
+    {
+      "device_type": "vl53l0x",
+      "label": "VL53L0X ToF",
+      "transport": "i2c",
+      "summary": "Laser time-of-flight distance sensor over I²C (ST VL53L0X).",
+      "kit": true
+    },
+    {
+      "device_type": "vl53l1x",
+      "label": "VL53L1X ToF",
+      "transport": "i2c",
+      "summary": "Laser time-of-flight distance sensor over I2C.",
+      "kit": true
+    }
+  ],
+  "parts": [
+    {
+      "type": "74hc595",
+      "deviceClass": "spi_device",
+      "label": "74HC595 Shift Register (8-bit output)",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "QB",
+          "etype": "output"
+        },
+        {
+          "name": "QC",
+          "etype": "output"
+        },
+        {
+          "name": "QD",
+          "etype": "output"
+        },
+        {
+          "name": "QE",
+          "etype": "output"
+        },
+        {
+          "name": "QF",
+          "etype": "output"
+        },
+        {
+          "name": "QG",
+          "etype": "output"
+        },
+        {
+          "name": "QH",
+          "etype": "output"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "QA",
+          "etype": "output"
+        },
+        {
+          "name": "SER",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "OE",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RCLK",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SRCLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "SRCLR",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "QH'",
+          "etype": "output"
+        }
+      ]
+    },
+    {
+      "type": "a4988",
+      "deviceClass": "board_io",
+      "label": "A4988 Stepper Driver",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VDD",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "STEP",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "DIR",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "EN",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MS1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MS2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MS3",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RESET",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "SLEEP",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "acs712",
+      "deviceClass": "board_io",
+      "label": "ACS712 Current Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "OUT",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "ads1115",
+      "deviceClass": "i2c_device",
+      "label": "ADS1115 16-bit ADC",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "ALERT",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 72
+    },
+    {
+      "type": "adxl345",
+      "deviceClass": "i2c_device",
+      "label": "ADXL345 Tilt",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ]
+    },
+    {
+      "type": "aht20",
+      "deviceClass": "i2c_device",
+      "label": "AHT20 Temp/Humidity",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 56
+    },
+    {
+      "type": "ams1117",
+      "deviceClass": "passive",
+      "label": "AMS1117 LDO",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN",
+          "etype": "passive"
+        },
+        {
+          "name": "GND",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "as5600",
+      "deviceClass": "i2c_device",
+      "label": "AS5600 Magnetic Encoder",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 54
+    },
+    {
+      "type": "at24c256",
+      "deviceClass": "i2c_device",
+      "label": "AT24C256 EEPROM",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "WP",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.7,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 80
+    },
+    {
+      "type": "bg770a-cellular",
+      "deviceClass": "uart_device",
+      "label": "Quectel BG770A Cellular",
+      "transport": "uart",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "TX",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RX",
+          "etype": "input",
+          "role": "uart_rx"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 4.3
+      }
+    },
+    {
+      "type": "bh1750",
+      "deviceClass": "i2c_device",
+      "label": "ROHM BH1750",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.4,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 35
+    },
+    {
+      "type": "bme280",
+      "deviceClass": "i2c_device",
+      "label": "BME280 Weather",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "CSB",
+          "etype": "passive"
+        },
+        {
+          "name": "SDO",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.71,
+        "max": 3.6
+      }
+    },
+    {
+      "type": "bmi270",
+      "deviceClass": "i2c_device",
+      "label": "bmi270",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.71,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 104
+    },
+    {
+      "type": "bmp280",
+      "deviceClass": "i2c_device",
+      "label": "BMP280 Pressure",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.7,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 118
+    },
+    {
+      "type": "bno055",
+      "deviceClass": "i2c_device",
+      "label": "BNO055 IMU",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "INT",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.4,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 40
+    },
+    {
+      "type": "button",
+      "deviceClass": "board_io",
+      "label": "Push Button",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "buzzer",
+      "deviceClass": "board_io",
+      "label": "Buzzer",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "+",
+          "etype": "passive"
+        },
+        {
+          "name": "-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "can-diagnostic-tool",
+      "deviceClass": "tool",
+      "label": "can-diagnostic-tool",
+      "transport": "tool",
+      "pins": [
+        {
+          "name": "CAN_H",
+          "etype": "passive"
+        },
+        {
+          "name": "CAN_L",
+          "etype": "passive"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "can-transceiver",
+      "deviceClass": "passive",
+      "label": "can-transceiver",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "TXD",
+          "etype": "input"
+        },
+        {
+          "name": "RXD",
+          "etype": "output"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CAN_H",
+          "etype": "passive"
+        },
+        {
+          "name": "CAN_L",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "capacitor",
+      "deviceClass": "passive",
+      "label": "Capacitor",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "dht11",
+      "deviceClass": "board_io",
+      "label": "DHT11 Temp/Humidity",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DATA",
+          "etype": "open_drain",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "dht22",
+      "deviceClass": "board_io",
+      "label": "DHT22 Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "DATA",
+          "etype": "bidirectional",
+          "role": "gpio"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "diode",
+      "deviceClass": "passive",
+      "label": "Diode",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "A",
+          "etype": "passive"
+        },
+        {
+          "name": "C",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "dip-switch",
+      "deviceClass": "board_io",
+      "label": "DIP Switch",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        },
+        {
+          "name": "3",
+          "etype": "passive"
+        },
+        {
+          "name": "4",
+          "etype": "passive"
+        },
+        {
+          "name": "C1",
+          "etype": "passive"
+        },
+        {
+          "name": "C2",
+          "etype": "passive"
+        },
+        {
+          "name": "C3",
+          "etype": "passive"
+        },
+        {
+          "name": "C4",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "drv2605",
+      "deviceClass": "i2c_device",
+      "label": "drv2605",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 90
+    },
+    {
+      "type": "drv8825",
+      "deviceClass": "board_io",
+      "label": "DRV8825 Stepper Driver",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VMOT",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "STEP",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "DIR",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "EN",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "M0",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "M1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "M2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RESET",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "SLEEP",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 8.2,
+        "max": 45
+      }
+    },
+    {
+      "type": "ds18b20",
+      "deviceClass": "board_io",
+      "label": "DS18B20 Temperature",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VDD",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DQ",
+          "etype": "open_drain",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "ds3231",
+      "deviceClass": "i2c_device",
+      "label": "DS3231 RTC",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SQW",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.3,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 104
+    },
+    {
+      "type": "esp32",
+      "deviceClass": "mcu",
+      "label": "ESP32",
+      "transport": "mcu"
+    },
+    {
+      "type": "esp32-c3-supermini",
+      "deviceClass": "mcu",
+      "label": "ESP32-C3 Super Mini",
+      "transport": "mcu"
+    },
+    {
+      "type": "esp32-s3-zero",
+      "deviceClass": "mcu",
+      "label": "ESP32-S3-Zero",
+      "transport": "mcu"
+    },
+    {
+      "type": "flame-sensor",
+      "deviceClass": "board_io",
+      "label": "Flame Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "fxos8700",
+      "deviceClass": "i2c_device",
+      "label": "FXOS8700",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ]
+    },
+    {
+      "type": "hall-sensor",
+      "deviceClass": "board_io",
+      "label": "Hall Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "hc-05",
+      "deviceClass": "uart_device",
+      "label": "HC-05 Bluetooth",
+      "transport": "uart",
+      "boardIoKind": "uart_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "TX",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RX",
+          "etype": "input",
+          "role": "uart_rx"
+        },
+        {
+          "name": "STATE",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "EN",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 6
+      }
+    },
+    {
+      "type": "hc595-7seg",
+      "deviceClass": "spi_device",
+      "label": "74HC595 7-Segment (4-digit)",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "DIO",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "SCLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "RCLK",
+          "etype": "input",
+          "role": "spi_cs"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2,
+        "max": 6
+      }
+    },
+    {
+      "type": "hx711",
+      "deviceClass": "board_io",
+      "label": "HX711 Load Cell",
+      "transport": "gpio_group",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DT",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.6,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "ili9341",
+      "deviceClass": "spi_device",
+      "label": "ILI9341 TFT",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "RESET",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "DC",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MOSI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "LED",
+          "etype": "input",
+          "role": "pwm"
+        }
+      ]
+    },
+    {
+      "type": "ina219",
+      "deviceClass": "i2c_device",
+      "label": "INA219 Power Monitor",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 64
+    },
+    {
+      "type": "inmp441",
+      "deviceClass": "board_io",
+      "label": "INMP441 I2S Mic",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VDD",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "WS",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "SD",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "L/R",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.8,
+        "max": 3.3
+      }
+    },
+    {
+      "type": "iolink-master",
+      "deviceClass": "uart_device",
+      "label": "IO-Link Master",
+      "transport": "uart",
+      "boardIoKind": "uart_device",
+      "pins": [
+        {
+          "name": "TX",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RX",
+          "etype": "input",
+          "role": "uart_rx"
+        },
+        {
+          "name": "L+",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "iolink-transceiver",
+      "deviceClass": "passive",
+      "label": "iolink-transceiver",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "TXD",
+          "etype": "input",
+          "role": "uart_rx"
+        },
+        {
+          "name": "RXD",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CQ",
+          "etype": "bidirectional"
+        },
+        {
+          "name": "L+",
+          "etype": "power_in",
+          "voltage": {
+            "min": 24,
+            "max": 24
+          }
+        }
+      ]
+    },
+    {
+      "type": "ir-obstacle",
+      "deviceClass": "board_io",
+      "label": "IR Obstacle Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "OUT",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "irf520",
+      "deviceClass": "board_io",
+      "label": "IRF520 MOSFET Module",
+      "transport": "board_io",
+      "boardIoKind": "led",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SIG",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "VIN",
+          "etype": "passive"
+        },
+        {
+          "name": "V-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "joystick",
+      "deviceClass": "board_io",
+      "label": "Analog Joystick",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VRX",
+          "etype": "passive"
+        },
+        {
+          "name": "VRY",
+          "etype": "passive"
+        },
+        {
+          "name": "SW",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "keypad",
+      "deviceClass": "board_io",
+      "label": "4x4 Keypad",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "R1",
+          "etype": "passive"
+        },
+        {
+          "name": "R2",
+          "etype": "passive"
+        },
+        {
+          "name": "R3",
+          "etype": "passive"
+        },
+        {
+          "name": "R4",
+          "etype": "passive"
+        },
+        {
+          "name": "C1",
+          "etype": "passive"
+        },
+        {
+          "name": "C2",
+          "etype": "passive"
+        },
+        {
+          "name": "C3",
+          "etype": "passive"
+        },
+        {
+          "name": "C4",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "kw41z-dev",
+      "deviceClass": "mcu",
+      "label": "kw41z-dev",
+      "transport": "mcu"
+    },
+    {
+      "type": "l293d",
+      "deviceClass": "board_io",
+      "label": "L293D",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "L1",
+          "etype": "passive"
+        },
+        {
+          "name": "L2",
+          "etype": "passive"
+        },
+        {
+          "name": "L3",
+          "etype": "passive"
+        },
+        {
+          "name": "L4",
+          "etype": "passive"
+        },
+        {
+          "name": "L5",
+          "etype": "passive"
+        },
+        {
+          "name": "L6",
+          "etype": "passive"
+        },
+        {
+          "name": "L7",
+          "etype": "passive"
+        },
+        {
+          "name": "L8",
+          "etype": "passive"
+        },
+        {
+          "name": "R1",
+          "etype": "passive"
+        },
+        {
+          "name": "R2",
+          "etype": "passive"
+        },
+        {
+          "name": "R3",
+          "etype": "passive"
+        },
+        {
+          "name": "R4",
+          "etype": "passive"
+        },
+        {
+          "name": "R5",
+          "etype": "passive"
+        },
+        {
+          "name": "R6",
+          "etype": "passive"
+        },
+        {
+          "name": "R7",
+          "etype": "passive"
+        },
+        {
+          "name": "R8",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "l298n",
+      "deviceClass": "board_io",
+      "label": "L298N Motor Driver",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "IN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN3",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN4",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "ENA",
+          "etype": "input",
+          "role": "pwm"
+        },
+        {
+          "name": "ENB",
+          "etype": "input",
+          "role": "pwm"
+        },
+        {
+          "name": "OUT1",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT2",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT3",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT4",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 5,
+        "max": 35
+      }
+    },
+    {
+      "type": "lcd1602",
+      "deviceClass": "i2c_device",
+      "label": "LCD1602 Character Display (I2C)",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        }
+      ]
+    },
+    {
+      "type": "ldr",
+      "deviceClass": "passive",
+      "label": "Photoresistor (LDR)",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "led",
+      "deviceClass": "board_io",
+      "label": "LED",
+      "transport": "board_io",
+      "boardIoKind": "led",
+      "pins": [
+        {
+          "name": "A",
+          "etype": "passive"
+        },
+        {
+          "name": "C",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "led-matrix",
+      "deviceClass": "spi_device",
+      "label": "MAX7219 8×8 LED Matrix",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DIN",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        }
+      ]
+    },
+    {
+      "type": "lipo_charger",
+      "deviceClass": "passive",
+      "label": "LiPo battery + charger",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "BAT+",
+          "etype": "passive"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "ADC",
+          "etype": "passive"
+        },
+        {
+          "name": "CHRG",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 4.2
+      }
+    },
+    {
+      "type": "lm2596",
+      "deviceClass": "passive",
+      "label": "LM2596 Buck Converter",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN+",
+          "etype": "passive"
+        },
+        {
+          "name": "IN-",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT+",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "logic-analyzer",
+      "deviceClass": "tool",
+      "label": "logic-analyzer",
+      "transport": "tool",
+      "pins": [
+        {
+          "name": "CH0",
+          "etype": "passive"
+        },
+        {
+          "name": "CH1",
+          "etype": "passive"
+        },
+        {
+          "name": "CH2",
+          "etype": "passive"
+        },
+        {
+          "name": "CH3",
+          "etype": "passive"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "logic-level-shifter",
+      "deviceClass": "passive",
+      "label": "logic-level-shifter",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "HV_IN",
+          "etype": "input"
+        },
+        {
+          "name": "LV_OUT",
+          "etype": "output"
+        },
+        {
+          "name": "HV",
+          "etype": "power_in"
+        },
+        {
+          "name": "LV",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.8,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "lora-sx1278",
+      "deviceClass": "spi_device",
+      "label": "LoRa SX1278 / RA-02",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "NSS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "MOSI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "MISO",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "DIO0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.8,
+        "max": 3.7
+      }
+    },
+    {
+      "type": "m12-5pin",
+      "deviceClass": "passive",
+      "label": "m12-5pin",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "L+",
+          "etype": "power_in",
+          "voltage": {
+            "min": 24,
+            "max": 24
+          }
+        },
+        {
+          "name": "P2",
+          "etype": "passive"
+        },
+        {
+          "name": "L-",
+          "etype": "power_in"
+        },
+        {
+          "name": "CQ",
+          "etype": "passive"
+        },
+        {
+          "name": "P5",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "max30102",
+      "deviceClass": "i2c_device",
+      "label": "max30102",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.7,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 87
+    },
+    {
+      "type": "max31855",
+      "deviceClass": "spi_device",
+      "label": "MAX31855 thermocouple",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "DO",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "TC+",
+          "etype": "passive"
+        },
+        {
+          "name": "TC-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "max485",
+      "deviceClass": "passive",
+      "label": "MAX485 RS-485",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DI",
+          "etype": "input",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RO",
+          "etype": "output",
+          "role": "uart_rx"
+        },
+        {
+          "name": "DE",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RE",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "A",
+          "etype": "passive"
+        },
+        {
+          "name": "B",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "max98357",
+      "deviceClass": "board_io",
+      "label": "MAX98357 I2S Amp",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VIN",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "BCLK",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "LRC",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "DIN",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "SD",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "GAIN",
+          "etype": "passive"
+        },
+        {
+          "name": "SPEAKER+",
+          "etype": "passive"
+        },
+        {
+          "name": "SPEAKER-",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "mcp2515",
+      "deviceClass": "spi_device",
+      "label": "MCP2515 CAN",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "SI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "SO",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "INT",
+          "etype": "output"
+        },
+        {
+          "name": "CANH",
+          "etype": "passive"
+        },
+        {
+          "name": "CANL",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.7,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "mcu",
+      "deviceClass": "mcu",
+      "label": "MCU",
+      "transport": "mcu"
+    },
+    {
+      "type": "microphone",
+      "deviceClass": "passive",
+      "label": "microphone",
+      "transport": "passive",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "OUT",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.4,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "microsd",
+      "deviceClass": "spi_device",
+      "label": "microSD (SPI)",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "MOSI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "MISO",
+          "etype": "output",
+          "role": "spi_miso"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.7,
+        "max": 3.6
+      }
+    },
+    {
+      "type": "mlx90614",
+      "deviceClass": "i2c_device",
+      "label": "Melexis MLX90614 IR Temp",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.6,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 90
+    },
+    {
+      "type": "mlx90640",
+      "deviceClass": "i2c_device",
+      "label": "mlx90640",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 51
+    },
+    {
+      "type": "mp1584",
+      "deviceClass": "passive",
+      "label": "MP1584 Buck Converter",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN+",
+          "etype": "passive"
+        },
+        {
+          "name": "IN-",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT+",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "mpu6050",
+      "deviceClass": "i2c_device",
+      "label": "MPU6050 IMU",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "XDA",
+          "etype": "passive"
+        },
+        {
+          "name": "XCL",
+          "etype": "passive"
+        },
+        {
+          "name": "AD0",
+          "etype": "passive"
+        },
+        {
+          "name": "INT",
+          "etype": "output"
+        }
+      ]
+    },
+    {
+      "type": "mq-135",
+      "deviceClass": "board_io",
+      "label": "MQ-135 Air Quality",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "mq-2",
+      "deviceClass": "board_io",
+      "label": "MQ-2 Gas Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "mq-6",
+      "deviceClass": "passive",
+      "label": "MQ-6 Gas Sensor",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "AOUT",
+          "etype": "passive"
+        },
+        {
+          "name": "DOUT",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 5,
+        "max": 5
+      }
+    },
+    {
+      "type": "mt3608",
+      "deviceClass": "passive",
+      "label": "MT3608 Boost Converter",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN+",
+          "etype": "passive"
+        },
+        {
+          "name": "IN-",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT+",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "neo6m-gps",
+      "deviceClass": "uart_device",
+      "label": "NEO-6M GPS",
+      "transport": "uart",
+      "boardIoKind": "uart_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "TX",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RX",
+          "etype": "input",
+          "role": "uart_rx"
+        }
+      ]
+    },
+    {
+      "type": "neopixel",
+      "deviceClass": "spi_device",
+      "label": "NeoPixel Strip",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "DIN",
+          "etype": "input"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DOUT",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 5,
+        "max": 5
+      }
+    },
+    {
+      "type": "note",
+      "deviceClass": "annotation",
+      "label": "note",
+      "transport": "annotation"
+    },
+    {
+      "type": "nrf24l01",
+      "deviceClass": "spi_device",
+      "label": "nRF24L01+",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CE",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "CSN",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "MOSI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "MISO",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "IRQ",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.9,
+        "max": 3.6
+      }
+    },
+    {
+      "type": "nrf52840-dk",
+      "deviceClass": "mcu",
+      "label": "nRF52840 DK",
+      "transport": "mcu"
+    },
+    {
+      "type": "nrf54l15",
+      "deviceClass": "mcu",
+      "label": "nrf54l15",
+      "transport": "mcu"
+    },
+    {
+      "type": "ntc-thermistor",
+      "deviceClass": "passive",
+      "label": "NTC Thermistor",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "A",
+          "etype": "passive"
+        },
+        {
+          "name": "B",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "nucleo-f401re",
+      "deviceClass": "mcu",
+      "label": "NUCLEO-F401RE",
+      "transport": "mcu"
+    },
+    {
+      "type": "nucleo-h563zi",
+      "deviceClass": "mcu",
+      "label": "NUCLEO-H563ZI",
+      "transport": "mcu"
+    },
+    {
+      "type": "nucleo-l476rg",
+      "deviceClass": "mcu",
+      "label": "nucleo-l476rg",
+      "transport": "mcu"
+    },
+    {
+      "type": "oled-sh1107",
+      "deviceClass": "i2c_device",
+      "label": "SH1107 OLED",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "oled-ssd1306",
+      "deviceClass": "i2c_device",
+      "label": "SSD1306 OLED",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        }
+      ]
+    },
+    {
+      "type": "oled-ssd1306-128x32",
+      "deviceClass": "i2c_device",
+      "label": "SSD1306 OLED 0.91″",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "pca9685",
+      "deviceClass": "i2c_device",
+      "label": "NXP PCA9685 PWM/Servo",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "OE",
+          "etype": "input"
+        },
+        {
+          "name": "LED0",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED1",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED2",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED3",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED4",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED5",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED6",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED7",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED8",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED9",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED10",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED11",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED12",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED13",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED14",
+          "etype": "output",
+          "role": "pwm"
+        },
+        {
+          "name": "LED15",
+          "etype": "output",
+          "role": "pwm"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "pcd8544",
+      "deviceClass": "spi_device",
+      "label": "Nokia 5110 LCD",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "CE",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "DC",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "DIN",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "pcf8574",
+      "deviceClass": "i2c_device",
+      "label": "PCF8574 I/O Expander",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "INT",
+          "etype": "output"
+        },
+        {
+          "name": "P0",
+          "etype": "passive"
+        },
+        {
+          "name": "P1",
+          "etype": "passive"
+        },
+        {
+          "name": "P2",
+          "etype": "passive"
+        },
+        {
+          "name": "P3",
+          "etype": "passive"
+        },
+        {
+          "name": "P4",
+          "etype": "passive"
+        },
+        {
+          "name": "P5",
+          "etype": "passive"
+        },
+        {
+          "name": "P6",
+          "etype": "passive"
+        },
+        {
+          "name": "P7",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.5,
+        "max": 6
+      },
+      "defaultI2cAddress": 32
+    },
+    {
+      "type": "pir-sensor",
+      "deviceClass": "board_io",
+      "label": "PIR Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "OUT",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "pn532",
+      "deviceClass": "i2c_device",
+      "label": "PN532 NFC",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "IRQ",
+          "etype": "output"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.7,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 36
+    },
+    {
+      "type": "potentiometer",
+      "deviceClass": "passive",
+      "label": "Potentiometer",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "W",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "rain-sensor",
+      "deviceClass": "board_io",
+      "label": "Rain Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "rc522",
+      "deviceClass": "spi_device",
+      "label": "RC522 RFID",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "SCK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "MOSI",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "MISO",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IRQ",
+          "etype": "output"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.5,
+        "max": 3.6
+      }
+    },
+    {
+      "type": "relay-4ch",
+      "deviceClass": "board_io",
+      "label": "4-Channel Relay",
+      "transport": "board_io",
+      "boardIoKind": "led",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "IN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN3",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN4",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "resistor",
+      "deviceClass": "passive",
+      "label": "Resistor",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "rgb-led",
+      "deviceClass": "board_io",
+      "label": "RGB LED",
+      "transport": "board_io",
+      "boardIoKind": "led",
+      "pins": [
+        {
+          "name": "R",
+          "etype": "passive"
+        },
+        {
+          "name": "G",
+          "etype": "passive"
+        },
+        {
+          "name": "B",
+          "etype": "passive"
+        },
+        {
+          "name": "GND",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "rotary-encoder",
+      "deviceClass": "board_io",
+      "label": "Rotary Encoder",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "CLK",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "DT",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "SW",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ]
+    },
+    {
+      "type": "rpi-pico",
+      "deviceClass": "mcu",
+      "label": "RPi Pico",
+      "transport": "mcu"
+    },
+    {
+      "type": "scd41",
+      "deviceClass": "i2c_device",
+      "label": "Sensirion SCD41 CO₂",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.4,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 98
+    },
+    {
+      "type": "servo",
+      "deviceClass": "board_io",
+      "label": "Servo Motor",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "PWM",
+          "etype": "input",
+          "role": "pwm",
+          "required": true
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.8,
+        "max": 6
+      }
+    },
+    {
+      "type": "seven-segment",
+      "deviceClass": "board_io",
+      "label": "7-Segment Display (single digit)",
+      "transport": "gpio_group",
+      "pins": [
+        {
+          "name": "A",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "B",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "C",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "D",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "E",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "F",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "G",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "DP",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "COM",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        }
+      ]
+    },
+    {
+      "type": "sgp41",
+      "deviceClass": "i2c_device",
+      "label": "Sensirion SGP41 VOC/NOx",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.7,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 89
+    },
+    {
+      "type": "sht30",
+      "deviceClass": "i2c_device",
+      "label": "SHT30 Temp/Humidity",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.4,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 68
+    },
+    {
+      "type": "sht31",
+      "deviceClass": "i2c_device",
+      "label": "Sensirion SHT31",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.15,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 68
+    },
+    {
+      "type": "sim800l",
+      "deviceClass": "uart_device",
+      "label": "SIM800L GSM",
+      "transport": "uart",
+      "boardIoKind": "uart_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "TX",
+          "etype": "output",
+          "role": "uart_tx"
+        },
+        {
+          "name": "RX",
+          "etype": "input",
+          "role": "uart_rx"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.4,
+        "max": 4.4
+      }
+    },
+    {
+      "type": "slide-switch",
+      "deviceClass": "board_io",
+      "label": "Slide Switch",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "1",
+          "etype": "passive"
+        },
+        {
+          "name": "COM",
+          "etype": "passive"
+        },
+        {
+          "name": "2",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "sn74hc165",
+      "deviceClass": "spi_device",
+      "label": "74HC165 Shift Register",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "QH",
+          "etype": "output",
+          "role": "spi_miso"
+        },
+        {
+          "name": "SH_LD",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "D0",
+          "etype": "input"
+        },
+        {
+          "name": "D1",
+          "etype": "input"
+        },
+        {
+          "name": "D2",
+          "etype": "input"
+        },
+        {
+          "name": "D3",
+          "etype": "input"
+        },
+        {
+          "name": "D4",
+          "etype": "input"
+        },
+        {
+          "name": "D5",
+          "etype": "input"
+        },
+        {
+          "name": "D6",
+          "etype": "input"
+        },
+        {
+          "name": "D7",
+          "etype": "input"
+        }
+      ]
+    },
+    {
+      "type": "soil-moisture",
+      "deviceClass": "passive",
+      "label": "Soil Moisture Sensor",
+      "transport": "analog",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "AOUT",
+          "etype": "passive"
+        },
+        {
+          "name": "DOUT",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "sound-sensor",
+      "deviceClass": "board_io",
+      "label": "Sound Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "sps30",
+      "deviceClass": "i2c_device",
+      "label": "Sensirion SPS30 PM",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 105
+    },
+    {
+      "type": "ssd1680_tricolor_290",
+      "deviceClass": "spi_device",
+      "label": "SSD1680 Tri-Color E-Paper",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DIN",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "DC",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "BUSY",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ]
+    },
+    {
+      "type": "stepper-28byj48",
+      "deviceClass": "board_io",
+      "label": "28BYJ-48 Stepper",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "IN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN3",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN4",
+          "etype": "input",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 5,
+        "max": 12
+      }
+    },
+    {
+      "type": "stm32-blackpill",
+      "deviceClass": "mcu",
+      "label": "STM32 Black Pill",
+      "transport": "mcu"
+    },
+    {
+      "type": "stm32-dev",
+      "deviceClass": "mcu",
+      "label": "STM32 Dev Board",
+      "transport": "mcu"
+    },
+    {
+      "type": "stm32h735",
+      "deviceClass": "mcu",
+      "label": "stm32h735",
+      "transport": "mcu"
+    },
+    {
+      "type": "tb6612",
+      "deviceClass": "board_io",
+      "label": "TB6612 Motor Driver",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VM",
+          "etype": "power_in"
+        },
+        {
+          "name": "AIN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "AIN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "PWMA",
+          "etype": "input",
+          "role": "pwm"
+        },
+        {
+          "name": "BIN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "BIN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "PWMB",
+          "etype": "input",
+          "role": "pwm"
+        },
+        {
+          "name": "STBY",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "A01",
+          "etype": "passive"
+        },
+        {
+          "name": "A02",
+          "etype": "passive"
+        },
+        {
+          "name": "B01",
+          "etype": "passive"
+        },
+        {
+          "name": "B02",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.7,
+        "max": 15
+      }
+    },
+    {
+      "type": "text-annotation",
+      "deviceClass": "annotation",
+      "label": "text-annotation",
+      "transport": "annotation"
+    },
+    {
+      "type": "tm1637-7seg",
+      "deviceClass": "board_io",
+      "label": "TM1637 7-Segment (4-digit)",
+      "transport": "gpio_group",
+      "pins": [
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "DIO",
+          "etype": "bidirectional",
+          "role": "gpio",
+          "required": true
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "tmc2209",
+      "deviceClass": "board_io",
+      "label": "TMC2209 Stepper",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VM",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "VIO",
+          "etype": "power_in"
+        },
+        {
+          "name": "STEP",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "DIR",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "EN",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MS1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "MS2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "DIAG",
+          "etype": "output",
+          "role": "gpio"
+        },
+        {
+          "name": "PDN_UART",
+          "etype": "open_drain",
+          "role": "uart_tx"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.75,
+        "max": 29
+      }
+    },
+    {
+      "type": "tmp117",
+      "deviceClass": "i2c_device",
+      "label": "tmp117",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 1.8,
+        "max": 5.5
+      },
+      "defaultI2cAddress": 72
+    },
+    {
+      "type": "tp4056",
+      "deviceClass": "passive",
+      "label": "TP4056 LiPo Charger",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN+",
+          "etype": "passive"
+        },
+        {
+          "name": "IN-",
+          "etype": "passive"
+        },
+        {
+          "name": "BAT+",
+          "etype": "passive"
+        },
+        {
+          "name": "BAT-",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT+",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT-",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "transistor",
+      "deviceClass": "passive",
+      "label": "Transistor",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "B",
+          "etype": "passive"
+        },
+        {
+          "name": "C",
+          "etype": "passive"
+        },
+        {
+          "name": "E",
+          "etype": "passive"
+        }
+      ]
+    },
+    {
+      "type": "ttp223",
+      "deviceClass": "board_io",
+      "label": "TTP223 Touch Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SIG",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "uc8151d_tricolor_290",
+      "deviceClass": "spi_device",
+      "label": "E-Paper 2.9\" tri-color (UC8151D)",
+      "transport": "spi",
+      "boardIoKind": "spi_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "DIN",
+          "etype": "input",
+          "role": "spi_mosi"
+        },
+        {
+          "name": "CLK",
+          "etype": "input",
+          "role": "spi_sck"
+        },
+        {
+          "name": "CS",
+          "etype": "input",
+          "role": "spi_cs"
+        },
+        {
+          "name": "DC",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "RST",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "BUSY",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ]
+    },
+    {
+      "type": "uln2003",
+      "deviceClass": "board_io",
+      "label": "ULN2003 Stepper Driver",
+      "transport": "board_io",
+      "boardIoKind": "pwm_output",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "IN1",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN2",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN3",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "IN4",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "OUT1",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT2",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT3",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT4",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 5,
+        "max": 12
+      }
+    },
+    {
+      "type": "ultrasonic",
+      "deviceClass": "board_io",
+      "label": "HC-SR04",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "TRIG",
+          "etype": "input",
+          "role": "gpio",
+          "required": true
+        },
+        {
+          "name": "ECHO",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 4.5,
+        "max": 5.5
+      }
+    },
+    {
+      "type": "veml7700",
+      "deviceClass": "i2c_device",
+      "label": "Vishay VEML7700 Light",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.5,
+        "max": 3.6
+      },
+      "defaultI2cAddress": 16
+    },
+    {
+      "type": "vibration-sensor",
+      "deviceClass": "board_io",
+      "label": "Vibration Sensor",
+      "transport": "board_io",
+      "boardIoKind": "button",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "A0",
+          "etype": "passive"
+        },
+        {
+          "name": "D0",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "vl53l0x",
+      "deviceClass": "i2c_device",
+      "label": "VL53L0X ToF",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        },
+        {
+          "name": "XSHUT",
+          "etype": "input",
+          "role": "gpio"
+        },
+        {
+          "name": "GPIO1",
+          "etype": "output",
+          "role": "gpio"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 2.6,
+        "max": 3.5
+      },
+      "defaultI2cAddress": 41
+    },
+    {
+      "type": "vl53l1x",
+      "deviceClass": "i2c_device",
+      "label": "VL53L1X ToF",
+      "transport": "i2c",
+      "boardIoKind": "i2c_device",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "SDA",
+          "etype": "open_drain",
+          "role": "i2c_sda"
+        },
+        {
+          "name": "SCL",
+          "etype": "open_drain",
+          "role": "i2c_scl"
+        }
+      ],
+      "defaultI2cAddress": 41
+    },
+    {
+      "type": "water-level",
+      "deviceClass": "board_io",
+      "label": "Water Level Sensor",
+      "transport": "board_io",
+      "boardIoKind": "adc_input",
+      "pins": [
+        {
+          "name": "VCC",
+          "etype": "power_in"
+        },
+        {
+          "name": "GND",
+          "etype": "power_in"
+        },
+        {
+          "name": "S",
+          "etype": "passive"
+        }
+      ],
+      "operatingVoltage": {
+        "min": 3.3,
+        "max": 5
+      }
+    },
+    {
+      "type": "wifi-ap",
+      "deviceClass": "wireless",
+      "label": "wifi-ap",
+      "transport": "wireless"
+    },
+    {
+      "type": "xl6009",
+      "deviceClass": "passive",
+      "label": "XL6009 Boost Converter",
+      "transport": "passive",
+      "pins": [
+        {
+          "name": "IN+",
+          "etype": "passive"
+        },
+        {
+          "name": "IN-",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT+",
+          "etype": "passive"
+        },
+        {
+          "name": "OUT-",
+          "etype": "passive"
+        }
+      ]
+    }
+  ],
+  "chips": [
+    "esp32",
+    "esp32c3",
+    "esp32s3",
+    "mkw41z4",
+    "nrf52840",
+    "nrf54l15",
+    "rp2040",
+    "stm32f103",
+    "stm32f401",
+    "stm32f401cdu6",
+    "stm32h563",
+    "stm32h735",
+    "stm32l476"
+  ]
+}

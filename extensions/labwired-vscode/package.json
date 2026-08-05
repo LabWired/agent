@@ -1,0 +1,375 @@
+{
+  "name": "labwired-vscode",
+  "displayName": "LabWired",
+  "description": "Embedder-clone foundation for LabWired: agent chat, modes, monitor, evidence, plan — IDE-native UI.",
+  "version": "0.6.0",
+  "compatibleCliVersion": "0.2.7",
+  "publisher": "labwired",
+  "license": "MIT",
+  "icon": "media/labwired-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LabWired/agent"
+  },
+  "homepage": "https://labwired.com",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "firmware",
+    "embedded",
+    "labwired",
+    "twin",
+    "verify",
+    "serial"
+  ],
+  "main": "./out/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "labwired",
+          "title": "LabWired",
+          "icon": "media/labwired-mark.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "labwiredPanel",
+          "title": "LabWired",
+          "icon": "media/labwired-mark.svg"
+        }
+      ]
+    },
+    "views": {
+      "labwired": [
+        {
+          "type": "webview",
+          "id": "labwired.chat",
+          "name": "Agent",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.history",
+          "name": "History",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.catalog",
+          "name": "Catalog",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.evidence",
+          "name": "Evidence",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.plan",
+          "name": "Plan",
+          "icon": "media/labwired-mark.svg"
+        }
+      ],
+      "labwiredPanel": [
+        {
+          "type": "webview",
+          "id": "labwired.serial",
+          "name": "Monitor",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.plot",
+          "name": "Plot",
+          "icon": "media/labwired-mark.svg"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "labwired.openChat", "title": "Open Agent Chat", "category": "LabWired" },
+      { "command": "labwired.openChatInEditor", "title": "New Chat in Editor", "category": "LabWired", "icon": "media/labwired-mark.svg" },
+      { "command": "labwired.openConversationFromHistory", "title": "Open Conversation", "category": "LabWired" },
+      { "command": "labwired.refreshHistory", "title": "Refresh Conversation History", "category": "LabWired", "icon": "$(refresh)" },
+      { "command": "labwired.moveChatToSecondarySidebar", "title": "Arrange Layout (Chat → Secondary Side Bar)", "category": "LabWired" },
+      { "command": "labwired.showBuildInfo", "title": "Show Build Info", "category": "LabWired" },
+      { "command": "labwired.openSchematics", "title": "Open Schematic…", "category": "LabWired", "icon": "$(circuit-board)" },
+      { "command": "labwired.openSchematicFile", "title": "Open Schematic File…", "category": "LabWired" },
+      { "command": "labwired.switchToPlan", "title": "Switch to Plan Mode", "category": "LabWired" },
+      { "command": "labwired.switchToAct", "title": "Switch to Act Mode", "category": "LabWired" },
+      { "command": "labwired.switchToDebug", "title": "Switch to Debug Mode", "category": "LabWired" },
+      { "command": "labwired.switchToVerify", "title": "Switch to Verify Mode", "category": "LabWired" },
+      { "command": "labwired.showSidebar", "title": "Show LabWired Sidebar", "category": "LabWired" },
+      { "command": "labwired.hideSidebar", "title": "Hide LabWired Sidebar", "category": "LabWired" },
+      { "command": "labwired.showMonitor", "title": "Show Monitor", "category": "LabWired" },
+      { "command": "labwired.hideMonitor", "title": "Hide Monitor", "category": "LabWired" },
+      { "command": "labwired.showTerminal", "title": "Show Integrated Terminal", "category": "LabWired" },
+      { "command": "labwired.switchMode", "title": "Switch Mode (Plan/Act/Debug/Verify)", "category": "LabWired" },
+      { "command": "labwired.newTab", "title": "New Chat Tab", "category": "LabWired" },
+      { "command": "labwired.closeTab", "title": "Close Active Chat Tab", "category": "LabWired" },
+      { "command": "labwired.restartCli", "title": "Restart CLI Bridge", "category": "LabWired" },
+      { "command": "labwired.switchModel", "title": "Switch Model", "category": "LabWired" },
+      { "command": "labwired.stopGeneration", "title": "Stop Generation", "category": "LabWired" },
+      { "command": "labwired.installCli", "title": "Install LabWired CLI", "category": "LabWired" },
+      { "command": "labwired.clearConversation", "title": "Clear Conversation", "category": "LabWired" },
+      { "command": "labwired.compressConversation", "title": "Compress Conversation", "category": "LabWired" },
+      { "command": "labwired.viewUsage", "title": "View Usage & Billing", "category": "LabWired" },
+      { "command": "labwired.viewHistory", "title": "View Conversation History", "category": "LabWired" },
+      { "command": "labwired.switchTeam", "title": "Switch Team", "category": "LabWired" },
+      { "command": "labwired.switchProject", "title": "Switch Project", "category": "LabWired" },
+      { "command": "labwired.undoLastMessage", "title": "Undo Last Message", "category": "LabWired" },
+      { "command": "labwired.rewind", "title": "Rewind Checkpoint…", "category": "LabWired" },
+      { "command": "labwired.openConsole", "title": "Open Web Console", "category": "LabWired" },
+      { "command": "labwired.openLogs", "title": "Open CLI Logs", "category": "LabWired" },
+      { "command": "labwired.showCliProcessOutput", "title": "Show CLI Process Output", "category": "LabWired" },
+      { "command": "labwired.showStartupProfile", "title": "Show Startup Profile", "category": "LabWired" },
+      { "command": "labwired.openSerial", "title": "Open Monitor", "category": "LabWired" },
+      { "command": "labwired.openSerialInEditor", "title": "Open Monitor in Editor", "category": "LabWired" },
+      { "command": "labwired.toggleSerial", "title": "Toggle Monitor", "category": "LabWired" },
+      { "command": "labwired.openPlot", "title": "Open Plot", "category": "LabWired" },
+      { "command": "labwired.openEvidence", "title": "Open Evidence", "category": "LabWired" },
+      { "command": "labwired.openPlan", "title": "Open Plan Panel", "category": "LabWired" },
+      { "command": "labwired.loadEvidence", "title": "Load Verify JSON…", "category": "LabWired" },
+      { "command": "labwired.startAgent", "title": "Start Agent (Terminal)", "category": "LabWired" },
+      { "command": "labwired.doctor", "title": "Run Doctor", "category": "LabWired" },
+      { "command": "labwired.smoke", "title": "Run Smoke", "category": "LabWired" },
+      { "command": "labwired.restartBridge", "title": "Refresh CLI Bridge", "category": "LabWired" },
+      { "command": "labwired.replayOnboarding", "title": "Replay Onboarding", "category": "LabWired" },
+      { "command": "labwired.showGettingStarted", "title": "Open Getting Started", "category": "LabWired" },
+      { "command": "labwired.openMcpDocs", "title": "MCP / BYO Agent Setup", "category": "LabWired" },
+      { "command": "labwired.githubDaemon", "title": "GitHub Daemon (docs)", "category": "LabWired" },
+      { "command": "labwired.login", "title": "Log in (Pro)", "category": "LabWired" },
+      { "command": "labwired.diffApproveDemo", "title": "Demo Diff Approval", "category": "LabWired" },
+      { "command": "labwired.runTool", "title": "Run Tool…", "category": "LabWired" },
+      { "command": "labwired.logout", "title": "Log out", "category": "LabWired" },
+      { "command": "labwired.billingStatus", "title": "Billing Status", "category": "LabWired" },
+      { "command": "labwired.datasheetExtract", "title": "Extract Datasheets", "category": "LabWired" },
+      { "command": "labwired.debugInfo", "title": "Debug Probe Info", "category": "LabWired" },
+      { "command": "labwired.startGithubDaemon", "title": "Start GitHub Daemon…", "category": "LabWired" }
+    ],
+    "customEditors": [
+      {
+        "viewType": "labwired.schematicEditor",
+        "displayName": "LabWired Schematic Viewer",
+        "selector": [
+          { "filenamePattern": "*.kicad_sch" },
+          { "filenamePattern": "*.kicad_pcb" },
+          { "filenamePattern": "*.kicad_pro" },
+          { "filenamePattern": "*.sch" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "labwired.openChatInEditor",
+          "group": "navigation@-1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "labwired.newTab",
+          "when": "view == labwired.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "labwired.startAgent",
+          "when": "view == labwired.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "labwired.refreshHistory",
+          "when": "view == labwired.history",
+          "group": "navigation"
+        },
+        {
+          "command": "labwired.loadEvidence",
+          "when": "view == labwired.evidence",
+          "group": "navigation"
+        },
+        {
+          "command": "labwired.openSchematics",
+          "when": "view == labwired.serial",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "labwired.openSchematicFile",
+          "when": "resourceExtname =~ /\\.(kicad_sch|kicad_pcb|kicad_pro|sch)$/",
+          "group": "navigation"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "labwiredGettingStarted",
+        "title": "Get Started with LabWired",
+        "description": "Full Pro surface: modes, monitor, evidence, history — Embedder-class workbench.",
+        "steps": [
+          {
+            "id": "openChat",
+            "title": "Open Agent chat",
+            "description": "Plan / Act / Debug / Verify live in the Agent panel.\n\n[Open Agent](command:labwired.openChat)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.openChat"]
+          },
+          {
+            "id": "modes",
+            "title": "Switch modes",
+            "description": "Cycle Plan → Act → Debug → Verify like Embedder’s mode pill.\n\n[Switch Mode](command:labwired.switchMode)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.switchMode"]
+          },
+          {
+            "id": "project",
+            "title": "Set project context",
+            "description": "Team + project ground Pro sessions.\n\n[Switch Project](command:labwired.switchProject)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.switchProject"]
+          },
+          {
+            "id": "monitor",
+            "title": "Open the Monitor",
+            "description": "Serial, capture, probe list — hardware loop.\n\n[Open Monitor](command:labwired.openSerial)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.openSerial"]
+          },
+          {
+            "id": "evidence",
+            "title": "Inspect twin evidence",
+            "description": "Never self-grade — open Evidence.\n\n[Open Evidence](command:labwired.openEvidence)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.openEvidence"]
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "LabWired",
+      "properties": {
+        "labwired.cliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Absolute path to the labwired CLI. Empty = auto-detect."
+        },
+        "labwired.autoInstallCli": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prompt to install the LabWired CLI when not found."
+        },
+        "labwired.autoRevealOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal LabWired views on activation."
+        },
+        "labwired.showSerial": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Monitor panel."
+        },
+        "labwired.showReasoningSummaries": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show reasoning summaries in chat when the agent provides them."
+        },
+        "labwired.closeAgentChatOnActivation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Try to close the built-in VS Code/Cursor agent chat when LabWired activates."
+        },
+        "labwired.moveChatToSecondarySidebarOnActivation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer secondary side bar layout when supported."
+        },
+        "labwired.telemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow anonymized telemetry (off by default; LabWired does not ship Sentry in OSS)."
+        },
+        "labwired.logLevel": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug", "trace"],
+          "default": "info",
+          "description": "Extension log verbosity (Output → LabWired)."
+        },
+        "labwired.defaultBaud": {
+          "type": "number",
+          "default": 115200,
+          "description": "Default serial baud rate."
+        },
+        "labwired.agentArgs": {
+          "type": "string",
+          "default": "",
+          "description": "Extra args when starting the agent terminal."
+        },
+        "labwired.appUrl": {
+          "type": "string",
+          "default": "https://app.labwired.com",
+          "description": "Web console / billing base URL."
+        },
+        "labwired.installUrl": {
+          "type": "string",
+          "default": "https://labwired.com/install",
+          "description": "CLI install script URL (curl | bash)."
+        },
+        "labwired.model": {
+          "type": "string",
+          "default": "qwen2.5-coder",
+          "description": "Model id for in-panel agent (OpenAI-compatible)."
+        },
+        "labwired.modelUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434/v1",
+          "description": "OpenAI-compatible base URL (Ollama default)."
+        },
+        "labwired.modelKey": {
+          "type": "string",
+          "default": "local",
+          "description": "API key for modelUrl (local for Ollama)."
+        },
+        "labwired.team": {
+          "type": "string",
+          "default": "",
+          "description": "Active team name/id for Pro."
+        },
+        "labwired.project": {
+          "type": "string",
+          "default": "",
+          "description": "Active project name/id for Pro."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "package": "npm run compile && npx --yes @vscode/vsce package --no-dependencies -o labwired-vscode.vsix",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.9.3"
+  }
+}
