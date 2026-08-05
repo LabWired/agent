@@ -57,7 +57,17 @@ claude mcp add labwired --transport http https://api.labwired.com/mcp
 More: [docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
 </details>
 
+## Surfaces (same tools)
+
+| Surface | How |
+|---------|-----|
+| **OpenCode agent** | `labwired` or `labwired agent` — skills + MCP |
+| **Hosted tools** | `labwired login` then `labwired` → remote `api.labwired.com/mcp` |
+| **VS Code** | LabWired extension: debug + **Configure Agent Tools** (same MCP) |
+| **Claude / Cursor** | `claude mcp add labwired --transport http https://api.labwired.com/mcp` |
+
 ## How it works
+
 
 1. You describe **any** board and the task  
 2. The agent writes firmware  

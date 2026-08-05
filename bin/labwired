@@ -12,14 +12,20 @@ export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
 # Product home resolution (branded LabWired install)
-# 1) LABWIRED_AGENT_HOME  2) sibling of this bin/  3) ~/.labwired/agent
+# Prefer the kit that owns this bin/ when it is complete (so a checkout of
+# labwired-agent wins over a stale ~/.labwired/agent without cloud-session).
+# Order: script sibling kit → LABWIRED_AGENT_HOME → ~/.labwired/agent
 _labwired_find_root() {
   local cand
+  cand="$(cd "$(dirname "$0")/.." && pwd)"
+  if [[ -f "$cand/lib/resolve-sim.sh" && -f "$cand/config/opencode.json" ]]; then
+    echo "$cand"
+    return 0
+  fi
   if [[ -n "${LABWIRED_AGENT_HOME:-}" && -f "${LABWIRED_AGENT_HOME}/lib/resolve-sim.sh" ]]; then
     echo "${LABWIRED_AGENT_HOME}"
     return 0
   fi
-  cand="$(cd "$(dirname "$0")/.." && pwd)"
   if [[ -f "$cand/lib/resolve-sim.sh" ]]; then
     echo "$cand"
     return 0
@@ -29,7 +35,6 @@ _labwired_find_root() {
     echo "$cand"
     return 0
   fi
-  # last resort: directory containing this script
   echo "$(cd "$(dirname "$0")" && pwd)"
 }
 
@@ -44,7 +49,17 @@ source "$ROOT/lib/resolve-probe.sh"
 # shellcheck source=lib/probe.sh
 source "$ROOT/lib/probe.sh"
 # shellcheck source=lib/cloud-session.sh
-source "$ROOT/lib/cloud-session.sh"
+if [[ -f "$ROOT/lib/cloud-session.sh" ]]; then
+  source "$ROOT/lib/cloud-session.sh"
+else
+  # Stale install without hosted session support — local OpenCode still works.
+  labwired_cloud_hosted_ready() { return 1; }
+  labwired_cloud_session_load() { return 1; }
+  labwired_cloud_export_runtime() { return 1; }
+  labwired_cloud_session_save() { fail "upgrade kit: missing lib/cloud-session.sh (re-run install)"; }
+  labwired_cloud_session_clear() { :; }
+  labwired_cloud_api_base() { echo "${LABWIRED_API_URL:-https://api.labwired.com}"; }
+fi
 
 # LabWired brand colors (cyan accent in terminal)
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
@@ -476,23 +491,44 @@ cmd_whoami() {
 }
 
 labwired_prepare_agent_start() {
+  # Ensure skills + AGENTS.md are discoverable by OpenCode even when the user
+  # only has a partial ~/.config/opencode from an older install.
+  local cfg_dir
+  cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  mkdir -p "$cfg_dir/skills"
+  if [[ -f "$ROOT/config/AGENTS.md" && ! -f "$cfg_dir/AGENTS.md" ]]; then
+    cp "$ROOT/config/AGENTS.md" "$cfg_dir/AGENTS.md"
+  fi
+  if [[ -d "$ROOT/skills" ]]; then
+    # Refresh skills so verify-firmware / repair-loop stay current
+    cp -R "$ROOT/skills/." "$cfg_dir/skills/" 2>/dev/null || true
+  fi
+
   if labwired_cloud_hosted_ready; then
     labwired_cloud_export_runtime || fail "hosted session incomplete — run: labwired login"
+    # OpenCode substitutes {env:VAR} from the process environment
+    export LABWIRED_ACCESS_TOKEN LABWIRED_PROJECT LABWIRED_MODEL_URL LABWIRED_MODEL_KEY LABWIRED_MODEL LABWIRED_API_URL
     if [[ -z "${LABWIRED_PROJECT:-}" ]]; then
       echo "labwired: warning — LABWIRED_PROJECT empty; model gateway will reject chat" >&2
+      echo "         fix: labwired login  (or export LABWIRED_PROJECT=<id>)" >&2
     fi
-    local cfg_dir cfg_file
-    cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
-    cfg_file="$cfg_dir/opencode.json"
+    # Always re-apply hosted OpenCode config so MCP is remote labwired_* tools
     if [[ -f "$ROOT/config/opencode.hosted.json" ]]; then
-      if [[ ! -f "$cfg_file" ]] || ! grep -q 'api.labwired.com/mcp' "$cfg_file" 2>/dev/null; then
-        labwired_install_hosted_opencode_config || true
-      fi
+      labwired_install_hosted_opencode_config || true
     fi
     export LABWIRED_PROFILE=hosted
-    say "mode: hosted (shared tools + knowledge at api.labwired.com)"
+    export OPENCODE_CONFIG_DIR="$cfg_dir"
+    say "mode: hosted OpenCode + shared tools (api.labwired.com/mcp)"
+    say "model: ${LABWIRED_MODEL_URL:-}/  id=${LABWIRED_MODEL:-labwired-default}"
   else
     labwired_export_sim || true
+    # Local default config if none
+    if [[ ! -f "$cfg_dir/opencode.json" && -f "$ROOT/config/opencode.json" ]]; then
+      cp "$ROOT/config/opencode.json" "$cfg_dir/opencode.json"
+      say "wrote local OpenCode config → $cfg_dir/opencode.json"
+    fi
+    export OPENCODE_CONFIG_DIR="$cfg_dir"
+    say "mode: local OpenCode (npx @labwired/mcp or LABWIRED_CLI sim)"
   fi
 }
 
@@ -501,11 +537,14 @@ cmd_help() {
     cat "$ROOT/branding/banner.txt"
     echo
   fi
-  cat <<EOF
+  cat <<'EOF'
 LabWired Agent
 
 Usage:
-  labwired                 Start
+  labwired                 Start OpenCode agent (skills + labwired_* tools)
+  labwired login           Device-code sign-in → hosted MCP + model gateway
+  labwired logout          Clear cloud session
+  labwired whoami          Show signed-in identity / project
   labwired doctor [--strict]  Check install (strict = require sim + probe-rs)
   labwired update             Self-update kit + tools (like Cursor agent update)
   labwired smoke              Prove install works (claim gate + sim)
@@ -527,9 +566,14 @@ Probe (any popular debugger via probe-rs; virtual = LabWired sim):
   labwired probe flash <elf> --chip <id> [--target virtual|probe|auto]
   labwired probe install-backend
 
+OpenCode is the agent runtime. `labwired` installs config + skills and starts it.
+Shared tools: hosted MCP (after login) or local @labwired/mcp + sim.
+
 Env:
-  LABWIRED_MODEL_URL       Model base URL (default Ollama)
-  LABWIRED_MODEL_KEY       API key
+  LABWIRED_ACCESS_TOKEN    Hosted Bearer (labwired login)
+  LABWIRED_PROJECT         Project id for X-LabWired-Project
+  LABWIRED_MODEL_URL       Model base URL (hosted: api.labwired.com/v1)
+  LABWIRED_MODEL_KEY       API key (hosted: same as access token)
   LABWIRED_BUILDER_URL     Compile service
   LABWIRED_CLI / LABWIRED_SIM   Simulator binary (prefer labwired-sim)
   LABWIRED_PROBE_RS        probe-rs binary override
@@ -697,6 +741,21 @@ case "${1:-}" in
     shift
     labwired_probe_cmd "$@"
     ;;
+  agent|opencode)
+    shift || true
+    if [[ -n "${LABWIRED_HOME:-}" && -d "${LABWIRED_HOME}/bin" ]]; then
+      export PATH="${LABWIRED_HOME}/bin:${PATH}"
+    fi
+    if ! command -v opencode >/dev/null 2>&1; then
+      fail "'opencode' not found. Install Node 18+, then re-run: curl -fsSL https://labwired.com/install | bash"
+    fi
+    labwired_prepare_agent_start
+    if [[ "${LABWIRED_PROFILE:-}" != "hosted" ]]; then
+      labwired_export_sim || true
+    fi
+    echo "labwired: starting OpenCode agent (skills + labwired_* tools)…" >&2
+    exec opencode "$@"
+    ;;
   "")
     # Ensure prefix tools visible for this session
     if [[ -n "${LABWIRED_HOME:-}" && -d "${LABWIRED_HOME}/bin" ]]; then
@@ -714,7 +773,7 @@ case "${1:-}" in
         echo "         or: labwired update --tools-only" >&2
       fi
     fi
-    echo "labwired: starting agent (skills + shared labwired_* tools)…" >&2
+    echo "labwired: starting OpenCode agent (skills + labwired_* tools)…" >&2
     exec opencode "$@"
     ;;
   *)
@@ -722,7 +781,11 @@ case "${1:-}" in
     if ! command -v opencode >/dev/null 2>&1; then
       fail "'opencode' not found on PATH. Run ./install.sh first."
     fi
-    labwired_export_sim || true
+    if labwired_cloud_hosted_ready 2>/dev/null; then
+      labwired_prepare_agent_start || true
+    else
+      labwired_export_sim || true
+    fi
     exec opencode "$@"
     ;;
 esac

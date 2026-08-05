@@ -3,7 +3,11 @@
   "mcp": {
     "labwired": {
       "type": "local",
-      "command": ["npx", "-y", "@labwired/mcp"],
+      "command": [
+        "npx",
+        "-y",
+        "@labwired/mcp"
+      ],
       "enabled": true,
       "timeout": 120000,
       "environment": {
@@ -51,7 +55,7 @@
       },
       "models": {
         "qwen2.5-coder": {
-          "name": "LabWired · Qwen2.5-Coder"
+          "name": "LabWired \u00b7 Qwen2.5-Coder"
         }
       }
     }
@@ -62,7 +66,7 @@
   "agent": {
     "labwired": {
       "name": "LabWired Agent",
-      "description": "Write firmware and run it on a virtual board.",
+      "description": "Write firmware and prove it on the LabWired twin via labwired_* tools.",
       "mode": "primary",
       "color": "#0056b3"
     }
