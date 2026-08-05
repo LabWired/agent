@@ -14,16 +14,16 @@ bad() { echo "FAIL $*"; fail=1; }
 
 echo "==> Wave A smoke (automated)"
 
-# 1 doctor (non-strict)
+# 1 doctor (non-strict): exit 0 is the only pass.
+# Do NOT grep substring "ready" — "not ready" also matches and hides FAILs.
 if "$LABWIRED" doctor >"$SMOKE_OUT/doctor.txt" 2>&1; then
-  pass "doctor ready"
-else
-  # doctor may warn without failing when sim optional
-  if grep -q 'ready' "$SMOKE_OUT/doctor.txt"; then
-    pass "doctor ready (warns ok)"
+  if grep -qiE '(^|[^a-z])not ready' "$SMOKE_OUT/doctor.txt"; then
+    bad "doctor printed not ready but exited 0"; tail -8 "$SMOKE_OUT/doctor.txt"
   else
-    bad "doctor"; tail -5 "$SMOKE_OUT/doctor.txt"
+    pass "doctor ready (exit 0)"
   fi
+else
+  bad "doctor exit non-zero"; tail -8 "$SMOKE_OUT/doctor.txt"
 fi
 
 # 2 offline assert
