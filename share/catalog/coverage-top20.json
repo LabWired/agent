@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "updated": "2026-08-05",
+  "note": "Ratchet target: each id should be queryable via labwired_list/describe and eventually labwired_part + datasheet text. Counts are kit beachheads, not marketing vanity.",
+  "targets": [
+    {"id": "esp32-c3-supermini", "kind": "board", "need": ["pinout", "uart", "gpio"]},
+    {"id": "esp32c3", "kind": "mcu", "need": ["pinout"]},
+    {"id": "nucleo-l476rg", "kind": "board", "need": ["pinout"]},
+    {"id": "stm32l476", "kind": "mcu", "need": ["pinout"]},
+    {"id": "stm32f103-blinky", "kind": "board", "need": ["pinout"]},
+    {"id": "adafruit-feather-esp32-v2", "kind": "board", "need": ["pinout"]},
+    {"id": "bme280", "kind": "part", "need": ["pinout", "i2c_addr", "datasheet"]},
+    {"id": "ssd1306", "kind": "part", "need": ["pinout", "i2c_addr", "datasheet"]},
+    {"id": "ssd1306-oled", "kind": "part", "need": ["pinout", "i2c_addr"]},
+    {"id": "adxl345", "kind": "part", "need": ["pinout", "i2c_addr", "datasheet"]},
+    {"id": "mpu6050", "kind": "part", "need": ["pinout", "i2c_addr"]},
+    {"id": "vl53l0x", "kind": "part", "need": ["pinout", "i2c_addr"]},
+    {"id": "led", "kind": "part", "need": ["pinout"]},
+    {"id": "button", "kind": "part", "need": ["pinout"]},
+    {"id": "resistor", "kind": "part", "need": []},
+    {"id": "logic-analyzer", "kind": "tool", "need": []},
+    {"id": "rp2040", "kind": "mcu", "need": ["pinout"]},
+    {"id": "nrf52840", "kind": "mcu", "need": ["pinout"]},
+    {"id": "stm32h563", "kind": "mcu", "need": ["pinout"]},
+    {"id": "esp32-s3", "kind": "mcu", "need": ["pinout"]}
+  ],
+  "local_systems": "share/catalog/systems/*.yaml — agent ships thin system YAMLs for twin beachheads"
+}

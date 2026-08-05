@@ -23,14 +23,18 @@ returns `status: model_verified` on that binary with a matching oracle.
 
 1. Confirm board/MCU and framework (Arduino or bare-metal first; Zephyr only
    when the session docs honestly support it).
-2. Prefer a target already validated via `board-bringup` / catalog describe.
+2. Prefer a target already validated via `board-bringup` / catalog describe /
+   **`part-knowledge`** (pins from tools only).
 3. Write the smallest skeleton that exercises one observable behavior:
    - GPIO toggle / blink, or
    - UART print of a known marker (e.g. Gate 1 uses `LABWIRED_OK`)
-4. Keep files minimal; no drive-by refactors of unrelated code.
-5. Hand off to `verify-firmware` (or `diagnose-firmware` on failure) with an
-   oracle clause for that behavior.
-6. Do not weaken the oracle to make a green scaffold.
+4. For blinky demos that will use **compose-observability**, prefer UART lines
+   `LED ON` / `LED OFF` (or equivalent) so LED vs UART can be composed without
+   inventing edges.
+5. Keep files minimal; no drive-by refactors of unrelated code.
+6. Hand off to `verify-firmware` / `golden-path` (or `diagnose-firmware` on
+   failure) with an oracle clause for that behavior.
+7. Do not weaken the oracle to make a green scaffold.
 
 ## Claim vocabulary
 

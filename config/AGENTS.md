@@ -18,6 +18,21 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 `hardware_observed` (flash + serial/RTT marker) is **never** upgraded to
 `model_verified`.
 
+## Plots = elements (not ready-made views)
+
+When the user wants a **plot, chart, scope, overlay, or “show X over time”**:
+
+- **Assemble** a view from observability **elements** (UART/serial, GPIO edges,
+  bus samples, registers, faults, evidence) via tools.
+- **Do not** invent a fixed plot type or pretend a ready-made dashboard exists.
+- **Do not** invent waveform data — pull from `labwired_run` / `labwired_inspect` /
+  evidence / plot series, or say the element is unavailable.
+- A composed plot is **observation**, never `model_verified` (use `verify-firmware`).
+- Prefer existing surfaces (plot series, capture/export, thin Plot glass) over
+  building a new plot product.
+
+Use skill **`compose-observability`**.
+
 ## Status words (use exactly)
 
 | Status | Meaning in plain terms |
@@ -80,14 +95,44 @@ Do not spin past the budget. Do not edit the oracle to force green.
 6. Report should include chip, probe selector (if any), ELF path/digest if known, marker, and capture excerpt ref.  
 7. Board examples under `examples/` / `fixtures/` are **canaries**, not the product.
 
+## Execution paths (do not force sim)
+
+LabWired supports **more than one way to run firmware**. Do **not** refuse to
+help or stall because a local simulator binary is missing.
+
+| Path | When | What you may claim |
+|------|------|--------------------|
+| **Twin / sim** (`labwired_run` / `labwired_verify`) | Hosted MCP after login, or local sim present | `model_verified` **only** via verify |
+| **Debugger** (VS Code F5 / DAP reverse-step, probe-rs GDB) | No sim, or user prefers silicon/debug | Observe / step / flash; **not** `model_verified` unless twin verify also ran |
+| **Desk HW** (`flash-firmware` / `hw-promote`) | Probe + board available | `hardware_observed` only with marker capture |
+
+**Preference when both exist:** twin verify first (fast, CI-repeatable), then
+optional debugger or promote.  
+**When twin is unavailable:** use the **debugger** (and/or probe tools) without
+apology — that is a first-class path, not a fallback failure.
+
+Never invent a sim result. Never call debugger success `model_verified`.
+
+## Default loop
+
+For first session or “prove it” asks, prefer skill **`golden-path`**:
+
+`part-knowledge` → `board-bringup` → `scaffold-firmware` →  
+**if twin tools available:** run → `verify-firmware` → repair ≤3 if red →  
+**else:** debugger / probe path (honest claims) →  
+`report-evidence` → optional `compose-observability`.
+
 ## Skills
 
 | Skill | When |
 |-------|------|
+| `golden-path` | End-to-end prove-before-silicon (default stranger path) |
 | `verify-firmware` | Before saying anything works on the twin |
 | `diagnose-firmware` | Capture a failing check, then fix and re-check |
 | `firmware-repair-loop` | Constrained multi-step repair: red → patch ≤3 re-verifies → same oracle |
 | `inspect-evidence` | Explain a result (read-only) |
+| `compose-observability` | Plot / chart / overlay / “show X over time” → assemble from **elements** |
+| `part-knowledge` | Pinout / part / datasheet facts — **tools only, never invent** |
 | `board-bringup` | New board or wiring |
 | `scaffold-firmware` | Minimal blink / serial hello |
 | `report-evidence` | Clear summary for the user or CI (twin + HW as separate fields) |
@@ -102,10 +147,13 @@ Do not spin past the budget. Do not edit the oracle to force green.
 |------|------|--------------|
 | `labwired_list` | Catalog boards / systems | none |
 | `labwired_describe` | Pins, defaults, beachhead metadata | none |
+| `labwired_part` / `labwired_part_*` | Structured part facts (when hosted) | none (not a pass) |
+| `labwired_datasheet` | Datasheet text search/page | none (not a pass) |
 | `labwired_validate` | Diagram / setup sanity | none (not a pass) |
+| `labwired_compile` | Source → `firmware_ref` (hosted) | none |
 | `labwired_run` | Observe twin serial / behavior | observation only |
 | `labwired_verify` | Mandatory-oracle dispose | **only** path to `model_verified` |
-| `labwired_inspect` | Evidence / result explanation | read-only |
+| `labwired_inspect` | State / evidence slice | read-only |
 
 ### CLI surfaces (agent / human)
 
@@ -125,6 +173,9 @@ Do not spin past the budget. Do not edit the oracle to force green.
 - Treating `labwired_run` output as `model_verified`  
 - Treating probe flash success alone as `hardware_observed` (serial marker required)  
 - Treating `hardware_observed` as `model_verified`  
+- Inventing plot/waveform series or claiming a ready-made plot product exists  
+- Treating a composed plot as `model_verified` or `hardware_observed`  
+- Inventing pinouts, I²C/SPI addresses, or register values without part/describe tools  
 - Invoking training / QLoRA / fine-tune tooling as part of the agent product  
 - OpenOCD-first workflows as the primary path (probe-rs remains default backend)  
 - More than **3** repair re-verifies after the first red without stopping and reporting  

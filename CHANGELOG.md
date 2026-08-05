@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.3.2 — 2026-08-05 — Wave A automated close-out
+
+### Proven (automated smoke)
+- **`scripts/smoke-wave-a.sh`** — doctor, offline assert, **live-gate1** twin red→green, E3 compose
+- **`scripts/compose-elements.py`** + `share/observability/element-catalog.json`
+- **`labwired_cloud_ensure_project`** — heal empty project_id after login
+- **`share/catalog/coverage-top20.json`** — knowledge coverage ratchet list
+- Doctor checks golden-path / part-knowledge / compose-observability skills
+- Sim still optional; debugger first-class
+
+### Run
+```bash
+./scripts/smoke-wave-a.sh
+./scripts/live-gate1.sh
+python3 scripts/compose-elements.py --uart fixtures/gate1-live/evidence/fixed/uart.log
+```
+
+## 0.3.1 — 2026-08-05 — Embedder offerings coverage (Wave A/B skills)
+
+### Skills / SOTA loop
+- **`golden-path`** — stranger path: knowledge → scaffold → verify → report → optional plot
+- **`part-knowledge`** — pin/part/datasheet via tools only; never invent
+- **`compose-observability`** — E3 LED vs UART recipe; plots = elements
+- AGENTS.md default loop + tool allowlist for part/datasheet/compile
+- OpenCode skill allowlist (local + hosted) includes new skills
+- **Sim not forced:** debugger / probe is first-class when twin missing; never rename debug success to `model_verified`
+
+### Docs
+- `docs/GOLDEN_PATH.md` — install → login → prove walkthrough
+- README skills table + golden-path pointer
+
+### CLI
+- Soft notes when no local sim (login / debugger options); doctor warn stays non-fatal
+
+### Tests
+- skills-inventory / harness / fw-usecase skill lists updated
+
 ## 0.3.0 — 2026-08-05 — First product release
 
 ### Ship

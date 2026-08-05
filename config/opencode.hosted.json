@@ -20,7 +20,10 @@
       "report-evidence": "allow",
       "flash-firmware": "allow",
       "firmware-repair-loop": "allow",
-      "hw-promote": "allow"
+      "hw-promote": "allow",
+      "compose-observability": "allow",
+      "part-knowledge": "allow",
+      "golden-path": "allow"
     }
   },
   "provider": {
@@ -36,7 +39,7 @@
       },
       "models": {
         "labwired-default": {
-          "name": "LabWired · Default"
+          "name": "LabWired \u00b7 Default"
         }
       }
     }

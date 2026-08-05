@@ -15,11 +15,103 @@ need_skill() {
 }
 
 for s in \
-  verify-firmware diagnose-firmware inspect-evidence \
+  verify-firmware diagnose-firmware inspect-evidence compose-observability \
+  part-knowledge golden-path \
   board-bringup scaffold-firmware report-evidence flash-firmware \
   firmware-repair-loop hw-promote
 do
   need_skill "$s"
+done
+
+# Plots = elements (not ready-made Open Plot product)
+if grep -qi 'elements\|compose.*plot\|not.*ready-made\|ready-made plot' \
+  "$ROOT/skills/compose-observability/SKILL.md"; then
+  echo "ok   compose-observability elements rule"
+else
+  echo "FAIL compose-observability missing elements product rule"
+  fail=1
+fi
+if grep -q 'compose-observability' "$ROOT/config/AGENTS.md" \
+  && grep -qi 'Plots = elements\|observability \*\*elements\*\*\|ready-made' \
+  "$ROOT/config/AGENTS.md"; then
+  echo "ok   AGENTS plots=elements rule"
+else
+  echo "FAIL AGENTS.md missing compose-observability / plots=elements"
+  fail=1
+fi
+
+# Wave A/B: golden path + part knowledge
+if grep -qi 'never invent\|tools first\|part-knowledge' \
+  "$ROOT/skills/part-knowledge/SKILL.md"; then
+  echo "ok   part-knowledge refuse-invent"
+else
+  echo "FAIL part-knowledge missing refuse-invent rule"
+  fail=1
+fi
+if grep -q 'golden-path' "$ROOT/config/AGENTS.md" \
+  && grep -qi 'labwired_verify\|model_verified' "$ROOT/skills/golden-path/SKILL.md"; then
+  echo "ok   golden-path + AGENTS default loop"
+else
+  echo "FAIL golden-path missing from AGENTS or verify rule"
+  fail=1
+fi
+if grep -qi 'do not force sim\|Do not force sim\|sim is not required\|debugger' \
+  "$ROOT/config/AGENTS.md" \
+  && grep -qi 'Do not force sim\|debugger path\|no sim' \
+  "$ROOT/skills/golden-path/SKILL.md"; then
+  echo "ok   sim optional / debugger first-class"
+else
+  echo "FAIL missing sim-optional / debugger path rule"
+  fail=1
+fi
+if grep -q 'E3 recipe' "$ROOT/skills/compose-observability/SKILL.md"; then
+  echo "ok   compose E3 LED vs UART recipe"
+else
+  echo "FAIL compose-observability missing E3 recipe"
+  fail=1
+fi
+if [[ -f "$ROOT/docs/GOLDEN_PATH.md" ]]; then
+  echo "ok   docs/GOLDEN_PATH.md"
+else
+  echo "FAIL missing docs/GOLDEN_PATH.md"
+  fail=1
+fi
+if [[ -f "$ROOT/share/observability/element-catalog.json" ]] \
+  && [[ -f "$ROOT/scripts/compose-elements.py" ]]; then
+  echo "ok   element catalog + compose-elements.py"
+else
+  echo "FAIL missing element catalog or compose-elements.py"
+  fail=1
+fi
+if [[ -f "$ROOT/share/catalog/coverage-top20.json" ]]; then
+  echo "ok   coverage-top20 ratchet list"
+else
+  echo "FAIL missing share/catalog/coverage-top20.json"
+  fail=1
+fi
+# compose smoke
+if printf 'LED ON\nLED OFF\n' | python3 "$ROOT/scripts/compose-elements.py" --uart - >/tmp/lw-compose-test.json 2>/dev/null \
+  && grep -q 'led_from_uart' /tmp/lw-compose-test.json; then
+  echo "ok   compose-elements extracts LED series"
+else
+  echo "FAIL compose-elements smoke"
+  fail=1
+fi
+if [[ -x "$ROOT/scripts/smoke-wave-a.sh" ]] || [[ -f "$ROOT/scripts/smoke-wave-a.sh" ]]; then
+  echo "ok   smoke-wave-a.sh present"
+else
+  echo "FAIL smoke-wave-a.sh missing"
+  fail=1
+fi
+# OpenCode skill allowlist includes new skills
+for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json"; do
+  if grep -q 'golden-path' "$cfg" && grep -q 'part-knowledge' "$cfg" \
+    && grep -q 'compose-observability' "$cfg"; then
+    echo "ok   $(basename "$cfg") skill allowlist"
+  else
+    echo "FAIL $cfg missing golden-path/part-knowledge/compose allow"
+    fail=1
+  fi
 done
 
 # Must not ship duplicate/ confusable skill name

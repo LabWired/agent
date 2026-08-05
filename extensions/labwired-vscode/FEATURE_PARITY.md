@@ -1,8 +1,15 @@
-# Embedder → LabWired feature parity
+# Embedder → LabWired feature parity (workbench chrome)
 
-**Goal:** Match Embedder’s *extension surfaces* where they matter, without abandoning LabWired’s wedge (twin oracle + shared MCP tools).
+**Goal:** Match Embedder’s *extension surfaces* where they matter, without abandoning LabWired’s wedge (twin oracle + shared MCP tools + **composable observability elements**).
 
 **Updated:** 2026-08-05
+
+**Product-level scorecard (path / knowledge / plots / kill):**  
+[`labwired` monorepo `docs/strategy/2026-08-05-product-parity-scorecard.md`](../../../labwired/docs/strategy/2026-08-05-product-parity-scorecard.md)  
+(adjust relative path if this clone sits outside the monorepo tree.)
+
+**Plots rule:** we do **not** match Embedder **Open Plot** as a ready-made product. We ship **elements** the agent assembles into any plot the user wants.  
+→ [`2026-08-05-composable-observability-elements.md`](../../../labwired/docs/strategy/2026-08-05-composable-observability-elements.md)
 
 ## Two LabWired products (do not confuse them)
 
@@ -13,7 +20,7 @@
 
 Embedder ships **one** fat extension (UI + 115 MB CLI). We ship **chrome here** + **`labwired` OpenCode** as the brain (same tools as playground MCP).
 
-Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only advantage
+Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only advantage · ⛔ refuse clone (see product scorecard)
 
 ## Matrix (agent workbench v0.6)
 
@@ -43,7 +50,8 @@ Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only a
 | Baud + ports | monitor + defaultBaud | ✅ |
 | Serial capture / marker | `labwired serial-capture` via tools | ✅ |
 | RTT / J-Link | probe tools / debug_* | 🔶 |
-| Plot | openPlot | 🔶 |
+| **Open Plot (ready-made)** | ⛔ not a product clone | ⛔ |
+| **“Show me a plot of X”** | **Elements** + agent compose; glass = **reuse** existing Plot panel / plot RPC / (playground) LA export strips — not a new plot builder | 🔶 ★ job parity via elements (E1–E3); E4 adopt path |
 | Schematics (KiCad) | schematic custom editor | 🔶 |
 | Walkthrough | Getting Started + replay | ✅ |
 | Layout secondary sidebar | moveChatToSecondarySidebar | 🔶 |
@@ -62,10 +70,13 @@ Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only a
 2. **Agent start = OpenCode path** — same as marketplace “Start OpenCode Agent” (done in bridge env + CLI).  
 3. **Hosted tools after login** — `labwired login` / extension Log in → `LABWIRED_ACCESS_TOKEN` + project → remote MCP.  
 4. **Honest stubs only** where backend missing (team/billing already open URLs).  
-5. **Do not** re-implement Embedder instrument suite before golden path: login → chat → twin verify green.
+5. **Do not** re-implement Embedder instrument suite or **Open Plot** before golden path: login → chat → twin verify green.  
+6. **Observability:** element catalog + compose skill + one E2E composed view — not a library of ready plots.
 
 ## Product rule
 
-If Embedder has a **command, view, mode, or setting**, the **agent workbench** should expose an equivalent under **LabWired**. Missing backend = honest stub (URL, terminal, or “needs labwired login / --server”).
+If Embedder has a **command, view, mode, or setting** that maps to a **user job we keep**, the **agent workbench** should expose an equivalent under **LabWired**. Missing backend = honest stub (URL, terminal, or “needs labwired login / --server”).
+
+**Exception — plots:** job parity (“show series / overlay X”) via **composable elements**, not command/widget parity with `openPlot`.
 
 The **debugger** extension does **not** need full chat parity — it needs twin debug + MCP/OpenCode handoff (already on `feat/agent-tools-mcp`).

@@ -68,6 +68,12 @@ else
   bad "AGENTS.md oracle vocabulary"
 fi
 
+if grep -q 'labwired_cloud_ensure_project' "$ROOT/lib/cloud-session.sh"; then
+  ok "ensure_project helper"
+else
+  bad "missing labwired_cloud_ensure_project"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "hosted-config FAIL"
   exit 1

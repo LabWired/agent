@@ -9,7 +9,7 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.2.9-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.3.2-blue)](CHANGELOG.md)
 
 ## Install
 
@@ -29,8 +29,16 @@ Then:
 
 ```bash
 labwired login    # device code → shared tools + hosted model
+labwired doctor
 labwired          # agent with labwired_* MCP tools
 ```
+
+In the agent: *“Blink the LED and prove it on the twin.”*  
+Skills run the **golden path** (knowledge → scaffold → verify → optional plot from **elements**).
+
+Full walkthrough: [docs/GOLDEN_PATH.md](docs/GOLDEN_PATH.md).
+
+Automated prove: `./scripts/smoke-wave-a.sh` (live twin red→green + E3 compose).
 
 Local-only (no sign-in) still works with a local model / sim:
 
@@ -68,11 +76,12 @@ More: [docs/PORTABLE_INSTALL.md](docs/PORTABLE_INSTALL.md)
 
 ## How it works
 
-
 1. You describe **any** board and the task  
 2. The agent writes firmware  
-3. It runs on a virtual board (twin)  
-4. Green only if behavior matches — never because the source “looks right”  
+3. It runs on a **virtual board (twin)** when available — or on silicon via the
+   **LabWired debugger / probe** when there is no sim (sim is **not** forced)  
+4. Twin **green** only if `labwired_verify` matches behavior — never because the
+   source “looks right.” Debugger runs use honest observe/HW claims, not fake twin green.
 
 Board-agnostic by design. Chip/port/marker come from the task and env
 (`LABWIRED_HW_PORT`, `LABWIRED_HW_MARKER`, `LABWIRED_HW_CHIP`) — not a single-MCU product path.
@@ -81,12 +90,25 @@ Board-agnostic by design. Chip/port/marker come from the task and env
 
 | | |
 |--|--|
-| `labwired` | Start |
+| `labwired` | Start OpenCode agent (skills + labwired_* tools) |
+| `labwired login` / `logout` / `whoami` | Hosted session |
 | `labwired doctor` | Check install |
 | `labwired version` | Version |
 | `labwired probe …` | Physical probes + virtual LabWired |
 | `labwired serial-capture` | UART/CDC marker window |
 | `./demo.sh` | Smoke test |
+
+## Skills (SOTA loop)
+
+| Skill | Role |
+|-------|------|
+| `golden-path` | Stranger path: prove on twin end-to-end |
+| `part-knowledge` | Pins/facts from tools — never invent |
+| `verify-firmware` | Only path to `model_verified` |
+| `firmware-repair-loop` | Max 3 repairs, same oracle |
+| `compose-observability` | Plots = elements, not ready-made Open Plot |
+
+See [config/AGENTS.md](config/AGENTS.md).
 
 ### Boards (not OpenOCD)
 

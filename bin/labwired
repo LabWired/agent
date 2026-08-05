@@ -166,9 +166,10 @@ cmd_doctor() {
       printf '     install: curl -fsSL https://labwired.com/install.sh | sh\n'
       ok=1
     else
-      printf '\033[33mwarn\033[0m labwired-sim: not found (optional for agent shell)\n'
-      printf '     full checks: curl -fsSL https://labwired.com/install.sh | sh\n'
-      printf '     or: export LABWIRED_CLI=/path/to/simulator\n'
+      # Sim is optional — debugger / hosted twin / probe are valid paths.
+      printf '\033[33mwarn\033[0m labwired-sim: not found (optional — not required)\n'
+      printf '     twin: labwired login  or  labwired update --tools-only\n'
+      printf '     or use LabWired VS Code debugger / probe-rs (sim not forced)\n'
     fi
   fi
 
@@ -203,7 +204,8 @@ cmd_doctor() {
   for skill in \
     verify-firmware diagnose-firmware inspect-evidence \
     board-bringup scaffold-firmware report-evidence flash-firmware \
-    firmware-repair-loop hw-promote
+    firmware-repair-loop hw-promote \
+    compose-observability part-knowledge golden-path
   do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
@@ -769,8 +771,10 @@ case "${1:-}" in
       if labwired_export_sim; then
         :
       else
-        echo "labwired: note — no local sim; run labwired login for hosted twin tools," >&2
-        echo "         or: labwired update --tools-only" >&2
+        # No local sim is fine — debugger / probe path is first-class.
+        echo "labwired: note — no local sim (optional)." >&2
+        echo "         twin: labwired login  (hosted tools)  or  labwired update --tools-only" >&2
+        echo "         or use LabWired debugger / probe-rs — sim is not required" >&2
       fi
     fi
     echo "labwired: starting OpenCode agent (skills + labwired_* tools)…" >&2

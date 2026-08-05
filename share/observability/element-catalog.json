@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "product_rule": "Plots are composed from elements; no ready-made plot catalog.",
+  "elements": [
+    {
+      "id": "serial_stream",
+      "name": "Serial / UART stream",
+      "tools": ["labwired_run", "serial-capture", "monitor"],
+      "shape": "timed or sequential text lines"
+    },
+    {
+      "id": "uart_numeric_series",
+      "name": "Numeric series from UART",
+      "tools": ["labwired_run", "plot_status", "plotParse"],
+      "shape": "named series → number[] from key=value or CSV lines"
+    },
+    {
+      "id": "gpio_edges",
+      "name": "GPIO / pad edges",
+      "tools": ["labwired_run", "labwired_inspect", "logicAnalyzerExport"],
+      "shape": "{ pin, t|cycle, level }[]"
+    },
+    {
+      "id": "bus_samples",
+      "name": "Bus samples (I2C/SPI/UART traces)",
+      "tools": ["labwired_run peripherals", "logicDataSource.traceSnapshot"],
+      "shape": "transaction or wire samples"
+    },
+    {
+      "id": "registers",
+      "name": "Register / peripheral slice",
+      "tools": ["labwired_inspect", "labwired_run output=peripherals"],
+      "shape": "named field → value"
+    },
+    {
+      "id": "faults",
+      "name": "Fault / diagnosis events",
+      "tools": ["labwired_run"],
+      "shape": "{ t?, kind, detail }[]"
+    },
+    {
+      "id": "evidence",
+      "name": "Oracle / evidence JSON",
+      "tools": ["labwired_verify", "assert-status"],
+      "shape": "status + evidence_ref + clause results"
+    },
+    {
+      "id": "logic_capture",
+      "name": "Logic capture dump",
+      "tools": ["logicAnalyzerExport", "VCD CLI", "waveform.csv"],
+      "shape": "CaptureObject or multi-lane edges"
+    }
+  ],
+  "compose_examples": [
+    {
+      "id": "e3_led_vs_uart",
+      "ask": "plot LED vs UART",
+      "elements": ["serial_stream", "gpio_edges", "uart_numeric_series"],
+      "script": "scripts/compose-elements.py"
+    }
+  ]
+}

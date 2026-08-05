@@ -134,6 +134,82 @@ labwired_cloud_hosted_ready() {
   return 1
 }
 
+# If session has a token but no project_id, pick the first project from the API
+# (or create "Desktop") and persist it. Login used to leave project empty when
+# bootstrap failed silently — that breaks the model gateway (X-LabWired-Project).
+labwired_cloud_ensure_project() {
+  if [[ -n "${LABWIRED_PROJECT:-}" ]]; then
+    return 0
+  fi
+  if [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
+    return 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  local api path proj
+  api="$(labwired_cloud_api_base)"
+  path="$(labwired_cloud_session_path)"
+  proj="$(
+    ACCESS="$LABWIRED_ACCESS_TOKEN" API="$api" SESSION_PATH="$path" python3 - <<'PY'
+import json, os, urllib.request, urllib.error
+from pathlib import Path
+api = os.environ["API"].rstrip("/")
+token = os.environ["ACCESS"]
+h = {"Authorization": f"Bearer {token}", "Accept": "application/json", "User-Agent": "labwired-agent/0.3.1"}
+
+def get(path):
+    req = urllib.request.Request(f"{api}{path}", headers=h)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+def post(path, body):
+    req = urllib.request.Request(
+        f"{api}{path}",
+        data=json.dumps(body).encode(),
+        headers={**h, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+proj = ""
+try:
+    data = get("/v1/projects")
+    projects = data.get("projects") or data.get("items") or []
+    if projects:
+        p0 = projects[0]
+        proj = p0.get("id") or p0.get("project_id") or ""
+except Exception:
+    pass
+if not proj:
+    try:
+        created = post("/v1/projects", {"name": "Desktop"})
+        p = created.get("project") or created
+        proj = p.get("id") or p.get("project_id") or ""
+    except Exception:
+        proj = ""
+if not proj:
+    raise SystemExit(1)
+# Persist into session JSON when present
+sp = Path(os.environ.get("SESSION_PATH") or "")
+if sp.is_file():
+    try:
+        d = json.loads(sp.read_text())
+        d["project_id"] = proj
+        sp.write_text(json.dumps(d, indent=2) + "\n")
+    except Exception:
+        pass
+print(proj)
+PY
+  )" || return 1
+  if [[ -z "$proj" ]]; then
+    return 1
+  fi
+  export LABWIRED_PROJECT="$proj"
+  return 0
+}
+
 # Export model + project env for both opencode and direct OpenAI-compat clients.
 labwired_cloud_export_runtime() {
   if [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
@@ -146,5 +222,9 @@ labwired_cloud_export_runtime() {
   export LABWIRED_MODEL_KEY="${LABWIRED_ACCESS_TOKEN}"
   export LABWIRED_MODEL="${LABWIRED_MODEL:-labwired-default}"
   export LABWIRED_PROJECT="${LABWIRED_PROJECT:-}"
+  # Auto-heal empty project so gateway + MCP work after older logins
+  if [[ -z "${LABWIRED_PROJECT:-}" ]]; then
+    labwired_cloud_ensure_project || true
+  fi
   return 0
 }

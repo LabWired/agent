@@ -21,11 +21,15 @@ A diagram and target must be **valid** before you claim firmware behavior.
 
 1. Clarify the target board or MCU with the user (catalog name if known).
 2. Call `labwired_list` / `labwired_describe` for pins, defaults, and beachhead.
-3. Draft a `diagram` JSON: MCU part type matching the board, nets, and peripherals
-   the firmware will touch.
-4. Call `labwired_validate` (or equivalent) when available; fix pin/bus errors.
-5. Only then load `scaffold-firmware` or write firmware against that diagram.
-6. Never invent pin maps that contradict catalog describe output.
+3. For sensors / connectors / non-obvious pins or bus addresses, load
+   **`part-knowledge`** (`labwired_part*` / `labwired_datasheet` when available).
+   **Never invent** pin maps or I²C/SPI addresses from model memory.
+4. Draft a `diagram` JSON: MCU part type matching the board, nets, and peripherals
+   the firmware will touch — values **only** from tool output.
+5. Call `labwired_validate` (or equivalent) when available; fix pin/bus errors.
+6. Only then load `scaffold-firmware` or write firmware against that diagram.
+7. Hand off success claims to `verify-firmware` / `golden-path` — bring-up alone
+   is not model-verified.
 
 ## Claim vocabulary
 

@@ -17,8 +17,12 @@ metadata:
 ## Hard rule
 
 You may tell the user firmware is **model-verified** only when `labwired_verify`
-returns `status: model_verified`. Compile success, `labwired_run` output, or reading
-the source is never enough. LLM judgment is never enough.
+returns `status: model_verified`. Compile success, `labwired_run` output, reading
+the source, or **debugger / probe success** is never enough. LLM judgment is never enough.
+
+If twin tools are **unavailable**, do not invent a verify result — hand off to the
+**debugger path** (VS Code F5 / probe-rs) and report observations without the
+`model_verified` label. Sim is not forced; debugger is first-class.
 
 ## Claim vocabulary
 
