@@ -57,6 +57,12 @@
       "ask": "plot LED vs UART",
       "elements": ["serial_stream", "gpio_edges", "uart_numeric_series"],
       "script": "scripts/compose-elements.py"
+    },
+    {
+      "id": "la_capture",
+      "ask": "show logic capture / pin edges",
+      "elements": ["logic_capture", "gpio_edges"],
+      "script": "scripts/compose-from-capture.py"
     }
   ]
 }

@@ -42,9 +42,14 @@ You do not upgrade status.
    labwired assert-status model_verified < verify.json
    # when HW result JSON is available (assert-status supports hardware_observed):
    # labwired assert-status hardware_observed < hw-result.json
+   # dual-claim markdown (never invents green):
+   python3 scripts/report-evidence.py --twin verify.json --hw hw.json --out report.md
+   python3 scripts/report-evidence.py --twin verify.json --require-evidence-on-green
    ```
 4. Optional: load `inspect-evidence` when explaining digests/signatures.
 5. Never invent signatures, digests, or a green status.
+6. If twin is `model_verified` and HW is `hardware_observed`, print **both** in the
+   dual-claim footer — never merge them into one green.
 
 ## Claim vocabulary
 

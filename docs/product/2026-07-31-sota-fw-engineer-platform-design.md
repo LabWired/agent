@@ -5,8 +5,9 @@
 | **Title** | LabWired SOTA Firmware Engineer Platform — Product Design |
 | **Author** | LabWired Product / Systems Architecture |
 | **Date** | 2026-07-31 |
-| **Status** | Approved (rev 3 — **V1 ship-first** rule binding) |
-| **Repos** | `labwired-cursor` (thin Electron editor), `labwired-agent` (JSON-RPC runtime) |
+| **Status** | Approved (rev 3 — **V1 ship-first** rule binding) — **roadmap for desk agent/editor**, not browser Architect |
+| **Repos** | `labwired-cursor` (thin Electron editor), `labwired-agent` (JSON-RPC / OpenCode runtime) |
+| **Not this doc** | Playground Architect (`/v1/agent`) — keep separate; see monorepo `docs/strategy/two-agents.md` |
 | **Baseline claim** | `AGENT_PRODUCT_READY` (scoped) — `docs/superpowers/plans/2026-07-31-agent-product-ready.md` |
 | **V1 ship rule** | **Binding:** `docs/superpowers/plans/2026-07-31-v1-ship-what-we-have.md` — ship only super-tested baseline first |
 | **Related specs** | `2026-07-30-thin-agent-runtime-design.md`, `2026-07-30-hw-lab-surfaces-design.md` |

@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-31  
 **Status:** Binding product rule for first customer-facing release  
-**Supersedes for ship order:** SOTA design is **roadmap only** until V1 is certified
+**Supersedes for ship order:** SOTA design is **roadmap only** until V1 is certified  
+**Surface:** **LabWired Agent** (desk / this repo) — not Playground Architect. Platform split: monorepo `docs/strategy/two-agents.md`.
 
 ---
 

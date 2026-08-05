@@ -42,8 +42,12 @@ If twin tools are **unavailable**, do not invent a verify result — hand off to
 3. Write an `oracle` with at least one clause for the behavior the user cares about.
 4. Call `labwired_verify` with `firmware_ref`, board/target, `diagram`, `oracle`.
 5. Report `status`, `gaps`, and (when present) `evidence_ref`. Quote failing clauses and diagnosis on non-pass.
-6. Never weaken the oracle to obtain a pass. Fix firmware or report unsupported honestly.
-7. **On red / non-green:** hand off to `firmware-repair-loop` (entry also via
+6. **On green:** hand off to **`report-evidence`** (or run
+   `python3 scripts/report-evidence.py --twin <verify.json>`). Prefer a report
+   that includes `evidence_ref` when the tool returned one — do not celebrate
+   green without stating evidence.
+7. Never weaken the oracle to obtain a pass. Fix firmware or report unsupported honestly.
+8. **On red / non-green:** hand off to `firmware-repair-loop` (entry also via
    `diagnose-firmware`). That loop freezes this oracle, allows at most **3**
    repair iterations, scores deterministically, and **abstains** when the budget
    or gaps block progress. Re-entry here is only for dispose; status minting

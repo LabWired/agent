@@ -9,7 +9,7 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.3.2-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.3.3-blue)](CHANGELOG.md)
 
 ## Install
 
@@ -39,6 +39,8 @@ Skills run the **golden path** (knowledge → scaffold → verify → optional p
 Full walkthrough: [docs/GOLDEN_PATH.md](docs/GOLDEN_PATH.md).
 
 Automated prove: `./scripts/smoke-wave-a.sh` (live twin red→green + E3 compose).
+
+Full automatable B/C: `./scripts/smoke-remaining.sh` (coverage, evidence report, LA compose, hosted MCP probe).
 
 Local-only (no sign-in) still works with a local model / sim:
 

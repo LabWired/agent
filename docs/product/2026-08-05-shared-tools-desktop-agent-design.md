@@ -7,14 +7,20 @@
 
 ## Product definition
 
-Every agent surface (Playground Architect, Desktop Editor, CLI `labwired`, Claude Code/Codex) uses the **same** tools and knowledge:
+Every agent surface uses the **same** tools and knowledge — shells and brain loops differ:
+
+| Surface | Brain / loop | Tools |
+|---------|--------------|--------|
+| Playground **Architect** | `/v1/agent` (browser) — keep separate product | Same LabWired verbs |
+| **LabWired Agent** (this package: CLI / editor) | `/v1/chat/completions` + OpenCode | MCP `labwired_*` |
+| Claude Code / Codex / Cursor | Customer’s agent | MCP only |
 
 - MCP registry: `labwired_*` (list, describe, compile, run, verify, part, datasheet, …)
-- Hosted: `https://api.labwired.com/mcp`
-- Model gateway: `https://api.labwired.com/v1` (`labwired-default`)
+- Hosted tools: `https://api.labwired.com/mcp`
+- Desk model gateway: `https://api.labwired.com/v1` (`labwired-default`)
 - Oracle rule: success only when `labwired_verify` → `status: model_verified`
 
-Shells differ (chat UI, install, auth). **Tools do not.**
+**Binding split:** platform `docs/strategy/two-agents.md`. Composer-shaped gateway work targets **this** package’s brain path, not Architect.
 
 ## v1 golden path (Desktop / CLI)
 

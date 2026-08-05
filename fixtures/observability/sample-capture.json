@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "analyzerId": "la0",
+    "nowCycle": 1000,
+    "windowSpan": 500,
+    "generatedAtCycle": 1000,
+    "channels": [
+      { "channel": "CH0", "pin": "GPIO4", "provenance": "pad", "connected": true },
+      { "channel": "CH1", "pin": "GPIO5", "provenance": "pad", "connected": true }
+    ]
+  },
+  "edges": [
+    { "channel": "CH0", "cycle": 100, "value": 1 },
+    { "channel": "CH0", "cycle": 200, "value": 0 },
+    { "channel": "CH0", "cycle": 300, "value": 1 },
+    { "channel": "CH1", "cycle": 150, "value": 1 },
+    { "channel": "CH1", "cycle": 250, "value": 0 }
+  ],
+  "samples": [],
+  "busTraces": {}
+}

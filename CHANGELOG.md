@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.3 — 2026-08-06 — Remaining automatable Wave B/C
+
+### Knowledge / coverage
+- `scripts/coverage-ratchet.sh` — top-20 vs catalog-facts + twin systems
+- Published `share/catalog/coverage-latest.json` + `.md` (local kit count)
+
+### Evidence / dual-claim
+- `scripts/report-evidence.py` — dual-claim markdown; optional `--require-evidence-on-green`
+- `verify-firmware` hands off to report-evidence on green
+
+### Observability
+- `scripts/compose-from-capture.py` — LA CaptureObject / edge CSV → elements
+- Sample fixture `fixtures/observability/sample-capture.json`
+
+### Docs
+- `docs/REVERSE_STEP_DEMO.md` — same-binary twin green + F5 reverse-step
+
+### Smoke
+- `./scripts/smoke-remaining.sh` — Wave A + coverage + report + LA compose
+
+```bash
+./scripts/smoke-remaining.sh
+./scripts/coverage-ratchet.sh
+```
+
 ## 0.3.2 — 2026-08-05 — Wave A automated close-out
 
 ### Proven (automated smoke)

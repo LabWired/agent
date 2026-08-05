@@ -4,6 +4,11 @@
 
 Package the agent like a **product people install and pay for**, not an internal harness dump.
 
+> **This package is the desk / Cursor-clone agent** (OpenCode harness + skills + MCP).  
+> It is **not** the in-browser Playground **Architect** (`/v1/agent`).  
+> Platform binding: [two-agents.md](https://github.com/LabWired/labwired/blob/main/docs/strategy/two-agents.md)  
+> (in monorepo: `labwired/docs/strategy/two-agents.md`).
+
 ---
 
 ## How competitors package (steal the shape, not the stack)

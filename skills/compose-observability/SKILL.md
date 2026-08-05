@@ -126,9 +126,13 @@ Canonical composed path for golden-path / blinky demos:
    - **GPIO series** (if available): edge list for the LED pin.
    - If only serial exists: compose a **digital-from-log** series
      (`1` on ON lines, `0` on OFF) and label it `derived_from_uart` (honest provenance).
-4. **Helper (reuse, do not reimplement):** from the agent kit root:
+4. **Helpers (reuse, do not reimplement):** from the agent kit root:
    ```bash
+   # UART / LED markers
    python3 scripts/compose-elements.py --uart path/to/uart.log --out composed.json
+   # Logic-analyzer CaptureObject or edge CSV (+ optional UART merge)
+   python3 scripts/compose-from-capture.py --capture capture.json --out composed.json
+   python3 scripts/compose-from-capture.py --edges-csv edges.csv --uart uart.log --out composed.json
    ```
    Catalog: `share/observability/element-catalog.json`
 5. Present:

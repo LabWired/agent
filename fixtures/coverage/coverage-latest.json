@@ -1,0 +1,283 @@
+{
+  "generated_at": "2026-08-05T22:27:16.391436+00:00",
+  "total_targets": 20,
+  "found_local": 20,
+  "found_pct": 100.0,
+  "pinout_or_ok": 19,
+  "catalog_parts_count": 136,
+  "twin_systems_count": 22,
+  "note": "Local agent kit coverage (catalog-facts + twin systems). Hosted labwired_part/datasheet is separate.",
+  "rows": [
+    {
+      "id": "esp32-c3-supermini",
+      "kind": "board",
+      "need": [
+        "pinout",
+        "uart",
+        "gpio"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types",
+        "systems/esp32c3.yaml"
+      ]
+    },
+    {
+      "id": "esp32c3",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/esp32c3.yaml",
+        "systems/esp32c3.yaml"
+      ]
+    },
+    {
+      "id": "nucleo-l476rg",
+      "kind": "board",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types",
+        "systems/stm32l476.yaml"
+      ]
+    },
+    {
+      "id": "stm32l476",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/stm32l476.yaml",
+        "systems/stm32l476.yaml"
+      ]
+    },
+    {
+      "id": "stm32f103-blinky",
+      "kind": "board",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "systems/stm32f103.yaml"
+      ]
+    },
+    {
+      "id": "adafruit-feather-esp32-v2",
+      "kind": "board",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": false,
+      "sources": [
+        "catalog-facts.parts~esp32"
+      ]
+    },
+    {
+      "id": "bme280",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr",
+        "datasheet"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "ssd1306",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr",
+        "datasheet"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts~oled-ssd1306"
+      ]
+    },
+    {
+      "id": "ssd1306-oled",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts~led"
+      ]
+    },
+    {
+      "id": "adxl345",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr",
+        "datasheet"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "mpu6050",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "vl53l0x",
+      "kind": "part",
+      "need": [
+        "pinout",
+        "i2c_addr"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "led",
+      "kind": "part",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "button",
+      "kind": "part",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "resistor",
+      "kind": "part",
+      "need": [],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "logic-analyzer",
+      "kind": "tool",
+      "need": [],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.parts",
+        "catalog-facts.device_types"
+      ]
+    },
+    {
+      "id": "rp2040",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/rp2040.yaml",
+        "systems/rp2040.yaml"
+      ]
+    },
+    {
+      "id": "nrf52840",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/nrf52840.yaml",
+        "systems/nrf52840.yaml"
+      ]
+    },
+    {
+      "id": "stm32h563",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/stm32h563.yaml",
+        "systems/stm32h563.yaml"
+      ]
+    },
+    {
+      "id": "esp32-s3",
+      "kind": "mcu",
+      "need": [
+        "pinout"
+      ],
+      "found_local": true,
+      "pinout_local": true,
+      "sources": [
+        "catalog-facts.chips",
+        "systems/esp32s3.yaml",
+        "systems/esp32s3-zero.yaml"
+      ]
+    }
+  ]
+}

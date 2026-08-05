@@ -103,6 +103,26 @@ else
   echo "FAIL smoke-wave-a.sh missing"
   fail=1
 fi
+if [[ -f "$ROOT/scripts/coverage-ratchet.sh" ]] \
+  && [[ -f "$ROOT/scripts/report-evidence.py" ]] \
+  && [[ -f "$ROOT/scripts/compose-from-capture.py" ]]; then
+  echo "ok   coverage + report-evidence + compose-from-capture scripts"
+else
+  echo "FAIL missing B/C helper scripts"
+  fail=1
+fi
+if [[ -f "$ROOT/docs/REVERSE_STEP_DEMO.md" ]]; then
+  echo "ok   REVERSE_STEP_DEMO.md"
+else
+  echo "FAIL missing REVERSE_STEP_DEMO.md"
+  fail=1
+fi
+if [[ -f "$ROOT/share/catalog/coverage-latest.json" ]]; then
+  echo "ok   coverage-latest published"
+else
+  echo "FAIL share/catalog/coverage-latest.json missing — run scripts/coverage-ratchet.sh"
+  fail=1
+fi
 # OpenCode skill allowlist includes new skills
 for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json"; do
   if grep -q 'golden-path' "$cfg" && grep -q 'part-knowledge' "$cfg" \
