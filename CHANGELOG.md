@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0 — 2026-08-05 — First product release
+
+### Ship
+- **Hosted OpenCode path:** `labwired login` → device-code auth → remote MCP (`api.labwired.com/mcp`) + model gateway (`labwired-default`)
+- **Shared tools:** same `labwired_*` surface as playground and VS Code
+- **Agent workbench extension** tracked under `extensions/labwired-vscode` (Embedder-class chrome + twin verify)
+- OpenCode skills refresh on start; `labwired agent` alias; doctor reports cloud session
+
+### Reliability
+- Prefer kit next to `bin/` over stale install prefix
+- Fix `labwired help` recursive hang (quoted heredoc)
+- Hosted config + session unit tests
+
+### Install
+```bash
+curl -fsSL https://labwired.com/install | bash
+labwired doctor
+labwired login   # optional hosted
+labwired         # OpenCode agent
+```
+
+
 ## 0.2.9 — 2026-07-30
 
 ### One-line install (really easy)
