@@ -70,7 +70,8 @@ labwired
 | Local sim | Same twin tools via local MCP |
 | **No sim** | **LabWired debugger** (F5 / probe-rs) + serial — fully supported; do **not** claim `model_verified` unless twin verify ran |
 
-Hosted knowledge (`labwired_part` / datasheet breadth) may be thinner offline; still **never invent** pins.
+Hosted knowledge: **`labwired_part`** (facts) + **`labwired_datasheet`** (datasheet MCP only).  
+Offline/local may be thinner; still **never invent** pins or datasheet text.
 
 ---
 

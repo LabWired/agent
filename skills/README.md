@@ -62,11 +62,18 @@ Sim is **not** forced; debugger is first-class when twin is missing.
 |------|------|
 | `labwired_list` / `labwired_describe` | Catalog + pins |
 | `labwired_part` | Structured part facts |
-| `labwired_datasheet` | Datasheet text search/page |
+| **`labwired_datasheet`** | **Datasheets — access only through this MCP tool** |
 | `labwired_compile` / `run` / `verify` | Build + twin prove |
 | `labwired_inspect` | State slices |
 
-Skills do not embed datasheet PDFs; they force **tool use**.
+### Datasheets (binding)
+
+- **Source of truth for datasheet text:** hosted MCP **`labwired_datasheet`**  
+  (same shared tools surface as compile/run/verify after `labwired login`).  
+- Skills **do not** ship PDF blobs or invent RM text.  
+- Flow: try **`labwired_part`** for checked facts → if missing, **`labwired_datasheet`**  
+  and **quote only what the tool returns**.  
+- Local project PDF drop folders are **not** the product datasheet path.
 
 ---
 

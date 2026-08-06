@@ -20,16 +20,18 @@ metadata:
 ## Hard rules
 
 1. **Never invent** pin numbers, bus addresses, register resets from model memory.  
-2. Call tools first: `labwired_list` / `labwired_describe` / `labwired_part*` /
-   `labwired_datasheet` when available.  
-3. A fact is **not** `model_verified`. Only **prove** pack / `labwired_verify` mints that.  
-4. Scaffold is a **proposal** — compile success is not a pass.
+2. Call MCP tools first: `labwired_list` / `labwired_describe` / `labwired_part*`.  
+3. **Datasheets only via MCP `labwired_datasheet`** — not model memory, not random web
+   scrape as authority. Quote tool output only.  
+4. A fact is **not** `model_verified`. Only **prove** pack / `labwired_verify` mints that.  
+5. Scaffold is a **proposal** — compile success is not a pass.
 
 ## A. Part knowledge (context before code)
 
 1. Identify part/board (ask once if unclear).  
-2. List/resolve → describe/get facts for pins and buses firmware will touch.  
-3. If a field is missing, datasheet search and **quote returned text only**.  
+2. `labwired_list` → `labwired_describe` → **`labwired_part`** for pins/buses firmware will touch.  
+3. If a field is missing: call **`labwired_datasheet`** (our datasheet MCP) and  
+   **quote only returned text**.  
 4. If tools return nothing / ambiguous — say so; do not fill gaps.
 
 ## B. Board / diagram

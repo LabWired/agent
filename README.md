@@ -115,7 +115,7 @@ Board-agnostic by design. Chip/port/marker come from the task and env
 **Process (Superpowers)** — prepacked in the same kit: TDD, plans, systematic-debugging,
 verification-before-completion, … (see `using-superpowers`).  
 
-**Knowledge / datasheets:** MCP tools `labwired_part` + `labwired_datasheet` (not invent).  
+**Knowledge:** `labwired_part` (facts). **Datasheets:** only MCP **`labwired_datasheet`** (not invent).  
 
 Map: [skills/README.md](skills/README.md) · [config/AGENTS.md](config/AGENTS.md).
 

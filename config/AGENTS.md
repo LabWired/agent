@@ -140,8 +140,11 @@ Engineering process skills ship in the same kit (`using-superpowers`, TDD, plans
 systematic-debugging, verification-before-completion, …). Use them for *how* to
 work. They **do not** mint `model_verified`.  
 
-**Knowledge:** pin/register/datasheet claims still go through MCP  
-(`labwired_part`, `labwired_datasheet`, list/describe) via **`bringup`**.
+**Knowledge:** pin/register claims via MCP `labwired_list` / `describe` / **`labwired_part`**.  
+**Datasheets:** **only** via MCP tool **`labwired_datasheet`** (hosted shared tools).  
+Do **not** invent datasheet text, scrape random PDFs as authority, or treat local
+drop-folder PDFs as the product knowledge plane unless the user explicitly asks
+to open a file they provided. Prefer `labwired_datasheet` after login.
 
 See `skills/README.md`.
 
@@ -154,7 +157,7 @@ See `skills/README.md`.
 | `labwired_list` | Catalog boards / systems | none |
 | `labwired_describe` | Pins, defaults, beachhead metadata | none |
 | `labwired_part` / `labwired_part_*` | Structured part facts (MCP knowledge store) | none (not a pass) |
-| `labwired_datasheet` | Datasheet text via MCP (search/page) | none (not a pass) |
+| **`labwired_datasheet`** | **Datasheet text — the only product path for datasheets** (MCP search/page) | none (not a pass) |
 | `labwired_validate` | Diagram / setup sanity | none (not a pass) |
 | `labwired_compile` | Source → `firmware_ref` (hosted) | none |
 | `labwired_run` | Observe twin serial / behavior | observation only |
