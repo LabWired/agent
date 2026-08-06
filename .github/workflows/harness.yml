@@ -13,6 +13,8 @@ jobs:
           bash tests/skills-inventory.sh
           bash tests/public-install.sh
           bash tests/prefix-unit.sh
+          bash tests/hosted-config.sh
+          bash tests/desktop-session.sh
       - name: demo
         run: ./demo.sh
 

@@ -160,12 +160,27 @@ PY
   return 0
 }
 
+# The LabWired Editor desktop app signs in with the device-code flow and hands
+# the agent its access token as LABWIRED_MODEL_KEY — it never runs `labwired
+# login`, so there is no session file to find. The api.labwired.com desktop
+# prefix (DESKTOP_ACCESS_TOKEN_PREFIX) is what makes this unambiguous: a bare
+# LABWIRED_MODEL_KEY is also how local/airgap users point at their own model, so
+# only the prefix may be read as "this is our hosted gateway".
+labwired_cloud_desktop_token() {
+  local key="${LABWIRED_MODEL_KEY:-}"
+  [[ "$key" == lwd_* ]] || return 1
+  echo "$key"
+}
+
 # True when we should run the hosted opencode profile (shared remote MCP tools).
 labwired_cloud_hosted_ready() {
   if [[ "${LABWIRED_PROFILE:-}" == "hosted" ]]; then
     return 0
   fi
   if [[ -n "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
+    return 0
+  fi
+  if labwired_cloud_desktop_token >/dev/null; then
     return 0
   fi
   if [[ -f "$(labwired_cloud_session_path)" ]]; then
@@ -252,6 +267,14 @@ PY
 
 # Export model + project env for both opencode and direct OpenAI-compat clients.
 labwired_cloud_export_runtime() {
+  if [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
+    # A desktop token already IS the session; adopt it rather than demanding a
+    # `labwired login` the editor has no way to perform. opencode.hosted.json
+    # substitutes {env:LABWIRED_ACCESS_TOKEN} into the provider apiKey and the
+    # remote MCP Authorization header, so leaving it unset sends empty bearers.
+    LABWIRED_ACCESS_TOKEN="$(labwired_cloud_desktop_token || true)"
+    export LABWIRED_ACCESS_TOKEN
+  fi
   if [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
     labwired_cloud_session_load || return 1
   fi
