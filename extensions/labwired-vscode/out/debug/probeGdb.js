@@ -43,6 +43,14 @@ const child_process_1 = require("child_process");
 const vscode = __importStar(require("vscode"));
 class ProbeDebugService {
     log = vscode.window.createOutputChannel("LabWired Debug");
+    dispose() {
+        try {
+            this.log.dispose();
+        }
+        catch {
+            /* ignore */
+        }
+    }
     info(chip) {
         const c = chip || "(auto)";
         const probe = process.env.LABWIRED_PROBE_RS ||

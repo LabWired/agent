@@ -67,9 +67,13 @@ export class AgentSession {
     const catalog = this.catalog.buildContext(prompt, 6);
     return [
       `Mode: ${mode}`,
-      "You are LabWired firmware agent. Prefer twin verification; never claim model_verified without labwired_verify.",
-      "IDE tools: /doctor /smoke /probe /serial /catalog /datasheet grep|section /gdb /rtt /billing /tools",
-      "Datasheets: use agentic navigation (list/extract/grep/section) — do NOT invent register maps.",
+      "You are LabWired firmware agent (VS Code = same path as CLI OpenCode).",
+      "Default skill pack: golden-path. Others: bringup · prove · observe · desk-hw (+ Superpowers process).",
+      "Never claim model_verified without labwired_verify success. Never invent datasheet facts.",
+      "Knowledge MCP only: labwired_part then labwired_datasheet (facts vs quotes; no invent).",
+      "Observability: labwired compose (elements) — not ready-made plots.",
+      "IDE slash tools: /doctor /smoke /probe /serial /catalog /datasheet grep|section /gdb /rtt /billing /tools",
+      "Prefer full terminal agent (LabWired: Start Agent) for twin + MCP; in-panel is a fallback.",
       "",
       catalog,
       "",

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
+import { cloudSessionEnv, loadCloudSession } from "./cloudSession";
 import { resolveLabwiredCli, type ResolvedCli } from "./resolver";
 import type { AgentMode } from "../services/sessionState";
 
@@ -16,24 +17,42 @@ export type RunResult = {
 /**
  * Thin bridge — Embedder CliManager equivalent.
  * Agent intelligence stays in CLI; extension supervises process + tools.
+ * Start path is identical to CLI: `labwired` → prepare → OpenCode + packs + MCP.
  */
 export class LabWiredBridge {
   private resolved: ResolvedCli;
   private agentTerminal: vscode.Terminal | undefined;
   private serverProc: ChildProcessWithoutNullStreams | undefined;
   private startedAt = Date.now();
+  private extensionPath?: string;
 
-  constructor(private readonly output: vscode.OutputChannel) {
-    this.resolved = resolveLabwiredCli();
+  constructor(
+    private readonly output: vscode.OutputChannel,
+    extensionPath?: string
+  ) {
+    this.extensionPath = extensionPath;
+    this.resolved = resolveLabwiredCli(extensionPath);
+  }
+
+  setExtensionPath(extensionPath: string) {
+    this.extensionPath = extensionPath;
   }
 
   refresh(): ResolvedCli {
-    this.resolved = resolveLabwiredCli();
+    this.resolved = resolveLabwiredCli(this.extensionPath);
     this.log(
       this.resolved.path
         ? `CLI: ${this.resolved.path} (${this.resolved.source}${this.resolved.version ? `, v${this.resolved.version}` : ""})`
         : "CLI: not found"
     );
+    const cloud = loadCloudSession();
+    if (cloud) {
+      this.log(
+        `cloud-session: ${cloud.email || "token"} project=${cloud.projectId || "(none)"}`
+      );
+    } else {
+      this.log("cloud-session: not signed in (labwired login for hosted MCP)");
+    }
     return this.resolved;
   }
 
@@ -238,31 +257,52 @@ export class LabWiredBridge {
 
   envForAgent(mode?: AgentMode): NodeJS.ProcessEnv {
     const c = vscode.workspace.getConfiguration("labwired");
+    // Start from process env, then inject cloud session (CLI-identical hosted path).
+    // Explicit VS Code settings win over cloud.json for model/project overrides.
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       LABWIRED_VSCODE: "1",
       LABWIRED_EDITOR: "1",
+      ...cloudSessionEnv(process.env, { preferBase: true }),
     };
     if (mode) env.LABWIRED_MODE = mode;
-    const model = c.get<string>("model");
-    if (model) env.LABWIRED_MODEL = model;
-    const modelUrl = c.get<string>("modelUrl");
-    if (modelUrl) env.LABWIRED_MODEL_URL = modelUrl;
-    const modelKey = c.get<string>("modelKey");
-    if (modelKey) {
+
+    const modelKey = (c.get<string>("modelKey") || "").trim();
+    const modelUrl = (c.get<string>("modelUrl") || "").trim();
+    const model = (c.get<string>("model") || "").trim();
+    const project = (c.get<string>("project") || "").trim();
+    const team = (c.get<string>("team") || "").trim();
+
+    // Hosted token in settings (or cloud session already set ACCESS_TOKEN)
+    if (modelKey && modelKey !== "local") {
       env.LABWIRED_MODEL_KEY = modelKey;
-      // Hosted OpenCode profile also reads LABWIRED_ACCESS_TOKEN for MCP + gateway
       if (modelKey.startsWith("lwd_") || modelKey.startsWith("lwk_")) {
         env.LABWIRED_ACCESS_TOKEN = modelKey;
       }
     }
-    const team = c.get<string>("team");
-    if (team) env.LABWIRED_TEAM = team;
-    const project = c.get<string>("project");
+    // Only override model URL when not the Ollama default, unless no cloud session
+    if (modelUrl && modelUrl !== "http://127.0.0.1:11434/v1") {
+      env.LABWIRED_MODEL_URL = modelUrl;
+    } else if (!env.LABWIRED_MODEL_URL && modelUrl) {
+      env.LABWIRED_MODEL_URL = modelUrl;
+    }
+    if (model && model !== "qwen2.5-coder") {
+      env.LABWIRED_MODEL = model;
+    } else if (!env.LABWIRED_MODEL && model) {
+      env.LABWIRED_MODEL = model;
+    }
     if (project) env.LABWIRED_PROJECT = project;
+    if (team) env.LABWIRED_TEAM = team;
+
+    // Prefer real agent kit root on PATH for prepare/skills
+    if (this.resolved.path) {
+      const kitBin = path.dirname(this.resolved.path);
+      env.PATH = `${kitBin}${path.delimiter}${env.PATH || process.env.PATH || ""}`;
+    }
     return env;
   }
 
+  /** Same start-here as CLI: login → doctor → labwired (golden-path + MCP). */
   async startAgentTerminal(mode?: AgentMode): Promise<void> {
     const r = await this.ensureCli();
     if (!r.path) return;
@@ -274,19 +314,36 @@ export class LabWiredBridge {
 
     this.stopGeneration();
 
+    const env = this.envForAgent(mode);
     this.agentTerminal = vscode.window.createTerminal({
       name: "LabWired Agent",
       cwd,
-      env: this.envForAgent(mode),
+      env,
     });
     this.agentTerminal.show(true);
 
     const q = (s: string) =>
       process.platform === "win32" ? `"${s}"` : `'${s.replace(/'/g, `'\\''`)}'`;
-    // Same entry as Embedder: extension launches the agent CLI.
-    // `labwired` with no args → OpenCode + shared labwired_* tools.
+    // Same entry as CLI / Embedder: bare `labwired` → prepare packs + OpenCode + MCP.
     let cmd = q(r.path);
     if (extra.trim()) cmd += ` ${extra.trim()}`;
+
+    const cloud = loadCloudSession();
+    this.agentTerminal.sendText(
+      `echo "LabWired start-here (VS Code = CLI): packs golden-path · bringup · prove · observe · desk-hw"`
+    );
+    this.agentTerminal.sendText(
+      `echo "Knowledge: MCP labwired_part / labwired_datasheet · compose: labwired compose …"`
+    );
+    if (cloud?.email || cloud?.projectId) {
+      this.agentTerminal.sendText(
+        `echo "Hosted: ${cloud.email || "signed in"} · project ${cloud.projectId || "(set via labwired login)"}"`
+      );
+    } else {
+      this.agentTerminal.sendText(
+        `echo "Not signed in — run LabWired: Log in or: ${q(r.path)} login"`
+      );
+    }
 
     const hints: Record<string, string> = {
       plan: "MODE=PLAN — research first; avoid flash until Act",
@@ -298,6 +355,25 @@ export class LabWiredBridge {
       this.agentTerminal.sendText(`echo "LabWired ${hints[mode]}"`);
     }
     this.agentTerminal.sendText(cmd);
+  }
+
+  /** Run `labwired login` in a terminal (writes ~/.labwired/session/cloud.json). */
+  async startLoginTerminal(): Promise<void> {
+    const r = await this.ensureCli();
+    if (!r.path) return;
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const term = vscode.window.createTerminal({
+      name: "LabWired Login",
+      cwd,
+      env: this.envForAgent(),
+    });
+    term.show(true);
+    const q = (s: string) =>
+      process.platform === "win32" ? `"${s}"` : `'${s.replace(/'/g, `'\\''`)}'`;
+    term.sendText(
+      `echo "LabWired login — same device-code flow as CLI; session → ~/.labwired/session/cloud.json"`
+    );
+    term.sendText(`${q(r.path)} login`);
   }
 
   stopGeneration() {

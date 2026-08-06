@@ -239,45 +239,13 @@ class ChatViewProvider {
                     this.rpcAsstMsg = asstMsg;
                     try {
                         await this.rpc.request("mode/set", { mode });
-                        // Prefer hosted when Pro; server hard-fails ProjectRequired
-                        const result = (await this.rpc.request("chat/send", {
-                            content: text,
-                            mode,
-                        }));
-                        if (result?.modelRoute) {
-                            this.store.append("system", `model: ${result.modelRoute} · ${result.model || "?"}` +
-                                (result.projectId ? ` · project ${result.projectId}` : ""));
-                        }
+                        await this.rpc.request("chat/send", { content: text, mode });
                     }
                     catch (e) {
-                        const msg = String(e);
-                        if (msg.includes("Project required") || msg.includes("-32001")) {
-                            if (asstMsg) {
-                                asstMsg.text =
-                                    "Pro hosted model needs a project. Run **LabWired: Select Pro Project** (or Log in → Dev Pro). Free local twin still works without a project.";
-                            }
-                            this.pushState();
-                            const pick = await vscode.window.showInformationMessage("Hosted model requires a Pro project.", "Select project", "Use local model");
-                            if (pick === "Select project") {
-                                await vscode.commands.executeCommand("labwired.selectProject");
-                            }
-                            else if (pick === "Use local model") {
-                                try {
-                                    await this.rpc.request("chat/send", {
-                                        content: text,
-                                        mode,
-                                        forceLocal: true,
-                                    });
-                                }
-                                catch (e2) {
-                                    await this.runLocalAgent(text, mode, asstMsg);
-                                }
-                            }
-                            break;
-                        }
                         if (asstMsg)
                             asstMsg.text = `RPC error: ${e}`;
                         this.pushState();
+                        // fallback
                         await this.runLocalAgent(text, mode, asstMsg);
                     }
                     break;

@@ -22,7 +22,18 @@ Embedder ships **one** fat extension (UI + 115 MB CLI). We ship **chrome here*
 
 Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only advantage · ⛔ refuse clone (see product scorecard)
 
-## Matrix (agent workbench v0.6)
+## Start-here parity (CLI ↔ VS Code) — v0.6.1
+
+| CLI | VS Code |
+|-----|---------|
+| `curl install \| bash` | LabWired: Install CLI |
+| `labwired login` | LabWired: Log in → terminal `labwired login` |
+| `~/.labwired/session/cloud.json` | Loaded into agent terminal env (`envForAgent`) |
+| `labwired doctor` | LabWired: Run Doctor |
+| `labwired` (prepare + OpenCode + packs) | LabWired: Start Agent (Terminal) |
+| golden-path / MCP knowledge / compose | Same — not a second agent stack |
+
+## Matrix (agent workbench v0.6.1)
 
 | Embedder feature | LabWired surface | Status |
 |------------------|------------------|--------|
@@ -61,8 +72,10 @@ Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only a
 | Twin evidence | Evidence + loadVerify JSON | ✅ ★ |
 | Doctor / smoke | doctor / smoke commands | ✅ ★ |
 | **Start agent = OpenCode** | startAgent → `labwired` (skills + labwired_*) | ✅ ★ |
+| **Hosted session from CLI login** | cloud.json → envForAgent | ✅ ★ |
+| **Walkthrough = start-here** | login → doctor → agent → prove | ✅ ★ |
 | Subagents / instruments | skills + future | ⬜ |
-| Headless `--server` streaming | bridge tryStartServer | ⬜ |
+| Headless `--server` streaming | bridge tryStartServer | 🔶 |
 
 ## Sprint priorities (feature parity that ships value)
 

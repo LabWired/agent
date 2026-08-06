@@ -73,45 +73,97 @@ function readVersion(cli) {
         return undefined;
     }
 }
-/** Resolve labwired CLI the same way Embedder resolves its agent binary. */
-function resolveLabwiredCli() {
+function parseSemver(v) {
+    if (!v)
+        return [0];
+    return v
+        .replace(/^v/i, "")
+        .split(/[.+-]/)
+        .map((x) => parseInt(x, 10) || 0);
+}
+/** true if a is strictly greater than b */
+function versionGt(a, b) {
+    const aa = parseSemver(a);
+    const bb = parseSemver(b);
+    const n = Math.max(aa.length, bb.length);
+    for (let i = 0; i < n; i++) {
+        const x = aa[i] || 0;
+        const y = bb[i] || 0;
+        if (x > y)
+            return true;
+        if (x < y)
+            return false;
+    }
+    return false;
+}
+function pickBest(candidates) {
+    let best;
+    for (const c of candidates) {
+        if (!isExecutable(c.path))
+            continue;
+        const version = readVersion(c.path);
+        if (!best || versionGt(version, best.version)) {
+            best = { path: c.path, version, source: c.source };
+        }
+    }
+    return best || { path: "", source: "missing" };
+}
+/**
+ * Resolve labwired CLI the same way Embedder resolves its agent binary.
+ *
+ * Prefer the newest kit: settings pin wins; otherwise compare agent kit next to
+ * this extension, ~/.labwired/agent, PATH, and prefix shims so a stale PATH
+ * install does not win over the workbench-bundled agent.
+ */
+function resolveLabwiredCli(extensionPath) {
     const cfg = vscode.workspace.getConfiguration("labwired");
     const setting = (cfg.get("cliPath") || "").trim();
     if (setting && isExecutable(setting)) {
         return { path: setting, version: readVersion(setting), source: "setting" };
     }
-    const onPath = which("labwired");
-    if (onPath) {
-        return { path: onPath, version: readVersion(onPath), source: "path" };
-    }
     const home = os.homedir();
-    const prefixCandidates = [
+    const candidates = [];
+    // Workbench lives at agent/extensions/labwired-vscode → ../../bin/labwired
+    const roots = [];
+    if (extensionPath)
+        roots.push(extensionPath);
+    try {
+        // out/cli → extension root
+        roots.push(path.dirname(path.dirname(__dirname)));
+    }
+    catch {
+        /* */
+    }
+    for (const root of roots) {
+        const agentBin = path.resolve(root, "..", "..", "bin", "labwired");
+        candidates.push({ path: agentBin, source: "agent-kit" });
+        if (process.platform === "win32") {
+            candidates.push({
+                path: path.resolve(root, "..", "..", "bin", "labwired.cmd"),
+                source: "agent-kit",
+            });
+        }
+    }
+    candidates.push({
+        path: path.join(home, ".labwired", "agent", "bin", "labwired"),
+        source: "agent-home",
+    });
+    if (process.platform === "win32") {
+        candidates.push({
+            path: path.join(home, ".labwired", "agent", "bin", "labwired.cmd"),
+            source: "agent-home",
+        });
+    }
+    const onPath = which("labwired");
+    if (onPath)
+        candidates.push({ path: onPath, source: "path" });
+    for (const c of [
         path.join(home, ".labwired", "bin", "labwired"),
         path.join(home, ".labwired", "bin", "labwired.cmd"),
         path.join(home, ".local", "bin", "labwired"),
-    ];
-    for (const c of prefixCandidates) {
-        if (isExecutable(c)) {
-            return { path: c, version: readVersion(c), source: "prefix" };
-        }
+    ]) {
+        candidates.push({ path: c, source: "prefix" });
     }
-    // Dev: agent repo sibling of this extension
-    // extensions/labwired-vscode → ../../bin/labwired
-    try {
-        const extRoot = path.dirname(path.dirname(__dirname));
-        const agentBin = path.join(extRoot, "..", "..", "bin", "labwired");
-        const resolved = path.resolve(agentBin);
-        if (isExecutable(resolved)) {
-            return {
-                path: resolved,
-                version: readVersion(resolved),
-                source: "agent-home",
-            };
-        }
-    }
-    catch {
-        /* ignore */
-    }
-    return { path: "", source: "missing" };
+    return pickBest(candidates);
 }
 //# sourceMappingURL=resolver.js.map

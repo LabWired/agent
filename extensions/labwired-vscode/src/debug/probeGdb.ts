@@ -9,6 +9,14 @@ import * as vscode from "vscode";
 export class ProbeDebugService {
   private log = vscode.window.createOutputChannel("LabWired Debug");
 
+  dispose(): void {
+    try {
+      this.log.dispose();
+    } catch {
+      /* ignore */
+    }
+  }
+
   info(chip?: string): string {
     const c = chip || "(auto)";
     const probe =

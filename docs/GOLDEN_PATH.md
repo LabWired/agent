@@ -26,6 +26,22 @@ In the agent:
 
 > Blink the LED and **prove** it on the twin. Then plot LED vs UART from real run output.
 
+---
+
+## Same path in VS Code / Cursor
+
+Workbench extension (`extensions/labwired-vscode`) is chrome only — same `labwired` entry:
+
+| Step | Command Palette |
+|------|-----------------|
+| Install | **LabWired: Install LabWired CLI** |
+| Login | **LabWired: Log in (Pro)** → *labwired login* (writes `~/.labwired/session/cloud.json`) |
+| Doctor | **LabWired: Run Doctor** |
+| Agent | **LabWired: Start Agent (Terminal)** → bare `labwired` (prepare + OpenCode + packs + MCP) |
+| Prove | Same chat prompt as CLI |
+
+Hosted env is loaded from cloud.json into the agent terminal. Do **not** use a second parallel agent stack.
+
 ### Pass criteria
 
 | Check | Pass |

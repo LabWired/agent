@@ -59,7 +59,7 @@ const probeGdb_1 = require("./debug/probeGdb");
 const billing_1 = require("./pro/billing");
 function activate(context) {
     const output = vscode.window.createOutputChannel("LabWired");
-    const bridge = new bridge_1.LabWiredBridge(output);
+    const bridge = new bridge_1.LabWiredBridge(output, context.extensionPath);
     const session = new sessionState_1.SessionState(context);
     const store = new conversationStore_1.ConversationStore(context);
     const diffs = new diffService_1.DiffService(context);
@@ -67,6 +67,7 @@ function activate(context) {
     const datasheets = new agentic_1.DatasheetService();
     const probeDebug = new probeGdb_1.ProbeDebugService();
     const billing = new billing_1.BillingService(context);
+    billing.setBridge(bridge);
     const tools = new runner_1.ToolRunner(bridge, catalog, datasheets, probeDebug, billing);
     const agent = new session_1.AgentSession(catalog, tools);
     const agentRoot = (0, rpcClient_1.resolveAgentRoot)(context.extensionPath);
@@ -610,30 +611,7 @@ function activate(context) {
         [
             "labwired.openMcpDocs",
             async () => {
-                // Same shared tools as marketplace extension + OpenCode:
-                // write workspace .vscode/mcp.json → api.labwired.com/mcp
-                const folder = vscode.workspace.workspaceFolders?.[0];
-                if (folder) {
-                    const dir = path.join(folder.uri.fsPath, ".vscode");
-                    const file = path.join(dir, "mcp.json");
-                    await fs.promises.mkdir(dir, { recursive: true }).catch(() => { });
-                    let existing = {};
-                    try {
-                        existing = JSON.parse(await fs.promises.readFile(file, "utf8"));
-                    }
-                    catch { /* empty */ }
-                    const servers = { ...(existing.servers || {}), labwired: {
-                            type: "http",
-                            url: "https://api.labwired.com/mcp",
-                        } };
-                    await fs.promises.writeFile(file, JSON.stringify({ ...existing, servers }, null, 2) + "\n", "utf8");
-                    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-                    await vscode.window.showTextDocument(doc);
-                    void vscode.window.showInformationMessage("LabWired MCP tools configured (same as OpenCode / playground). Sign in via labwired login for auth.");
-                }
-                else {
-                    await vscode.env.openExternal(vscode.Uri.parse("https://labwired.com/agent.html"));
-                }
+                await vscode.env.openExternal(vscode.Uri.parse("https://labwired.com/agent.html"));
             },
         ],
         [
@@ -749,12 +727,17 @@ function activate(context) {
         })();
     }
     const cs = catalog.stats();
-    store.append("system", `LabWired v0.6.0\n` +
-        `• Agentic datasheets (not RAG): /datasheet extract|grep|section\n` +
-        `• GDB/RTT: /gdb start <chip> · /rtt <chip>\n` +
-        `• Billing: /billing · login · GitHub: labwired daemon\n` +
+    const cli = bridge.getCli();
+    store.append("system", `LabWired workbench v0.6.1 — same start-here as CLI\n` +
+        `1. Log in (labwired login) → hosted MCP + model\n` +
+        `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
+        `3. “Blink the LED and prove it on the twin.”\n` +
+        `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
+        `• Knowledge: MCP labwired_part / labwired_datasheet\n` +
+        `• Compose: labwired compose … (elements, not ready-made plots)\n` +
+        `• CLI: ${cli.path || "(missing)"} (${cli.source}${cli.version ? ` v${cli.version}` : ""})\n` +
         `• Catalog: ${cs.parts} parts · tools: /tools`);
-    output.appendLine(`LabWired workbench v0.6.0 — tools=${registry_1.TOOLS.length} catalog=${cs.parts}`);
+    output.appendLine(`LabWired workbench v0.6.1 — tools=${registry_1.TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`);
 }
 function deactivate() {
     /* noop */

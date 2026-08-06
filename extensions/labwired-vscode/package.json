@@ -2,8 +2,8 @@
   "name": "labwired-vscode",
   "displayName": "LabWired",
   "description": "Embedder-clone foundation for LabWired: agent chat, modes, monitor, evidence, plan — IDE-native UI.",
-  "version": "0.6.0",
-  "compatibleCliVersion": "0.2.7",
+  "version": "0.6.1",
+  "compatibleCliVersion": "0.3.7",
   "publisher": "labwired",
   "license": "MIT",
   "icon": "media/labwired-icon.png",
@@ -223,40 +223,40 @@
       {
         "id": "labwiredGettingStarted",
         "title": "Get Started with LabWired",
-        "description": "Full Pro surface: modes, monitor, evidence, history — Embedder-class workbench.",
+        "description": "Same start-here as the CLI: login → doctor → agent → blink & prove on the twin.",
         "steps": [
           {
-            "id": "openChat",
-            "title": "Open Agent chat",
-            "description": "Plan / Act / Debug / Verify live in the Agent panel.\n\n[Open Agent](command:labwired.openChat)",
+            "id": "installCli",
+            "title": "Install the LabWired CLI",
+            "description": "Workbench is chrome; the brain is `labwired` (OpenCode + packs + MCP).\n\n[Install CLI](command:labwired.installCli)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
-            "completionEvents": ["onCommand:labwired.openChat"]
+            "completionEvents": ["onCommand:labwired.installCli"]
           },
           {
-            "id": "modes",
-            "title": "Switch modes",
-            "description": "Cycle Plan → Act → Debug → Verify like Embedder’s mode pill.\n\n[Switch Mode](command:labwired.switchMode)",
+            "id": "login",
+            "title": "Log in (hosted MCP + model)",
+            "description": "Same device-code as `labwired login`. Session → `~/.labwired/session/cloud.json`.\n\n[Log in](command:labwired.login)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
-            "completionEvents": ["onCommand:labwired.switchMode"]
+            "completionEvents": ["onCommand:labwired.login"]
           },
           {
-            "id": "project",
-            "title": "Set project context",
-            "description": "Team + project ground Pro sessions.\n\n[Switch Project](command:labwired.switchProject)",
+            "id": "doctor",
+            "title": "Run doctor",
+            "description": "Confirm CLI, packs (golden-path · bringup · prove · observe · desk-hw), and tools.\n\n[Run Doctor](command:labwired.doctor)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
-            "completionEvents": ["onCommand:labwired.switchProject"]
+            "completionEvents": ["onCommand:labwired.doctor"]
           },
           {
-            "id": "monitor",
-            "title": "Open the Monitor",
-            "description": "Serial, capture, probe list — hardware loop.\n\n[Open Monitor](command:labwired.openSerial)",
+            "id": "startAgent",
+            "title": "Start Agent (OpenCode)",
+            "description": "Opens a terminal and runs bare `labwired` — prepare skills + golden-path + shared labwired_* tools.\n\n[Start Agent](command:labwired.startAgent)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
-            "completionEvents": ["onCommand:labwired.openSerial"]
+            "completionEvents": ["onCommand:labwired.startAgent"]
           },
           {
-            "id": "evidence",
-            "title": "Inspect twin evidence",
-            "description": "Never self-grade — open Evidence.\n\n[Open Evidence](command:labwired.openEvidence)",
+            "id": "prove",
+            "title": "Blink & prove on the twin",
+            "description": "In the agent: *Blink the LED and prove it on the twin.* Green only after `labwired_verify` → model_verified. Optional: compose LED vs UART from elements.\n\n[Open Evidence](command:labwired.openEvidence)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
             "completionEvents": ["onCommand:labwired.openEvidence"]
           }
