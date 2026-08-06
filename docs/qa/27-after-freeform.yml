@@ -1,0 +1,206 @@
+### Page
+- Page URL: https://app.labwired.com/?lab=esp32c3-oled-lab
+- Page Title: LabWired Playground — The easy way to build hardware
+### Snapshot
+```yaml
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - link "LabWired" [ref=f1e6] [cursor=pointer]:
+        - /url: https://labwired.com
+      - generic [ref=f1e11]: ›
+      - generic [ref=f1e12]: ESP32-C3 0.96" OLED
+    - button "Search components, boards, and examples" [ref=f1e15] [cursor=pointer]:
+      - generic [ref=f1e16]: ⌘K
+      - generic [ref=f1e17]: Search components, boards, examples…
+    - generic [ref=f1e18]:
+      - generic "Editor mode" [ref=f1e19]:
+        - button "Edit" [pressed] [ref=f1e20] [cursor=pointer]
+        - button "Run" [ref=f1e21] [cursor=pointer]
+      - generic [ref=f1e22]:
+        - button "View" [ref=f1e24] [cursor=pointer]
+        - button "Tools" [ref=f1e26] [cursor=pointer]
+      - button "Open My Projects" [ref=f1e30] [cursor=pointer]:
+        - generic [ref=f1e31]: 📂
+        - generic [ref=f1e32]: My Projects
+      - button "Embed" [ref=f1e33] [cursor=pointer]
+      - button "Share" [ref=f1e34] [cursor=pointer]
+      - button "Send feedback" [ref=f1e36] [cursor=pointer]:
+        - generic [ref=f1e39]: Feedback
+      - group "Account menu" [ref=f1e521]:
+        - button "Open user menu" [ref=f1e523] [cursor=pointer]:
+          - img "Andrii Shylenko's logo" [ref=f1e526]
+  - main "Canvas" [ref=f1e41]:
+    - generic [ref=f1e43]:
+      - complementary "Build kit" [ref=f1e44]:
+        - separator "Resize build kit" [ref=f1e45]
+        - generic [ref=f1e46]:
+          - tablist "Build kit tabs" [ref=f1e47]:
+            - tab "Parts (3)" [selected] [ref=f1e48] [cursor=pointer]
+            - tab "Assembly (4)" [ref=f1e49] [cursor=pointer]
+            - tab "Pins" [ref=f1e50] [cursor=pointer]
+          - button "Close build kit" [ref=f1e51] [cursor=pointer]: ×
+        - tabpanel [ref=f1e52]:
+          - generic [ref=f1e53]:
+            - generic [ref=f1e54]:
+              - textbox "Search parts" [ref=f1e59]:
+                - /placeholder: Search parts, type, or pin…
+              - button "Export BOM" [ref=f1e60] [cursor=pointer]
+            - generic [ref=f1e63]:
+              - listbox "Parts" [ref=f1e64]:
+                - generic [ref=f1e65]:
+                  - button "Microcontroller 1" [expanded] [ref=f1e66] [cursor=pointer]:
+                    - generic [ref=f1e67]: ▾
+                    - generic [ref=f1e69]: Microcontroller
+                    - generic [ref=f1e70]: "1"
+                  - option "ESP32-C3 Super Mini esp32-c3-supermini mcu runs code" [selected] [ref=f1e72] [cursor=pointer]:
+                    - img [ref=f1e74]:
+                      - generic [ref=f1e76]:
+                        - generic [ref=f1e82]: ESP32-C3
+                        - generic [ref=f1e97]: BOOT
+                        - generic [ref=f1e103]: ESP32-C3 SUPER MINI
+                        - generic [ref=f1e109]: 5V
+                        - generic [ref=f1e113]: GND
+                        - generic [ref=f1e117]: 3V3
+                        - generic [ref=f1e121]: GP4
+                        - generic [ref=f1e125]: GP3
+                        - generic [ref=f1e129]: GP2
+                        - generic [ref=f1e133]: GP1
+                        - generic [ref=f1e137]: GP0
+                        - generic [ref=f1e141]: GP5
+                        - generic [ref=f1e145]: GP6
+                        - generic [ref=f1e149]: GP7
+                        - generic [ref=f1e153]: GP8
+                        - generic [ref=f1e157]: GP9
+                        - generic [ref=f1e161]: GP10
+                        - generic [ref=f1e165]: GP20
+                        - generic [ref=f1e169]: GP21
+                    - generic [ref=f1e173]:
+                      - generic [ref=f1e174]: ESP32-C3 Super Mini
+                      - generic [ref=f1e175]:
+                        - generic [ref=f1e176]: esp32-c3-supermini
+                        - generic [ref=f1e177]: mcu
+                    - generic [ref=f1e178]: runs code
+                - generic [ref=f1e181]:
+                  - button "Displays 1" [expanded] [ref=f1e182] [cursor=pointer]:
+                    - generic [ref=f1e183]: ▾
+                    - generic [ref=f1e185]: Displays
+                    - generic [ref=f1e186]: "1"
+                  - option "OLED 128x64 oled-ssd1306 oled simulated" [ref=f1e188] [cursor=pointer]:
+                    - img [ref=f1e190]:
+                      - generic [ref=f1e191]:
+                        - generic [ref=f1e201]: 128 x 64 OLED
+                        - generic [ref=f1e221]: SSD1306 · I²C 0x3C
+                        - generic [ref=f1e222]: GND
+                        - generic [ref=f1e224]: VCC
+                        - generic [ref=f1e226]: SCL
+                        - generic [ref=f1e228]: SDA
+                    - generic [ref=f1e239]:
+                      - generic [ref=f1e240]: OLED 128x64
+                      - generic [ref=f1e241]:
+                        - generic [ref=f1e242]: oled-ssd1306
+                        - generic [ref=f1e243]: oled
+                    - generic [ref=f1e244]: simulated
+                - generic [ref=f1e247]:
+                  - button "Instruments 1" [expanded] [ref=f1e248] [cursor=pointer]:
+                    - generic [ref=f1e249]: ▾
+                    - generic [ref=f1e251]: Instruments
+                    - generic [ref=f1e252]: "1"
+                  - option "Note note note annotation" [ref=f1e254] [cursor=pointer]:
+                    - img [ref=f1e256]:
+                      - generic [ref=f1e257]: "ESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5. Try: Run and watch the Arduino sketch paint the clock."
+                    - generic [ref=f1e260]:
+                      - generic [ref=f1e261]: Note
+                      - generic [ref=f1e262]:
+                        - generic [ref=f1e263]: note
+                        - generic [ref=f1e264]: note
+                    - generic [ref=f1e265]: annotation
+              - complementary "ESP32-C3 Super Mini detail" [ref=f1e268]:
+                - heading "ESP32-C3 Super Mini" [level=3] [ref=f1e270]
+                - button "Focus on canvas" [ref=f1e272] [cursor=pointer]
+                - generic [ref=f1e273]: runs code
+                - generic [ref=f1e276]:
+                  - heading "Pinout · 16 pins" [level=4] [ref=f1e277]
+                  - generic [ref=f1e278]:
+                    - generic [ref=f1e279]: 3V3 → oled.VCC
+                    - generic [ref=f1e280]: GND → oled.GND
+                    - generic [ref=f1e281]: GPIO4 → oled.SDA
+                    - generic [ref=f1e282]: GPIO5 → oled.SCL
+        - generic [ref=f1e283]: Board esp32c3-oled-lab · 3 parts · 4 wires · 4 steps
+      - generic "Signal legend":
+        - generic "1 wire": Power
+        - generic "1 wire": Ground
+        - generic "2 wires": I²C
+      - generic [ref=f1e284]:
+        - generic [ref=f1e285]:
+          - generic [ref=f1e290]:
+            - img [ref=f1e291]:
+              - generic [ref=f1e293]:
+                - 'generic "Power: Supply rail" [ref=f1e294]'
+                - 'generic "Ground: Common return rail" [ref=f1e296]'
+                - 'generic "I2C SCL: I2C digital signal" [ref=f1e298]'
+                - 'generic "I2C SDA: I2C digital signal" [ref=f1e300]'
+              - generic [ref=f1e302]: "ESP32-C3 Super Mini clock on a 0.96 inch 128x64 SSD1306 OLED. I2C is SDA=GPIO4, SCL=GPIO5. Try: Run and watch the Arduino sketch paint the clock."
+              - button "Open ESP32-C3 0.96\" OLED target properties" [ref=f1e307]:
+                - generic [ref=f1e310]:
+                  - generic [ref=f1e316]: ESP32-C3
+                  - generic [ref=f1e331]: BOOT
+                  - generic [ref=f1e337]: ESP32-C3 SUPER MINI
+                  - generic [ref=f1e343]: 5V
+                  - generic [ref=f1e347]: GND
+                  - generic [ref=f1e351]: 3V3
+                  - generic [ref=f1e355]: GP4
+                  - generic [ref=f1e359]: GP3
+                  - generic [ref=f1e363]: GP2
+                  - generic [ref=f1e367]: GP1
+                  - generic [ref=f1e371]: GP0
+                  - generic [ref=f1e375]: GP5
+                  - generic [ref=f1e379]: GP6
+                  - generic [ref=f1e383]: GP7
+                  - generic [ref=f1e387]: GP8
+                  - generic [ref=f1e391]: GP9
+                  - generic [ref=f1e395]: GP10
+                  - generic [ref=f1e399]: GP20
+                  - generic [ref=f1e403]: GP21
+              - generic [ref=f1e441]:
+                - generic [ref=f1e471]: SSD1306 · I²C 0x3C
+                - generic [ref=f1e472]: GND
+                - generic [ref=f1e474]: VCC
+                - generic [ref=f1e476]: SCL
+                - generic [ref=f1e478]: SDA
+            - button "Tidy layout" [ref=f1e498] [cursor=pointer]
+          - generic [ref=f1e529]:
+            - separator "Resize Architect" [ref=f1e530]
+            - generic [ref=f1e531]:
+              - generic [ref=f1e532]: ✦
+              - generic [ref=f1e533]: Architect
+              - generic [ref=f1e534]: Ready
+              - button "Collapse Architect agent" [ref=f1e537] [cursor=pointer]:
+                - generic [ref=f1e538]: ›
+            - generic [ref=f1e540]:
+              - generic [ref=f1e542]:
+                - paragraph [ref=f1e543]: Pick a starter below, or describe what to build. Done means Verified live on the twin.
+                - generic [ref=f1e544]:
+                  - button "LED blink" [ref=f1e545] [cursor=pointer]
+                  - button "Button + LED" [ref=f1e546] [cursor=pointer]
+                  - button "OLED hello" [ref=f1e547] [cursor=pointer]
+                  - button "Serial hello" [ref=f1e548] [cursor=pointer]
+                  - button "Prove it works" [ref=f1e549] [cursor=pointer]
+              - generic [ref=f1e551]:
+                - textbox "Message the Architect" [ref=f1e552]:
+                  - /placeholder: Describe a change, or ask a question…
+                - generic [ref=f1e553]:
+                  - generic [ref=f1e554]:
+                    - button "Attach files" [ref=f1e555] [cursor=pointer]
+                    - button "Generation history" [disabled] [ref=f1e558]: History
+                  - generic [ref=f1e559]:
+                    - button "Dictate" [ref=f1e560] [cursor=pointer]
+                    - button "Send" [disabled] [ref=f1e564]: ↑
+        - button "About this lab" [ref=f1e502] [cursor=pointer]
+    - toolbar "System simulation controls" [ref=f1e510]:
+      - button "Pause system" [ref=f1e565] [cursor=pointer]:
+        - generic [ref=f1e569]: Pause
+      - button "Reset system" [ref=f1e514] [cursor=pointer]
+      - status [ref=f1e518]:
+        - generic [ref=f1e520]: Running
+```

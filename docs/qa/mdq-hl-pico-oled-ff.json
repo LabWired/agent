@@ -1,0 +1,55 @@
+{
+  "out": {
+    "ok": true,
+    "reason": "verified",
+    "ticks": 7,
+    "last": {
+      "path": "/",
+      "href": "https://app.labwired.com/?lab=rp2040-pico&mdq=1785386624755",
+      "verified": true,
+      "thinking": false,
+      "err": null,
+      "starterBlock": false,
+      "partsCount": 2,
+      "sendMsg": true,
+      "starters": [
+        "📂Pico + OLED I2C"
+      ],
+      "rows": [
+        "• Add SSD1306 OLED from catalog to Pico, show Hello Pico, serial OLED_OK. Prove it.",
+        "✦ ✓ Working device — Verified live on the twin. · mcu"
+      ],
+      "bodyHit": {
+        "traffic": false,
+        "bme": false,
+        "ultrasonic": false,
+        "doorbell": false,
+        "pico": true,
+        "nrf": false,
+        "stm": false
+      }
+    },
+    "agentN": 1
+  },
+  "agent": [
+    {
+      "status": 200,
+      "t": 1785386646885,
+      "ok": true,
+      "hasError": false,
+      "starterBlock": false,
+      "hasFinish": true,
+      "hasHydrate": true,
+      "hasPatch": false,
+      "toolHints": [
+        "\"toolName\":\"search_similar_labs\"",
+        "\"toolName\":\"search_similar_labs\""
+      ],
+      "msHint": 11171
+    }
+  ],
+  "rows": [
+    "• Add SSD1306 OLED from catalog to Pico, show Hello Pico, serial OLED_OK. Prove it.",
+    "✦ ✓ Working device — Verified live on the twin. · mcu"
+  ]
+}

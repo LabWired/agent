@@ -1,0 +1,1664 @@
+{
+  "started": "2026-07-29T16:50:21.218Z",
+  "deploy": "post #1091 + pages-deploy success",
+  "cases": [
+    {
+      "t": 1785343823681,
+      "s": "install_check_start",
+      "o": null
+    },
+    {
+      "t": 1785343824206,
+      "s": "install_head",
+      "o": {
+        "u": "https://labwired.com/install",
+        "status": 200
+      }
+    },
+    {
+      "t": 1785343824672,
+      "s": "install_head",
+      "o": {
+        "u": "https://labwired.com/agent-install.sh",
+        "status": 200
+      }
+    },
+    {
+      "t": 1785343825105,
+      "s": "install_head",
+      "o": {
+        "u": "https://labwired.com/install.ps1",
+        "status": 200
+      }
+    },
+    {
+      "t": 1785343825105,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=esp32c3-oled-lab"
+    },
+    {
+      "t": 1785343837235,
+      "s": "status_c3",
+      "o": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343825105",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785343838295,
+      "s": "click_starter",
+      "o": {
+        "name": "LED blink",
+        "r": "f1e545"
+      }
+    },
+    {
+      "t": 1785343842320,
+      "s": "tick_c3-led_0",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343846598,
+      "s": "tick_c3-led_1",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343850866,
+      "s": "tick_c3-led_2",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343855050,
+      "s": "tick_c3-led_3",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343859357,
+      "s": "tick_c3-led_4",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343863661,
+      "s": "tick_c3-led_5",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343867962,
+      "s": "tick_c3-led_6",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343872114,
+      "s": "tick_c3-led_7",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343876273,
+      "s": "tick_c3-led_8",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343880599,
+      "s": "tick_c3-led_9",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343884864,
+      "s": "tick_c3-led_10",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343888892,
+      "s": "tick_c3-led_11",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343893221,
+      "s": "tick_c3-led_12",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343897286,
+      "s": "tick_c3-led_13",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343901400,
+      "s": "tick_c3-led_14",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343901400,
+      "s": "starter_timeout",
+      "o": {
+        "name": "LED blink",
+        "tag": "c3-led"
+      }
+    },
+    {
+      "t": 1785343902354,
+      "s": "c3_led_result",
+      "o": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343825105",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785343903484,
+      "s": "after_type",
+      "o": {
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true
+      }
+    },
+    {
+      "t": 1785343904723,
+      "s": "after_retype",
+      "o": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343825105",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785343904723,
+      "s": "click_send",
+      "o": "f1e564"
+    },
+    {
+      "t": 1785343908824,
+      "s": "ff_0",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343912900,
+      "s": "ff_1",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343917137,
+      "s": "ff_2",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343921275,
+      "s": "ff_3",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343925487,
+      "s": "ff_4",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343929677,
+      "s": "ff_5",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343933802,
+      "s": "ff_6",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343937916,
+      "s": "ff_7",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343942100,
+      "s": "ff_8",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343946267,
+      "s": "ff_9",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343950552,
+      "s": "ff_10",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343954875,
+      "s": "ff_11",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED"
+      }
+    },
+    {
+      "t": 1785343957301,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=esp32c3-oled-lab"
+    },
+    {
+      "t": 1785343967869,
+      "s": "status_c3b",
+      "o": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343957301",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785343968818,
+      "s": "click_starter",
+      "o": {
+        "name": "Serial hello",
+        "r": "f2e548"
+      }
+    },
+    {
+      "t": 1785343972857,
+      "s": "tick_c3-serial_0",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343976892,
+      "s": "tick_c3-serial_1",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343981114,
+      "s": "tick_c3-serial_2",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343985312,
+      "s": "tick_c3-serial_3",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343989350,
+      "s": "tick_c3-serial_4",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343993531,
+      "s": "tick_c3-serial_5",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785343997779,
+      "s": "tick_c3-serial_6",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344001873,
+      "s": "tick_c3-serial_7",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344005895,
+      "s": "tick_c3-serial_8",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344009933,
+      "s": "tick_c3-serial_9",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344013954,
+      "s": "tick_c3-serial_10",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344018139,
+      "s": "tick_c3-serial_11",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344022429,
+      "s": "tick_c3-serial_12",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344026726,
+      "s": "tick_c3-serial_13",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344030898,
+      "s": "tick_c3-serial_14",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344030898,
+      "s": "starter_timeout",
+      "o": {
+        "name": "Serial hello",
+        "tag": "c3-serial"
+      }
+    },
+    {
+      "t": 1785344032559,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=nokia5110-invaders-lab"
+    },
+    {
+      "t": 1785344043211,
+      "s": "status_nokia",
+      "o": {
+        "url": "https://app.labwired.com/?lab=nokia5110-invaders-lab&_cb=1785344032559",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344046039,
+      "s": "after_type",
+      "o": {
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true
+      }
+    },
+    {
+      "t": 1785344047693,
+      "s": "after_retype",
+      "o": {
+        "url": "https://app.labwired.com/?lab=nokia5110-invaders-lab&_cb=1785344032559",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344047693,
+      "s": "click_send",
+      "o": "f3e1293"
+    },
+    {
+      "t": 1785344051916,
+      "s": "ff_0",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344056247,
+      "s": "ff_1",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344060674,
+      "s": "ff_2",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344065133,
+      "s": "ff_3",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344069330,
+      "s": "ff_4",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344073696,
+      "s": "ff_5",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344078674,
+      "s": "ff_6",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344082928,
+      "s": "ff_7",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344088044,
+      "s": "ff_8",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344093718,
+      "s": "ff_9",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344098706,
+      "s": "ff_10",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344103392,
+      "s": "ff_11",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout"
+      }
+    },
+    {
+      "t": 1785344108710,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=nrf52840-proximity-lab"
+    },
+    {
+      "t": 1785344120323,
+      "s": "status_nrf",
+      "o": {
+        "url": "https://app.labwired.com/?lab=nrf52840-proximity-lab&_cb=1785344108710",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344124371,
+      "s": "after_type",
+      "o": {
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true
+      }
+    },
+    {
+      "t": 1785344126036,
+      "s": "after_retype",
+      "o": {
+        "url": "https://app.labwired.com/?lab=nrf52840-proximity-lab&_cb=1785344108710",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344126036,
+      "s": "click_send",
+      "o": "f4e812"
+    },
+    {
+      "t": 1785344130322,
+      "s": "ff_0",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344134547,
+      "s": "ff_1",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344138693,
+      "s": "ff_2",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344143037,
+      "s": "ff_3",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344147065,
+      "s": "ff_4",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344151394,
+      "s": "ff_5",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344155474,
+      "s": "ff_6",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344160479,
+      "s": "ff_7",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344174399,
+      "s": "ff_8",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344186034,
+      "s": "ff_9",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344193624,
+      "s": "ff_10",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344205010,
+      "s": "ff_11",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE"
+      }
+    },
+    {
+      "t": 1785344212083,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=rp2040-pico"
+    },
+    {
+      "t": 1785344228573,
+      "s": "status_rp",
+      "o": {
+        "url": "https://app.labwired.com/?lab=rp2040-pico&_cb=1785344212083",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344246034,
+      "s": "after_type",
+      "o": {
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true
+      }
+    },
+    {
+      "t": 1785344298236,
+      "s": "after_retype",
+      "o": {
+        "url": "https://app.labwired.com/?lab=rp2040-pico&_cb=1785344212083",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344298236,
+      "s": "click_send",
+      "o": "f5e585"
+    },
+    {
+      "t": 1785344314092,
+      "s": "ff_0",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344323464,
+      "s": "ff_1",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344331645,
+      "s": "ff_2",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344340801,
+      "s": "ff_3",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344355974,
+      "s": "ff_4",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344367930,
+      "s": "ff_5",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344387055,
+      "s": "ff_6",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344393733,
+      "s": "ff_7",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344419659,
+      "s": "ff_8",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344437004,
+      "s": "ff_9",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344461784,
+      "s": "ff_10",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344465986,
+      "s": "ff_11",
+      "o": {
+        "hasPrompt": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico"
+      }
+    },
+    {
+      "t": 1785344469952,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=esp32c3-oled-lab"
+    },
+    {
+      "t": 1785344481470,
+      "s": "status_c3c",
+      "o": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785344469952",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      }
+    },
+    {
+      "t": 1785344483832,
+      "s": "click_starter",
+      "o": {
+        "name": "Prove it works",
+        "r": "f6e521"
+      }
+    },
+    {
+      "t": 1785344488224,
+      "s": "tick_c3-prove_0",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344492532,
+      "s": "tick_c3-prove_1",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344496785,
+      "s": "tick_c3-prove_2",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344501090,
+      "s": "tick_c3-prove_3",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344505384,
+      "s": "tick_c3-prove_4",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344509649,
+      "s": "tick_c3-prove_5",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344514024,
+      "s": "tick_c3-prove_6",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344518332,
+      "s": "tick_c3-prove_7",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344522691,
+      "s": "tick_c3-prove_8",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344526956,
+      "s": "tick_c3-prove_9",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344531249,
+      "s": "tick_c3-prove_10",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344535503,
+      "s": "tick_c3-prove_11",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344539814,
+      "s": "tick_c3-prove_12",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344544117,
+      "s": "tick_c3-prove_13",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344548357,
+      "s": "tick_c3-prove_14",
+      "o": {
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true
+      }
+    },
+    {
+      "t": 1785344548357,
+      "s": "starter_timeout",
+      "o": {
+        "name": "Prove it works",
+        "tag": "c3-prove"
+      }
+    }
+  ],
+  "bugs": [
+    {
+      "id": "LIVE-STARTER-TIMEOUT",
+      "title": "Starter LED blink did not complete",
+      "detail": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343825105",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T16:51:41.400Z"
+    },
+    {
+      "id": "LIVE-FREEFORM-TIMEOUT",
+      "title": "Freeform did not complete",
+      "detail": {
+        "tag": "c3-ff",
+        "prompt": "Also print LABWIRED_QA_OK on UART every second",
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343825105",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T16:52:34.875Z"
+    },
+    {
+      "id": "LIVE-STARTER-TIMEOUT",
+      "title": "Starter Serial hello did not complete",
+      "detail": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785343957301",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T16:53:50.898Z"
+    },
+    {
+      "id": "LIVE-FREEFORM-TIMEOUT",
+      "title": "Freeform did not complete",
+      "detail": {
+        "tag": "nokia-ff",
+        "prompt": "Build STM32L476 LED blink with serial LABWIRED_STM_OK",
+        "url": "https://app.labwired.com/?lab=nokia5110-invaders-lab&_cb=1785344032559",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "5",
+        "breadcrumb": "Nokia 5110 Breakout",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T16:55:03.392Z"
+    },
+    {
+      "id": "LIVE-FREEFORM-TIMEOUT",
+      "title": "Freeform did not complete",
+      "detail": {
+        "tag": "nrf-ff",
+        "prompt": "nRF52840 simple LED blink LABWIRED_NRF_OK on serial",
+        "url": "https://app.labwired.com/?lab=nrf52840-proximity-lab&_cb=1785344108710",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "4",
+        "breadcrumb": "nRF52840 Proximity + BLE",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T16:56:45.010Z"
+    },
+    {
+      "id": "LIVE-FREEFORM-TIMEOUT",
+      "title": "Freeform did not complete",
+      "detail": {
+        "tag": "rp-ff",
+        "prompt": "RP2040 Pico blink and print LABWIRED_RP_OK every second",
+        "url": "https://app.labwired.com/?lab=rp2040-pico&_cb=1785344212083",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": true,
+        "sendMessageDisabled": false,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "2",
+        "breadcrumb": "Raspberry Pi Pico",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T17:01:06.002Z"
+    },
+    {
+      "id": "LIVE-STARTER-TIMEOUT",
+      "title": "Starter Prove it works did not complete",
+      "detail": {
+        "url": "https://app.labwired.com/?lab=esp32c3-oled-lab&_cb=1785344469952",
+        "signedIn": true,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendMessageEnabled": false,
+        "sendMessageDisabled": true,
+        "hasStarters": true,
+        "hasVerifiedBubble": false,
+        "verifiedBadge": false,
+        "parts": "3",
+        "breadcrumb": "ESP32-C3 0.96\" OLED",
+        "busyNotice": false,
+        "history": true,
+        "userMessageHint": false
+      },
+      "t": "2026-07-29T17:02:28.357Z"
+    }
+  ],
+  "finished": "2026-07-29T17:02:30.040Z",
+  "summary": {
+    "cases": 128,
+    "bugs": 7,
+    "bugIds": [
+      "LIVE-STARTER-TIMEOUT",
+      "LIVE-FREEFORM-TIMEOUT"
+    ]
+  }
+}

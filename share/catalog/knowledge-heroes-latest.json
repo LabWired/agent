@@ -1,0 +1,146 @@
+{
+  "heroes": 8,
+  "local_hits": 8,
+  "mcp_list_hits": 0,
+  "mcp_part_hits": 0,
+  "mcp_datasheet_hits": 0,
+  "useful_count": 8,
+  "session": true,
+  "rows": [
+    {
+      "id": "bme280",
+      "kind": "part",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "bme280",
+          "pin_count": null,
+          "transport": "i2c",
+          "has_pins": true
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "ssd1306",
+      "kind": "part",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "oled-ssd1306",
+          "pin_count": null,
+          "transport": "i2c",
+          "has_pins": true
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "adxl345",
+      "kind": "part",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "adxl345",
+          "pin_count": null,
+          "transport": "i2c",
+          "has_pins": true
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "led",
+      "kind": "part",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "led",
+          "pin_count": null,
+          "transport": "board_io",
+          "has_pins": true
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "button",
+      "kind": "part",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "button",
+          "pin_count": null,
+          "transport": "board_io",
+          "has_pins": true
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "esp32c3",
+      "kind": "mcu",
+      "local": {
+        "local_catalog": false,
+        "local_system": true,
+        "detail": {}
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "stm32l476",
+      "kind": "mcu",
+      "local": {
+        "local_catalog": false,
+        "local_system": true,
+        "detail": {}
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    },
+    {
+      "id": "esp32-c3-supermini",
+      "kind": "board",
+      "local": {
+        "local_catalog": true,
+        "local_system": false,
+        "detail": {
+          "type": "esp32-c3-supermini",
+          "pin_count": null,
+          "transport": "mcu",
+          "has_pins": false
+        }
+      },
+      "mcp": {
+        "error": "HTTP Error 401: Unauthorized"
+      },
+      "useful": true
+    }
+  ],
+  "note": "useful = local catalog/system OR mcp list/part hit. Prefer growing part facts + datasheet retrieval."
+}

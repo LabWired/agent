@@ -1,0 +1,46 @@
+{
+  "started": "2026-07-29T21:31:33.505Z",
+  "mode": "signed-in",
+  "cases": [
+    {
+      "t": 1785360696510,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=esp32c3-oled-lab&siqa=1785360696510"
+    },
+    {
+      "t": 1785360720202,
+      "s": "load",
+      "o": "### Result\n{\n  \"href\": \"https://app.labwired.com/?lab=esp32c3-oled-lab&siqa=1785360696510\",\n  \"signedIn\": true,\n  \"email\": \"shylenkoa@gmail.com\",\n  \"userId\": \"user_3DqakRYYx8RmlNMggznGdcRYcfd\",\n  \"sendMessage\": true,\n  \"feedback\": true,\n  \"hasTa\": true,\n  \"starters\": [\n    \"LED blink\",\n    \"Serial hello\"\n  ]\n}\n### Ran Playwright code\n```js\nawait page.evaluate('() => {\\n    const signedIn = !!(window.Clerk?.user || document.querySelector(\\'.cl-userButtonTrigger\\'));\\n    const email = window.Clerk?.user?.primaryEmailAddress?.emailAddress\\n      || window.Clerk?.user?.emailAddresses?.[0]?.emailAddress || null;\\n    return {\\n      href: location.href.slice(0, 140),\\n      signedIn,\\n      email,\\n      userId: window.Clerk?.user?.id || null,\\n      sendMessage: !!document.querySelector(\\'button[aria-label=\"Send message\"]\\'),\\n      feedback: !!document.querySelector(\\'button[aria-label=\"Feedback\"]\\'),\\n      hasTa: !!document.querySelector(\\'textarea[aria-label=\"Message the Architect\"]\\'),\\n      starters: [...document.querySelectorAll(\\'button\\')].filter(b => /LED blink|Serial hello/i.test((b.textContent||\\'\\').trim())).map(b => b.textContent.trim()),\\n    };\\n  }');\n```"
+    },
+    {
+      "t": 1785360726236,
+      "s": "click_led",
+      "o": "### Result\n{\n  \"ok\": true\n}\n### Ran Playwright code\n```js\nawait page.evaluate('() => {\\n    const led = [...document.querySelectorAll(\\'button\\')].find(b => (b.textContent||\\'\\').trim() === \\'LED blink\\');\\n    if (!led) return { ok: false };\\n    led.click();\\n    return { ok: true };\\n  }');\n```"
+    },
+    {
+      "t": 1785360729763,
+      "s": "led_pass",
+      "o": {
+        "ticks": 1
+      }
+    },
+    {
+      "t": 1785360737944,
+      "s": "freeform_send",
+      "o": "### Result\n{\n  \"ok\": true,\n  \"path\": \"/p/987446eef01e00f807eaa9cc8299b4de/edit\"\n}\n### Ran Playwright code\n```js\nawait page.evaluate('async () => {\\n    const ta = document.querySelector(\\'textarea[aria-label=\"Message the Architect\"]\\');\\n    if (!ta) return { err: \\'no ta\\' };\\n    const desc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, \\'value\\');\\n    ta.focus();\\n    desc.set.call(ta, \\'Print HELLO_SIGNED_QA on serial every 2 seconds\\');\\n    ta.dispatchEvent(new InputEvent(\\'input\\', { bubbles: true, data: \\'x\\', inputType: \\'insertText\\' }));\\n    await new Promise(r => setTimeout(r, 150));\\n    const send = document.querySelector(\\'button[aria-label=\"Send message\"]\\');\\n    if (!send || send.disabled) return { err: \\'send blocked\\', disabled: send?.disabled, val: ta.value };\\n    send.click();\\n    return { ok: true, path: location.pathname };\\n  }');\n```"
+    },
+    {
+      "t": 1785360850257,
+      "s": "freeform_settled",
+      "o": {
+        "ticks": 18
+      }
+    },
+    {
+      "t": 1785360879705,
+      "s": "final",
+      "o": "### Result\n{\n  \"href\": \"https://app.labwired.com/p/987446eef01e00f807eaa9cc8299b4de/edit\",\n  \"path\": \"/p/987446eef01e00f807eaa9cc8299b4de/edit\",\n  \"signedIn\": true,\n  \"email\": \"shylenkoa@gmail.com\",\n  \"agent\": [\n    {\n      \"method\": \"POST\",\n      \"u\": \"https://api.labwired.com/v1/agent\",\n      \"t\": 1785360720208,\n      \"done\": true,\n      \"hasAuth\": true,\n      \"status\": 200,\n      \"ms\": 7117,\n      \"hasError\": false,\n      \"hasFinish\": true,\n      \"hasVerifiedText\": true,\n      \"head\": \"id: 1\\ndata: {\\\"type\\\":\\\"data-build-progress\\\",\\\"data\\\":{\\\"phase\\\":\\\"understand\\\",\\\"status\\\":\\\"active\\\",\\\"detail\\\":\\\"Reading request…\\\"}}\\n\\ndata: {\\\"type\\\":\\\"data-resume-cursor\\\",\\\"data\\\":{\\\"seq\\\":1,\\\"turnId\\\":\"\n    },\n    {\n      \"method\": \"POST\",\n      \"u\": \"https://api.labwired.com/v1/agent\",\n      \"t\": 1785360731918,\n      \"done\": true,\n      \"hasAuth\": true,\n      \"status\": 200,\n      \"ms\": 74336,\n      \"hasError\": false,\n      \"hasFinish\": true,\n      \"hasVerifiedText\": true,\n      \"head\": \"id: 1\\ndata: {\\\"type\\\":\\\"data-build-progress\\\",\\\"data\\\":{\\\"phase\\\":\\\"understand\\\",\\\"status\\\":\\\"active\\\",\\\"detail\\\":\\\"Reading request…\\\"}}\\n\\ndata: {\\\"type\\\":\\\"data-resume-cursor\\\",\\\"data\\\":{\\\"seq\\\":1,\\\"turnId\\\":\"\n    }\n  ],\n  \"rows\": [\n    \"• ESP32-C3 LED blink — load a starter if possible and prove it works on the twin\",\n    \"✦ ✓ Working device — Verified live on the twin. · mcu\",\n    \"• Print HELLO_SIGNED_QA on serial every 2 seconds\",\n    \"✦ ↳ mcu: the run didn’t reach a proven state ↳ firmware → mcu: Full starter already proven on the twin. Do not edit unle\"\n  ],\n  \"verified\": true,\n  \"err\": null,\n  \"ss\": {\n    \"labwired:architect-history:labwired:architect-run:63:project:987446eef01e00f807eaa9cc8299b4de:board:esp32c3-oled-lab\": \"[{\\\"id\\\":\\\"h_ms6lq6p8_c9mwg\\\",\\\"at\\\":1785360806252,\\\"prompt\\\":\\\"Print HELLO_SIGNED_QA on serial every 2 seconds\\\",\\\"summary\\\":\\\"Updat\",\n    \"labwired:architect-run:40:project:987446eef01e00f807eaa9cc8299b4de\": \"{\\\"chatId\\\":\\\"20f976dd-f496-4b50-92d6-66f72f7efd"
+    }
+  ],
+  "ended": "2026-07-29T21:34:39.705Z"
+}

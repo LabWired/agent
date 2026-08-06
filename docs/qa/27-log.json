@@ -1,0 +1,61 @@
+[
+  {
+    "s": "signed_in",
+    "o": true
+  },
+  {
+    "s": "user_menu",
+    "o": true
+  },
+  {
+    "s": "click_led",
+    "o": "f1e545"
+  },
+  {
+    "s": "verified",
+    "o": true
+  },
+  {
+    "s": "stale_title",
+    "o": true
+  },
+  {
+    "s": "parts",
+    "o": "3"
+  },
+  {
+    "s": "composer",
+    "o": "f1e552"
+  },
+  {
+    "s": "send_refs",
+    "o": []
+  },
+  {
+    "s": "meta_enter"
+  },
+  {
+    "s": "feedback_modal",
+    "o": false
+  },
+  {
+    "s": "sign_in_modal",
+    "o": false
+  },
+  {
+    "s": "probe_in_ui",
+    "o": false
+  },
+  {
+    "s": "working_or_progress",
+    "o": true
+  },
+  {
+    "s": "my_projects_preview",
+    "o": "### Page\n- Page URL: https://app.labwired.com/?lab=esp32c3-oled-lab\n- Page Title: LabWired Playground — The easy way to build hardware\n### Snapshot\n```yaml\n- generic [ref=f1e3]:\n  - banner [ref=f1e4]:\n    - generic [ref=f1e5]:\n      - link \"LabWired\" [ref=f1e6] [cursor=pointer]:\n        - /url: https://labwired.com\n      - generic [ref=f1e11]: ›\n      - generic [ref=f1e12]: ESP32-C3 0.96\" OLED\n    - button \"Search components, boards, and examples\" [ref=f1e15] [cursor=pointer]:\n      - generic [ref=f1e16]: ⌘K\n      - generic [ref=f1e17]: Search components, boards, examples…\n    - generic [ref=f1e18]:\n      - generic \"Editor mode\" [ref=f1e19]:\n        - button \"Edit\" [pressed] [ref=f1e20] [cursor=pointer]\n        - button \"Run\" [ref=f1e21] [cursor=pointer]\n      - generic [ref=f1e22]:\n        - button \"View\" [ref=f1e24] [cursor=pointer]\n        - button \"Tools\" [ref=f1e26] [cursor=pointer]\n      - button \"Open My Projects\" [ref=f1e30] [cursor=pointer]:\n        - generic [ref=f1e31]: 📂\n        - generic [ref=f1e32]: My Projects\n      - button \"Embed\" [ref=f1e33] [cursor=pointer]\n      - button \"Share\" [ref=f1e34] [cursor=pointer]\n      - button \"Send feedback\" [ref=f1e36] [cursor=poi"
+  },
+  {
+    "s": "shot",
+    "o": "### Result\n- [Screenshot of viewport](.playwright-mcp/page-2026-07-29T15-08-22-775Z.png)\n### Ran Playwright code\n```js\n// Screenshot viewport and save it as .playwright-mcp/page-2026-07-29T15-08-22-775Z.png\nawait page.screenshot({\n  path: '.playwright-mcp/page-2026-07-29T15-08-22-775Z.png',\n  scale:"
+  }
+]

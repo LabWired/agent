@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.7 — 2026-08-06 — Close top gaps (knowledge, ship-gate, compose, start-here)
+
+1. **Knowledge heroes** — `kit-heroes.json` + `scripts/knowledge-top-parts.py` (local catalog + MCP probe)
+2. **Ship gate** — `./scripts/ship-gate.sh` (doctor, assert, live twin, compose, knowledge, golden-path-first)
+3. **Observe CLI** — `labwired compose uart|capture` for agent-callable element assembly
+4. **Start-here** — README single door (OpenCode + packs); Architect secondary
+5. **Golden-path first** — AGENTS + opencode agent description; Superpowers secondary on firmware
+
 ## 0.3.6 — 2026-08-06 — Drop legacy skill interfaces
 
 ### Breaking (skill names)

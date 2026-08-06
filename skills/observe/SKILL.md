@@ -38,13 +38,15 @@ metadata:
 
 Catalog: `share/observability/element-catalog.json`
 
-## Helpers
+## Agent-callable helpers (prefer CLI)
 
 ```bash
-python3 scripts/compose-elements.py --uart uart.log --out composed.json
-python3 scripts/compose-from-capture.py --capture capture.json --out composed.json
-python3 scripts/compose-from-capture.py --edges-csv edges.csv --uart uart.log
+labwired compose uart --file uart.log --out composed.json
+labwired compose capture --capture capture.json --out composed.json
+labwired compose capture --capture capture.json --uart uart.log --out composed.json
 ```
+
+(Scripts under `scripts/compose-*.py` are the implementation; call via **`labwired compose`**.)
 
 ## E3 recipe — LED vs UART
 

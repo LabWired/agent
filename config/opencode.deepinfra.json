@@ -76,7 +76,7 @@
   "agent": {
     "labwired": {
       "name": "LabWired Agent",
-      "description": "Write firmware and prove it on the LabWired twin via labwired_* tools.",
+      "description": "START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
       "mode": "primary",
       "color": "#0056b3"
     }

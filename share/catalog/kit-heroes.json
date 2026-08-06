@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "note": "Kit heroes for knowledge usefulness smoke. Agent should answer these via MCP knowledge path (list/describe/part/datasheet).",
+  "heroes": [
+    {
+      "id": "bme280",
+      "kind": "part",
+      "questions": ["i2c address", "pinout / interface pins"],
+      "expect": { "list_or_describe": true, "prefer_part_fact": true }
+    },
+    {
+      "id": "ssd1306",
+      "kind": "part",
+      "questions": ["i2c address", "interface"],
+      "expect": { "list_or_describe": true, "prefer_part_fact": true }
+    },
+    {
+      "id": "adxl345",
+      "kind": "part",
+      "questions": ["i2c address", "interface"],
+      "expect": { "list_or_describe": true, "prefer_part_fact": true }
+    },
+    {
+      "id": "led",
+      "kind": "part",
+      "questions": ["pins A/C or anode/cathode"],
+      "expect": { "list_or_describe": true }
+    },
+    {
+      "id": "button",
+      "kind": "part",
+      "questions": ["pins"],
+      "expect": { "list_or_describe": true }
+    },
+    {
+      "id": "esp32c3",
+      "kind": "mcu",
+      "questions": ["default UART", "GPIO for LED blink beachhead"],
+      "expect": { "list_or_describe": true, "local_system": "esp32c3" }
+    },
+    {
+      "id": "stm32l476",
+      "kind": "mcu",
+      "questions": ["board beachhead nucleo"],
+      "expect": { "list_or_describe": true, "local_system": "stm32l476" }
+    },
+    {
+      "id": "esp32-c3-supermini",
+      "kind": "board",
+      "questions": ["board id", "MCU"],
+      "expect": { "list_or_describe": true }
+    }
+  ]
+}

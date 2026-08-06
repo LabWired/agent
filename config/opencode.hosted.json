@@ -60,7 +60,7 @@
   "agent": {
     "labwired": {
       "name": "LabWired Agent",
-      "description": "Write firmware and prove it on the shared LabWired twin. Hosted brain + labwired_* tools; claim green only after labwired_verify \u2192 model_verified.",
+      "description": "START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
       "mode": "primary",
       "color": "#0056b3"
     }

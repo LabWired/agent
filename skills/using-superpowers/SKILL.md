@@ -40,13 +40,15 @@ Before pin/register/electrical claims or firmware that depends on them:
 3. **Never invent.** Label fact vs quote vs missing.  
 4. Superpowers does **not** replace knowledge MCP. See `docs/KNOWLEDGE.md`.
 
-## Default firmware path
+## Default firmware path (always first)
 
-Prefer **`golden-path`**:
+**For firmware / board / blink / prove tasks: load `golden-path` before Superpowers process skills.**
 
 ```text
-bringup → prove → optional observe → optional desk-hw
+golden-path → bringup → prove → optional observe → optional desk-hw
 ```
+
+Superpowers (TDD, plans, …) are **secondary** on firmware work.
 
 ## When to load Superpowers process skills
 

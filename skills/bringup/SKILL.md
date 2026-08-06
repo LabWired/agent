@@ -40,6 +40,12 @@ Engineers ask the same things (“I²C addr?”, “which pin?”, “reset valu
 
 Label answers **fact** vs **quote** vs **missing**. Full contract: `docs/KNOWLEDGE.md`.
 
+### Kit heroes (prioritize usefulness)
+
+For these ids, always try tools before saying unknown:  
+`bme280`, `ssd1306`, `adxl345`, `led`, `button`, `esp32c3`, `esp32-c3-supermini`, `stm32l476`  
+(see `share/catalog/kit-heroes.json`). Prefer **`labwired_part`** hits; use **`labwired_datasheet`** for prose.
+
 ## B. Diagram
 
 1. Draft `diagram` from tool values only.  

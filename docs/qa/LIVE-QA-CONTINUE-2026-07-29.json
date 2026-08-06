@@ -1,0 +1,124 @@
+{
+  "started": "2026-07-29T20:15:28.825Z",
+  "cases": [
+    {
+      "t": 1785356129919,
+      "s": "install_scripts",
+      "o": {
+        "install": 200,
+        "agent_sh": 200,
+        "install_ps1": 200,
+        "agent_ps1": 200
+      }
+    },
+    {
+      "t": 1785356129919,
+      "s": "navigate",
+      "o": "https://app.labwired.com/?lab=esp32c3-oled-lab&qa=1785356129919"
+    },
+    {
+      "t": 1785356145035,
+      "s": "load",
+      "o": {
+        "signedIn": false,
+        "feedbackOk": true,
+        "sendMessage": true,
+        "sendDisabled": true,
+        "hasTa": true,
+        "starters": [
+          "LED blink",
+          "Serial hello"
+        ],
+        "title": "LabWired Playground — The easy way to build hardware",
+        "path": "/?lab=esp32c3-oled-lab&qa=1785356129919"
+      }
+    },
+    {
+      "t": 1785356145155,
+      "s": "led_button_count",
+      "o": 1
+    },
+    {
+      "t": 1785356151214,
+      "s": "led_err",
+      "o": {
+        "verified": false,
+        "thinking": false,
+        "status": null,
+        "err": "ERROR\nThe agent hit an error mid-run. Try again.\nRetry",
+        "starters": false,
+        "rows": [
+          "• ESP32-C3 LED blink — load a starter if possible and prove it works on the twin",
+          "✦ ERROR The agent hit an error mid-run. Try again. Retry"
+        ],
+        "path": "/"
+      }
+    },
+    {
+      "t": 1785356151215,
+      "s": "led_timeout",
+      "o": {
+        "verified": false,
+        "thinking": false,
+        "status": null,
+        "err": "ERROR\nThe agent hit an error mid-run. Try again.\nRetry",
+        "starters": false,
+        "rows": [
+          "• ESP32-C3 LED blink — load a starter if possible and prove it works on the twin",
+          "✦ ERROR The agent hit an error mid-run. Try again. Retry"
+        ],
+        "path": "/"
+      }
+    },
+    {
+      "t": 1785356151402,
+      "s": "freeform_pre",
+      "o": {
+        "disabled": false,
+        "valLen": 45
+      }
+    },
+    {
+      "t": 1785356154444,
+      "s": "freeform_err",
+      "o": {
+        "path": "/",
+        "thinking": false,
+        "status": null,
+        "err": "ERROR\nThe agent hit an error mid-run. Try again.\nRetry",
+        "rows": [
+          "• ESP32-C3 LED blink — load a starter if possible and prove it works on the twin",
+          "• Print HELLO_QA_CONT on serial every 2 seconds",
+          "✦ ERROR The agent hit an error mid-run. Try again. Retry"
+        ],
+        "hasProbe": true,
+        "feedbackModal": false,
+        "assistantN": 1
+      }
+    },
+    {
+      "t": 1785356164824,
+      "s": "nokia_lab",
+      "o": {
+        "path": "/?lab=nokia5110-invaders-lab&qa=1785356154561",
+        "hasParts": true,
+        "hasArchitect": true,
+        "textSample": "LabWired\n›\nNokia 5110 Breakout\n⌘K\nSearch components, boards, examples…\nEdit\nRun\nView\nTools\n📂\nMy Projects\nEmbed\nShare\nFeedback\nSign in\nParts (5)\nAssembly (9)\nPins\n×\nExport BOM\n▾\nMICROCONTROLLER\n1\nST-L"
+      }
+    }
+  ],
+  "notes": [],
+  "agentCalls": [
+    {
+      "u": "https://api.labwired.com/v1/agent",
+      "status": 200,
+      "t": 1785356148038
+    },
+    {
+      "u": "https://api.labwired.com/v1/agent",
+      "status": 200,
+      "t": 1785356152004
+    }
+  ],
+  "ended": "2026-07-29T20:16:05.144Z"
+}

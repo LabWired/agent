@@ -440,6 +440,12 @@ labwired_install_hosted_opencode_config() {
     cp "$ROOT/config/AGENTS.md" "$cfg_dir/AGENTS.md"
   fi
   if [[ -d "$ROOT/skills" ]]; then
+    local _legacy
+    for _legacy in verify-firmware part-knowledge board-bringup scaffold-firmware \
+      diagnose-firmware firmware-repair-loop report-evidence inspect-evidence \
+      compose-observability flash-firmware hw-promote; do
+      rm -rf "$cfg_dir/skills/$_legacy"
+    done
     cp -R "$ROOT/skills/." "$cfg_dir/skills/"
   fi
   say "OpenCode config: hosted (remote MCP + api.labwired.com/v1) → $cfg_dir/opencode.json"
@@ -500,7 +506,13 @@ labwired_prepare_agent_start() {
     cp "$ROOT/config/AGENTS.md" "$cfg_dir/AGENTS.md"
   fi
   if [[ -d "$ROOT/skills" ]]; then
-    # Refresh skills (domain packs + Superpowers)
+    # Drop legacy micro-skill names, then refresh packs + Superpowers
+    local _legacy
+    for _legacy in verify-firmware part-knowledge board-bringup scaffold-firmware \
+      diagnose-firmware firmware-repair-loop report-evidence inspect-evidence \
+      compose-observability flash-firmware hw-promote; do
+      rm -rf "$cfg_dir/skills/$_legacy"
+    done
     cp -R "$ROOT/skills/." "$cfg_dir/skills/" 2>/dev/null || true
   fi
 
@@ -532,22 +544,85 @@ labwired_prepare_agent_start() {
   fi
 }
 
+cmd_compose() {
+  # Agent-callable observe surface (elements → JSON). Not a ready-made plot product.
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    uart)
+      local file="" out=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --file|-f) file="${2:-}"; shift 2 || true ;;
+          --out|-o) out="${2:-}"; shift 2 || true ;;
+          *)
+            if [[ -z "$file" && -f "$1" ]]; then file="$1"; shift; else shift || true; fi
+            ;;
+        esac
+      done
+      [[ -n "$file" ]] || fail "usage: labwired compose uart --file <uart.log> [--out composed.json]"
+      if [[ -n "$out" ]]; then
+        exec python3 "$ROOT/scripts/compose-elements.py" --uart "$file" --out "$out"
+      else
+        exec python3 "$ROOT/scripts/compose-elements.py" --uart "$file"
+      fi
+      ;;
+    capture)
+      local cap="" edges="" uart="" out=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --capture|-c) cap="${2:-}"; shift 2 || true ;;
+          --edges) edges="${2:-}"; shift 2 || true ;;
+          --uart) uart="${2:-}"; shift 2 || true ;;
+          --out|-o) out="${2:-}"; shift 2 || true ;;
+          *) shift || true ;;
+        esac
+      done
+      [[ -n "$cap" || -n "$edges" ]] || fail "usage: labwired compose capture --capture <json> [--uart log] [--out out.json]"
+      local args=()
+      [[ -n "$cap" ]] && args+=(--capture "$cap")
+      [[ -n "$edges" ]] && args+=(--edges-csv "$edges")
+      [[ -n "$uart" ]] && args+=(--uart "$uart")
+      [[ -n "$out" ]] && args+=(--out "$out")
+      exec python3 "$ROOT/scripts/compose-from-capture.py" "${args[@]}"
+      ;;
+    help|--help|-h|"")
+      cat <<'CEOF'
+labwired compose — assemble observability elements (not ready-made plots)
+
+  labwired compose uart --file <uart.log> [--out composed.json]
+  labwired compose capture --capture <capture.json> [--uart log] [--out out.json]
+
+Uses kit scripts; agent should call this instead of inventing waveforms.
+CEOF
+      ;;
+    *)
+      fail "unknown compose subcommand: $sub (try: uart | capture | help)"
+      ;;
+  esac
+}
+
 cmd_help() {
   if [[ -f "$ROOT/branding/banner.txt" ]]; then
     cat "$ROOT/branding/banner.txt"
     echo
   fi
   cat <<'EOF'
-LabWired Agent
+LabWired Agent — start here (OpenCode + packs + shared MCP)
+
+  curl install → labwired login → labwired doctor → labwired
+  In chat: "Blink the LED and prove it on the twin."
+  (Playground Architect is optional / secondary — same labwired_* tools.)
 
 Usage:
-  labwired                 Start OpenCode agent (skills + labwired_* tools)
+  labwired                 Start OpenCode agent (golden-path first + MCP)
   labwired login           Device-code sign-in → hosted MCP + model gateway
   labwired logout          Clear cloud session
   labwired whoami          Show signed-in identity / project
   labwired doctor [--strict]  Check install (strict = require sim + probe-rs)
-  labwired update             Self-update kit + tools (like Cursor agent update)
+  labwired update             Self-update kit + tools
   labwired smoke              Prove install works (claim gate + sim)
+  labwired compose …          Assemble plot elements (uart | capture)
   labwired install-deps       Install sim + probe-rs into prefix
   labwired package …          Portable prefix: info | path | env | uninstall
   labwired version            Version
@@ -560,14 +635,11 @@ Usage:
   labwired probe …         Boards: physical probes + virtual LabWired
   labwired help            This help
 
-Probe (any popular debugger via probe-rs; virtual = LabWired sim):
-  labwired probe list
-  labwired probe chips stm32
-  labwired probe flash <elf> --chip <id> [--target virtual|probe|auto]
-  labwired probe install-backend
+Ship gate (CI / release):
+  ./scripts/ship-gate.sh
 
-OpenCode is the agent runtime. `labwired` installs config + skills and starts it.
-Shared tools: hosted MCP (after login) or local @labwired/mcp + sim.
+OpenCode is the agent runtime. Skills: golden-path · bringup · prove · observe · desk-hw
+(+ Superpowers process). Knowledge via MCP labwired_part / labwired_datasheet.
 
 Env:
   LABWIRED_ACCESS_TOKEN    Hosted Bearer (labwired login)
@@ -737,6 +809,10 @@ case "${1:-}" in
     shift
     cmd_serial_capture "$@"
     ;;
+  compose)
+    shift
+    cmd_compose "$@"
+    ;;
   probe)
     shift
     labwired_probe_cmd "$@"
@@ -753,7 +829,8 @@ case "${1:-}" in
     if [[ "${LABWIRED_PROFILE:-}" != "hosted" ]]; then
       labwired_export_sim || true
     fi
-    echo "labwired: starting OpenCode agent (skills + labwired_* tools)…" >&2
+    echo "labwired: starting OpenCode — default skill golden-path; packs bringup/prove/observe/desk-hw" >&2
+    echo "labwired: knowledge MCP labwired_part + labwired_datasheet; compose: labwired compose …" >&2
     exec opencode "$@"
     ;;
   "")
@@ -775,7 +852,8 @@ case "${1:-}" in
         echo "         or use LabWired debugger / probe-rs — sim is not required" >&2
       fi
     fi
-    echo "labwired: starting OpenCode agent (skills + labwired_* tools)…" >&2
+    echo "labwired: starting OpenCode — default skill golden-path (firmware first)" >&2
+    echo "labwired: start-here: login → doctor → labwired → “blink and prove it”" >&2
     exec opencode "$@"
     ;;
   *)

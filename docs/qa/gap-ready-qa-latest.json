@@ -1,0 +1,149 @@
+{
+  "stamp": "2026-08-05T20:13:20Z",
+  "pass": 28,
+  "fail": 0,
+  "agent_product_ready": true,
+  "definition": "AGENT_PRODUCT_READY: Parts 1\u20134 implemented and automated; Part 5 static commands/slash/UI build; live debug_read on esp32c3; flash confirm; promote dry_run; twin gate1. NOT claiming: full Electron click E2E, GDB step/BP UI, STM32 powered read, physical flash+serial desk run.",
+  "checks": [
+    {
+      "id": "syntax",
+      "pass": true,
+      "evidence": "ok"
+    },
+    {
+      "id": "cmd-debug",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.openHwLab",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.openEvidence",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.signIn",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.refreshAgent",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.gdbStart",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.debugRead",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "cmd-labwired.flashConfirm",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "ui-hwlab",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "ui-agent-status",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "ui-build",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "chat-slash",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "chat-ux-starters",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "chat-ux-claims",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "twin-gate1",
+      "pass": true,
+      "evidence": "assert-status: ok (model_verified)\n"
+    },
+    {
+      "id": "rpc-init",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-tools",
+      "pass": true,
+      "evidence": "[]"
+    },
+    {
+      "id": "rpc-plan-gdb",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-plan-hw-promote",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-plan-hw-promote-dry",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-flash-confirm",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-hw-observed",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-refuse-mv",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-promote-dry",
+      "pass": true,
+      "evidence": "=== flash ===\n[dry_run] flash skipped\n=== capture ===\n[dry_run] marker LABWIRED_OK assumed matched=t"
+    },
+    {
+      "id": "rpc-chat-gdb",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-chat-promote",
+      "pass": true,
+      "evidence": ""
+    },
+    {
+      "id": "rpc-debug-read-live",
+      "pass": true,
+      "evidence": "3fc88000: 00000000 00000000 00000000 00000000\n"
+    }
+  ]
+}
