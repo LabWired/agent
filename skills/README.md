@@ -74,6 +74,7 @@ Prepacked: `using-superpowers`, TDD, plans, systematic-debugging, …
 
 ---
 
-## Aliases
+## No legacy skill names
 
-Old micro-skill names are thin stubs → packs (`verify-firmware` → `prove`, etc.).
+Only the **5 domain packs** + Superpowers process skills ship.  
+Old names (`verify-firmware`, `part-knowledge`, …) are **dropped**.

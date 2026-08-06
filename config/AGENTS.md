@@ -27,11 +27,11 @@ When the user wants a **plot, chart, scope, overlay, or “show X over time”**
 - **Do not** invent a fixed plot type or pretend a ready-made dashboard exists.
 - **Do not** invent waveform data — pull from `labwired_run` / `labwired_inspect` /
   evidence / plot series, or say the element is unavailable.
-- A composed plot is **observation**, never `model_verified` (use `verify-firmware`).
+- A composed plot is **observation**, never `model_verified` (use **`prove`**).
 - Prefer existing surfaces (plot series, capture/export, thin Plot glass) over
   building a new plot product.
 
-Use skill pack **`observe`** (alias: `compose-observability`).
+Use skill pack **`observe`**.
 
 ## Status words (use exactly)
 
@@ -69,7 +69,7 @@ promote may run for demos without twin green, but claims must say
 
 ## Repair budget
 
-Constrained multi-step repair (`firmware-repair-loop` / diagnose path):
+Constrained multi-step repair (inside **`prove`** pack):
 
 | Parameter | v0 default |
 |-----------|------------|
@@ -81,7 +81,7 @@ Constrained multi-step repair (`firmware-repair-loop` / diagnose path):
 
 Do not spin past the budget. Do not edit the oracle to force green.
 
-## hw-promote rules (board-agnostic)
+## Desk-hw rules (board-agnostic)
 
 1. Prefer sim / twin green first when a twin path exists.  
 2. Flash alone ≠ `hardware_observed` — serial/RTT marker in a **captured** window is required.  
@@ -124,15 +124,17 @@ See `skills/README.md` — **5 packs**, not 12 micro-skills.
 
 ## Skills (domain packs + Superpowers process)
 
-### LabWired domain (firmware)
+### LabWired domain (firmware) — only these names
 
-| Pack | When | Aliases (thin stubs) |
-|------|------|----------------------|
-| **`golden-path`** | Default end-to-end stranger path | — |
-| **`bringup`** | Pins, parts, diagram, scaffold | part-knowledge, board-bringup, scaffold-firmware |
-| **`prove`** | Twin verify, repair ≤3, evidence report | verify-firmware, diagnose-firmware, firmware-repair-loop, report-evidence, inspect-evidence |
-| **`observe`** | Plots from **elements** (not ready-made) | compose-observability |
-| **`desk-hw`** | Flash + `hardware_observed` only | flash-firmware, hw-promote |
+| Pack | When |
+|------|------|
+| **`golden-path`** | Default end-to-end stranger path |
+| **`bringup`** | Knowledge + diagram + scaffold |
+| **`prove`** | Twin verify, repair ≤3, evidence report |
+| **`observe`** | Plots from **elements** (not ready-made) |
+| **`desk-hw`** | Flash + `hardware_observed` only |
+
+Old micro-skill names (verify-firmware, part-knowledge, …) are **removed**.
 
 ### Superpowers (process — prepacked)
 

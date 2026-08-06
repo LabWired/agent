@@ -103,7 +103,7 @@ PY
 
 # ——— FW-ENV ———
 if [[ -n "$LABWIRED" ]] && "$LABWIRED" doctor >/tmp/lw-doctor.txt 2>&1; then
-  if grep -q "ready\|doctor: clean\|ok  skill: verify-firmware" /tmp/lw-doctor.txt; then
+  if grep -q "ready\|doctor: clean\|ok  skill: golden-path" /tmp/lw-doctor.txt; then
     record "FW-ENV-01" pass "labwired doctor ok"
   else
     record "FW-ENV-01" fail "doctor ran but not ready: $(head -5 /tmp/lw-doctor.txt | tr '\n' ' ')"
@@ -112,11 +112,11 @@ else
   record "FW-ENV-01" fail "doctor failed or labwired missing"
 fi
 
-if grep -q "labwired-sim" /tmp/lw-doctor.txt 2>/dev/null && grep -q "skill: verify-firmware" /tmp/lw-doctor.txt 2>/dev/null; then
+if grep -q "labwired-sim" /tmp/lw-doctor.txt 2>/dev/null && grep -q "skill: golden-path" /tmp/lw-doctor.txt 2>/dev/null; then
   record "FW-ENV-02" pass "sim + skills present"
 else
   # re-check doctor file
-  if [[ -f /tmp/lw-doctor.txt ]] && grep -qE "skill: (verify-firmware|scaffold-firmware)" /tmp/lw-doctor.txt; then
+  if [[ -f /tmp/lw-doctor.txt ]] && grep -qE "skill: (golden-path|bringup|prove)" /tmp/lw-doctor.txt; then
     record "FW-ENV-02" pass "skills present (sim check soft)"
   else
     record "FW-ENV-02" fail "missing sim or skills"
@@ -243,7 +243,7 @@ else
 fi
 
 # ——— skills / onboarding ———
-for skill in verify-firmware diagnose-firmware firmware-repair-loop scaffold-firmware board-bringup flash-firmware hw-promote inspect-evidence report-evidence compose-observability part-knowledge golden-path; do
+for skill in golden-path bringup prove observe desk-hw using-superpowers; do
   if [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
     record "FW-SKILL-$skill" pass "SKILL.md present"
   else
@@ -451,13 +451,13 @@ else
 fi
 
 # diagnose skill = fail first narrative (file check)
-if grep -q "failing" "$ROOT/skills/diagnose-firmware/SKILL.md" 2>/dev/null; then
+if grep -q "failing" "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
   record "FW-FIX-01" pass "diagnose fail-first skill"
 else
   record "FW-FIX-01" fail "diagnose skill missing rule"
 fi
 
-if grep -q "Max 3" "$ROOT/skills/firmware-repair-loop/SKILL.md" 2>/dev/null; then
+if grep -q "Max 3" "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
   record "FW-FIX-02" pass "repair budget skill"
 else
   record "FW-FIX-02" fail "repair loop skill"

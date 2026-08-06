@@ -9,7 +9,7 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.3.5-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.3.6-blue)](CHANGELOG.md)
 
 ## Install
 
@@ -150,12 +150,6 @@ labwired
 
 | | |
 |--|--|
-| `verify-firmware` | Run the check |
-| `diagnose-firmware` | Fail, patch, re-check |
-| `inspect-evidence` | Read a result |
-| `board-bringup` | Board + wiring |
-| `scaffold-firmware` | Blink / serial hello |
-| `report-evidence` | Report for you or CI |
 
 ## Air-gap
 

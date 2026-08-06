@@ -10,13 +10,11 @@ metadata:
   gate: "1"
   labwired: "true"
   pack: "prove"
-  aliases: "verify-firmware,diagnose-firmware,firmware-repair-loop,report-evidence,inspect-evidence"
 ---
 
 # Prove (verify · repair · evidence)
 
-**Pack** of: verify-firmware · diagnose-firmware · firmware-repair-loop ·
-report-evidence · inspect-evidence.
+Twin dispose: oracle verify, budgeted repair, dual-claim evidence.
 
 ## Hard rules
 

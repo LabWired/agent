@@ -3,19 +3,16 @@ name: desk-hw
 description: >-
   Flash via probe-rs (or virtual) and optional promote to hardware_observed
   (flash + serial/RTT marker). Never upgrade hardware_observed to model_verified.
-  Prefer twin prove first. Alias: flash-firmware, hw-promote.
+  Prefer twin prove first.
 license: MIT
 compatibility: opencode
 metadata:
   gate: "workflow"
   labwired: "true"
   pack: "desk-hw"
-  aliases: "flash-firmware,hw-promote"
 ---
 
 # Desk hardware (flash · promote)
-
-**Pack** of: flash-firmware · hw-promote.
 
 ## Hard rules
 

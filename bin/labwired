@@ -500,7 +500,7 @@ labwired_prepare_agent_start() {
     cp "$ROOT/config/AGENTS.md" "$cfg_dir/AGENTS.md"
   fi
   if [[ -d "$ROOT/skills" ]]; then
-    # Refresh skills so verify-firmware / repair-loop stay current
+    # Refresh skills (domain packs + Superpowers)
     cp -R "$ROOT/skills/." "$cfg_dir/skills/" 2>/dev/null || true
   fi
 

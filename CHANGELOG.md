@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.6 — 2026-08-06 — Drop legacy skill interfaces
+
+### Breaking (skill names)
+- Removed old micro-skill dirs: `verify-firmware`, `part-knowledge`, `board-bringup`, etc.
+- **Only** domain packs remain: `golden-path`, `bringup`, `prove`, `observe`, `desk-hw`
+- Superpowers process skills still prepacked
+- OpenCode allowlists cleaned; stale aliases deleted on prepare/sync
+
 ## 0.3.5 — 2026-08-06 — Superpowers prepacked + MCP knowledge
 
 ### Process + domain in one kit

@@ -278,13 +278,13 @@ if [[ -d "$ROOT/skills/firmware-verification" ]]; then
 else
   echo "ok   no firmware-verification skill"
 fi
-# Required v0 skills (packages skills-repair / skills-hw)
-for _skill in firmware-repair-loop hw-promote; do
-  if [[ -f "$ROOT/skills/$_skill/SKILL.md" ]]; then
-    echo "ok   skill present: $_skill"
-  else
-    echo "FAIL skill missing: skills/$_skill/SKILL.md"
+# Legacy skill dirs must not exist
+for _legacy in firmware-repair-loop hw-promote verify-firmware part-knowledge; do
+  if [[ -d "$ROOT/skills/$_legacy" ]]; then
+    echo "FAIL legacy skill still present: $_legacy"
     fail=1
+  else
+    echo "ok   legacy gone: $_legacy"
   fi
 done
 

@@ -10,7 +10,6 @@ metadata:
   gate: "workflow"
   labwired: "true"
   pack: "bringup"
-  aliases: "part-knowledge,board-bringup,scaffold-firmware"
 ---
 
 # Bringup (knowledge + diagram + scaffold)

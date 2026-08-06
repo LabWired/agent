@@ -3,19 +3,17 @@ name: observe
 description: >-
   Plots and overlays from observability elements (serial, gpio edges, bus,
   registers, evidence) — not ready-made plot products. Assemble any view the
-  user wants; never invent waveforms. Alias: compose-observability.
+  user wants; never invent waveforms.
 license: MIT
 compatibility: opencode
 metadata:
   gate: "1"
   labwired: "true"
   pack: "observe"
-  aliases: "compose-observability"
 ---
 
 # Observe (compose elements → any plot)
 
-**Pack** of: compose-observability.  
 **Rule:** We do **not** ship ready-made plots. We ship **elements** you assemble.
 
 ## Hard rules
