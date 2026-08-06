@@ -1,2 +1,0 @@
-### Result
-- 0: (current) [Welcome](chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/connect.html?mcpRelayUrl=ws%3A%2F%2F%5B%3A%3A1%5D%3A49650%2Fextension%2Fe0a66a75-218b-483d-a7df-03c4e680e435&client=%7B%22name%22%3A%22labwired-qa3%22%7D&protocolVersion=2&token=oqfuXJrVRXZBK6FNv1R1AsbP0DS0BBVcZMrPto91m7c)

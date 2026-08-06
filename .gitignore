@@ -1,43 +1,40 @@
-# Local agent tooling (not product)
-.grok/
-.DS_Store
 
-# Build / pack artifacts
-dist/
-*.tar.gz
-.pio/
-.pio/**
-workspaces/**/.pio/
-fixtures/**/.pio/
-examples/**/.pio/
-
-# Runtime evidence (generated)
-workspaces/**/evidence/
-examples/**/evidence/
-fixtures/**/evidence/
-**/evidence/
-# Smoke run artifacts (keep coverage-latest.* tracked)
-fixtures/coverage/smoke/
 __pycache__/
-*.pyc
-*.elf
-*.bin
 !fixtures/**/*.bin
-# Gate 1 live prebuilts (tiny bare-metal twin ELFs)
 !fixtures/gate1-live/firmware/*.elf
-
-# Secrets / env
+.DS_Store
 .env
 .env.*
+.grok/
+.pio/
+.pio/**
+*.bin
+*.elf
 *.pem
-
+*.pyc
+*.tar.gz
+**/evidence/
+# Build / pack artifacts
 # Competitor artifact dumps (re-download; keep STUDY.md only)
-docs/competitive/embedder-vscode/*.vsix
-docs/competitive/embedder-vscode/unpacked/
-docs/competitive/embedder-vscode/marketplace-query.json
-docs/competitive/embedder-vscode/marketplace-meta.json
-
+# Gate 1 live prebuilts (tiny bare-metal twin ELFs)
+# Local agent tooling (not product)
+# Runtime evidence (generated)
+# Secrets / env
+# Smoke run artifacts (keep coverage-latest.* tracked)
 # VS Code extension build
+dist/
+docs/competitive/embedder-vscode/*.vsix
+docs/competitive/embedder-vscode/marketplace-meta.json
+docs/competitive/embedder-vscode/marketplace-query.json
+docs/competitive/embedder-vscode/unpacked/
+docs/qa/
+examples/**/.pio/
+examples/**/evidence/
+extensions/labwired-vscode/*.vsix
 extensions/labwired-vscode/node_modules/
 extensions/labwired-vscode/out/
-extensions/labwired-vscode/*.vsix
+fixtures/**/.pio/
+fixtures/**/evidence/
+fixtures/coverage/smoke/
+workspaces/**/.pio/
+workspaces/**/evidence/
