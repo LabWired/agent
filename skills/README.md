@@ -1,82 +1,79 @@
 # LabWired agent skills (prepacked)
 
-Two layers, one OpenCode install:
+Clear interfaces — few packs, one knowledge path, shared MCP.
 
-1. **LabWired domain packs** (firmware / twin / claims)  
-2. **Superpowers process skills** (TDD, plans, debugging method)
-
-MCP tools (`labwired_*`) — including **`labwired_part`** and **`labwired_datasheet`** — are the knowledge plane. Skills teach *when* to call them.
+```text
+Skills (how to work)     MCP tools (what is true)
+─────────────────────    ────────────────────────
+golden-path / packs  →   labwired_* (knowledge, prove, …)
+Superpowers          →   process only (never mint green)
+```
 
 ---
 
-## Domain packs (primary — use these for firmware)
+## Domain packs (firmware)
 
-| Pack | When | Aliases |
-|------|------|---------|
-| **`golden-path`** | Default stranger / “prove it” loop | — |
-| **`bringup`** | Pins, parts, diagram, scaffold | part-knowledge, board-bringup, scaffold-firmware |
-| **`prove`** | Twin verify, repair ≤3, evidence | verify-*, diagnose-*, report-*, inspect-* |
-| **`observe`** | Plots from **elements** | compose-observability |
-| **`desk-hw`** | Flash + `hardware_observed` | flash-firmware, hw-promote |
+| Pack | Interface job |
+|------|----------------|
+| **`golden-path`** | Entry: full stranger loop |
+| **`bringup`** | **Knowledge + diagram + scaffold** (one path for part questions) |
+| **`prove`** | Twin verify / repair / evidence → `model_verified` |
+| **`observe`** | Compose plots from **elements** |
+| **`desk-hw`** | Flash + `hardware_observed` |
 
 ```text
 golden-path → bringup → prove → optional observe → optional desk-hw
 ```
 
-### Claim rules
+### Claims
 
-| Claim | Source |
-|-------|--------|
-| `model_verified` | **Only** `labwired_verify` |
-| `hardware_observed` | Flash **and** serial/RTT marker |
-| Datasheet / pin facts | MCP tools — never invent |
+| Claim | Interface |
+|-------|-----------|
+| `model_verified` | **`prove`** + `labwired_verify` only |
+| `hardware_observed` | **`desk-hw`** (flash + marker) |
+| Pin / part answers | **`bringup`** + knowledge MCP (below) |
 
 Sim is **not** forced; debugger is first-class when twin is missing.
 
 ---
 
-## Superpowers (process — prepacked)
+## Knowledge (one agent path)
 
-| Skill | When |
-|-------|------|
-| **`using-superpowers`** | How process + LabWired layers combine (read first) |
-| `brainstorming` | Design / ambiguous requirements |
-| `writing-plans` / `executing-plans` | Multi-step plans |
-| `test-driven-development` | Implementation discipline |
-| `systematic-debugging` | Unknown bugs (process) |
-| `verification-before-completion` | Before claiming done |
-| `dispatching-parallel-agents` | Parallel work |
-| `subagent-driven-development` | Subagent execution |
-| `requesting-code-review` / `receiving-code-review` | Review loop |
-| `finishing-a-development-branch` | Ship / merge decisions |
-| `using-git-worktrees` | Isolated worktrees |
-| `writing-skills` | Authoring skills |
+**Job:** Same hardware questions (pins, addrs, registers, notes) without inventing.
 
-**Priority:** LabWired claims + MCP facts **override** generic Superpowers advice when they conflict.
+| Agent does | MCP tools |
+|------------|-----------|
+| Load **`bringup`** | |
+| Find part | `labwired_list` / `labwired_describe` |
+| Prefer structured answer | **`labwired_part`** |
+| Grounded prose / missing fact | **`labwired_datasheet`** (our datasheet MCP) |
+| Still nothing | Say **missing** |
+
+**Agent-facing:** one knowledge path (not two products).  
+**Public copy:** knowledge via MCP — do not advertise a full public PDF library.  
+**Internal:** PDF ingest + vector DB may back `labwired_datasheet`; keep that off marketing.
+
+Full contract: **[`docs/KNOWLEDGE.md`](../docs/KNOWLEDGE.md)**.
+
+
+## Superpowers (process)
+
+Prepacked: `using-superpowers`, TDD, plans, systematic-debugging, …  
+
+**Priority:** user → LabWired claims → knowledge MCP → Superpowers process.
 
 ---
 
-## Knowledge plane (MCP)
+## Other MCP (not knowledge)
 
-| Tool | Role |
-|------|------|
-| `labwired_list` / `labwired_describe` | Catalog + pins |
-| `labwired_part` | Structured part facts |
-| **`labwired_datasheet`** | **Datasheets — access only through this MCP tool** |
-| `labwired_compile` / `run` / `verify` | Build + twin prove |
-| `labwired_inspect` | State slices |
-
-### Datasheets (binding)
-
-- **Source of truth for datasheet text:** hosted MCP **`labwired_datasheet`**  
-  (same shared tools surface as compile/run/verify after `labwired login`).  
-- Skills **do not** ship PDF blobs or invent RM text.  
-- Flow: try **`labwired_part`** for checked facts → if missing, **`labwired_datasheet`**  
-  and **quote only what the tool returns**.  
-- Local project PDF drop folders are **not** the product datasheet path.
+| Job | Tools |
+|-----|--------|
+| Prove | `labwired_compile` / `run` / `verify` |
+| Inspect | `labwired_inspect` |
+| Validate wiring | `labwired_validate` |
 
 ---
 
 ## Aliases
 
-Old LabWired micro-skill names remain as **thin stubs** pointing at packs so older prompts still work.
+Old micro-skill names are thin stubs → packs (`verify-firmware` → `prove`, etc.).

@@ -31,22 +31,14 @@ This kit ships **two layers**:
 
 If Superpowers says “just implement” and LabWired says “verify first” → **verify first**.
 
-## Knowledge & datasheets (our MCP — not invented)
+## Knowledge (one path — our MCP, not invent)
 
 Before pin/register/electrical claims or firmware that depends on them:
 
-1. Load **`bringup`** (or alias `part-knowledge`).  
-2. Call **LabWired MCP tools** (same surface as prove):  
-   `labwired_list` → `labwired_describe` → **`labwired_part`**  
-   → if fact missing → **`labwired_datasheet`** (**datasheet MCP only**).  
-3. **Never invent** pinouts, I²C addresses, register values, or datasheet quotes.
-
-| Need | Tool |
-|------|------|
-| Structured facts | `labwired_part` |
-| **Datasheet text** | **`labwired_datasheet` only** |
-
-Superpowers process skills do **not** replace datasheet MCP.
+1. Load **`bringup`**.  
+2. MCP: `list` / `describe` → **`labwired_part`** → **`labwired_datasheet`** as needed.  
+3. **Never invent.** Label fact vs quote vs missing.  
+4. Superpowers does **not** replace knowledge MCP. See `docs/KNOWLEDGE.md`.
 
 ## Default firmware path
 

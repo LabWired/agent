@@ -140,11 +140,11 @@ Engineering process skills ship in the same kit (`using-superpowers`, TDD, plans
 systematic-debugging, verification-before-completion, …). Use them for *how* to
 work. They **do not** mint `model_verified`.  
 
-**Knowledge:** pin/register claims via MCP `labwired_list` / `describe` / **`labwired_part`**.  
-**Datasheets:** **only** via MCP tool **`labwired_datasheet`** (hosted shared tools).  
-Do **not** invent datasheet text, scrape random PDFs as authority, or treat local
-drop-folder PDFs as the product knowledge plane unless the user explicitly asks
-to open a file they provided. Prefer `labwired_datasheet` after login.
+**Knowledge (one path):** same questions (pins, addrs, registers) via MCP —  
+`list` / `describe` → **`labwired_part`** (facts) → **`labwired_datasheet`** (grounded
+text from our knowledge MCP when needed). **Never invent.**  
+Do not market “we host every vendor PDF”; use tools and answer the question.  
+Contract: `docs/KNOWLEDGE.md` · pack: **`bringup`**.
 
 See `skills/README.md`.
 
@@ -156,8 +156,8 @@ See `skills/README.md`.
 |------|------|--------------|
 | `labwired_list` | Catalog boards / systems | none |
 | `labwired_describe` | Pins, defaults, beachhead metadata | none |
-| `labwired_part` / `labwired_part_*` | Structured part facts (MCP knowledge store) | none (not a pass) |
-| **`labwired_datasheet`** | **Datasheet text — the only product path for datasheets** (MCP search/page) | none (not a pass) |
+| `labwired_part` / `labwired_part_*` | Structured part facts (preferred) | none (not a pass) |
+| **`labwired_datasheet`** | Grounded datasheet/knowledge text via our MCP (not invent) | none (not a pass) |
 | `labwired_validate` | Diagram / setup sanity | none (not a pass) |
 | `labwired_compile` | Source → `firmware_ref` (hosted) | none |
 | `labwired_run` | Observe twin serial / behavior | observation only |

@@ -1,9 +1,9 @@
 ---
 name: bringup
 description: >-
-  Board/part context and minimal firmware scaffold. Tools for pins and parts
-  only — never invent pinouts or I2C addresses. Use before writing or claiming
-  behavior. Pack: part knowledge + diagram validate + scaffold.
+  Board/part context and minimal firmware scaffold. One knowledge path via MCP
+  (list/describe/part, then datasheet tool for grounded text). Never invent
+  pinouts or I2C addresses.
 license: MIT
 compatibility: opencode
 metadata:
@@ -13,44 +13,50 @@ metadata:
   aliases: "part-knowledge,board-bringup,scaffold-firmware"
 ---
 
-# Bringup (parts + diagram + scaffold)
+# Bringup (knowledge + diagram + scaffold)
 
-**Pack** of: part-knowledge · board-bringup · scaffold-firmware.
+**One knowledge interface** for pins/parts/electrical questions.  
+Full contract: `docs/KNOWLEDGE.md`.
 
 ## Hard rules
 
-1. **Never invent** pin numbers, bus addresses, register resets from model memory.  
-2. Call MCP tools first: `labwired_list` / `labwired_describe` / `labwired_part*`.  
-3. **Datasheets only via MCP `labwired_datasheet`** — not model memory, not random web
-   scrape as authority. Quote tool output only.  
-4. A fact is **not** `model_verified`. Only **prove** pack / `labwired_verify` mints that.  
-5. Scaffold is a **proposal** — compile success is not a pass.
+1. **Never invent** pins, bus addresses, register values, or datasheet text.  
+2. **One MCP knowledge path** (same questions):  
+   `list` / `describe` → **`labwired_part`** (facts) → **`labwired_datasheet`** when you need grounded prose or the fact is missing.  
+3. Knowledge is **not** `model_verified` (use **`prove`** for twin green).  
+4. Scaffold is a **proposal** — compile success is not a pass.  
+5. Do **not** tell the user we are a public full-PDF library — use tools; answer the question.
 
-## A. Part knowledge (context before code)
+## A. Knowledge (same questions → one path)
 
-1. Identify part/board (ask once if unclear).  
-2. `labwired_list` → `labwired_describe` → **`labwired_part`** for pins/buses firmware will touch.  
-3. If a field is missing: call **`labwired_datasheet`** (our datasheet MCP) and  
-   **quote only returned text**.  
-4. If tools return nothing / ambiguous — say so; do not fill gaps.
+Engineers ask the same things (“I²C addr?”, “which pin?”, “reset value?”). **One job**, one path:
 
-## B. Board / diagram
+| Step | Tool | Use |
+|------|------|-----|
+| 1 | `labwired_list` | Find part/board id |
+| 2 | `labwired_describe` | Pins/buses overview |
+| 3 | **`labwired_part`** | **Preferred** structured fact |
+| 4 | **`labwired_datasheet`** | Grounded text from our knowledge MCP (quote tool output only) |
+| 5 | — | Still empty → say **missing**; do not invent |
 
-1. Draft `diagram` JSON (MCU type, nets, peripherals) from tool values only.  
-2. `labwired_validate` when available; fix pin/bus errors.  
-3. Never invent pin maps that contradict describe/part output.
+Label answers **fact** vs **quote** vs **missing**. Full contract: `docs/KNOWLEDGE.md`.
 
-## C. Scaffold firmware
+## B. Diagram
 
-1. Smallest blink and/or UART hello (prefer `LED ON`/`LED OFF` lines if plots later).  
-2. Optional marker e.g. `LABWIRED_OK` for desk promote later.  
-3. No drive-by refactors.  
-4. Hand off to **`prove`** (or `golden-path`) with an oracle for that behavior.
+1. Draft `diagram` from tool values only.  
+2. `labwired_validate` when available.  
+3. No pin maps that contradict tools.
+
+## C. Scaffold
+
+1. Minimal blink and/or UART hello (`LED ON`/`OFF` if plots later).  
+2. Optional marker `LABWIRED_OK` for desk promote.  
+3. Hand off to **`prove`** or **`golden-path`**.
 
 ## Handoff
 
-| Next | Skill pack |
-|------|------------|
-| Prove on twin | `prove` |
-| Full stranger path | `golden-path` |
-| Plot after run | `observe` |
+| Next | Pack |
+|------|------|
+| Twin prove | `prove` |
+| Full loop | `golden-path` |
+| Plot | `observe` |
