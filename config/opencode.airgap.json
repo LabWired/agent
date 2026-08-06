@@ -3,7 +3,11 @@
   "mcp": {
     "labwired": {
       "type": "local",
-      "command": ["npx", "-y", "@labwired/mcp"],
+      "command": [
+        "npx",
+        "-y",
+        "@labwired/mcp"
+      ],
       "enabled": true,
       "timeout": 120000,
       "environment": {
@@ -21,7 +25,12 @@
       "board-bringup": "allow",
       "scaffold-firmware": "allow",
       "report-evidence": "allow",
-      "flash-firmware": "allow"
+      "flash-firmware": "allow",
+      "firmware-repair-loop": "allow",
+      "hw-promote": "allow",
+      "compose-observability": "allow",
+      "part-knowledge": "allow",
+      "golden-path": "allow"
     }
   },
   "provider": {
@@ -33,12 +42,16 @@
         "apiKey": "{env:LABWIRED_MODEL_KEY}"
       },
       "models": {
-        "qwen2.5-coder": { "name": "LabWired · Qwen2.5-Coder" }
+        "qwen2.5-coder": {
+          "name": "LabWired \u00b7 Qwen2.5-Coder"
+        }
       }
     }
   },
   "model": "labwired-local/qwen2.5-coder",
-  "enabled_providers": ["labwired-local"],
+  "enabled_providers": [
+    "labwired-local"
+  ],
   "autoupdate": false,
   "share": "disabled",
   "agent": {

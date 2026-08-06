@@ -22,6 +22,7 @@ run() {
 
 run "harness"           "$ROOT/tests/harness.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
+run "skills-verify-all" "$ROOT/tests/skills-verify-all.sh"
 run "hosted-config"     "$ROOT/tests/hosted-config.sh"
 run "compose-helpers"   "$ROOT/tests/compose-helpers.sh"
 run "smoke-doctor-gate" "$ROOT/tests/smoke-doctor-gate.sh"

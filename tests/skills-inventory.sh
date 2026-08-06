@@ -124,15 +124,26 @@ else
   fail=1
 fi
 # OpenCode skill allowlist includes new skills
-for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json"; do
+for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
+  "$ROOT/config/opencode.deepinfra.json" "$ROOT/config/opencode.airgap.json"; do
   if grep -q 'golden-path' "$cfg" && grep -q 'part-knowledge' "$cfg" \
-    && grep -q 'compose-observability' "$cfg"; then
+    && grep -q 'compose-observability' "$cfg" \
+    && grep -q 'firmware-repair-loop' "$cfg" \
+    && grep -q 'hw-promote' "$cfg"; then
     echo "ok   $(basename "$cfg") skill allowlist"
   else
-    echo "FAIL $cfg missing golden-path/part-knowledge/compose allow"
+    echo "FAIL $cfg incomplete skill allowlist"
     fail=1
   fi
 done
+
+# Exhaustive per-skill structural + claim verification
+if bash "$ROOT/tests/skills-verify-all.sh"; then
+  echo "ok   skills-verify-all"
+else
+  echo "FAIL skills-verify-all"
+  fail=1
+fi
 
 # Must not ship duplicate/ confusable skill name
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then
