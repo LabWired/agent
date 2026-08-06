@@ -86,8 +86,16 @@ labwired_deps_install_sim() {
 
   if [[ "$version" == "latest" ]]; then
     labwired_deps_say "resolving latest LabWired sim release (${repo})"
-    version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
-      | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+    # GitHub "latest" may be a demos-only tag (e.g. firmware-demos-v2) without
+    # platform tarballs. Prefer newest semver-style tag (v0.21.0, …).
+    version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=30" \
+      | tr ',' '\n' \
+      | sed -n 's/.*"tag_name": *"\(v[0-9][^"]*\)".*/\1/p' \
+      | head -1)"
+    if [[ -z "$version" ]]; then
+      version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+    fi
   fi
   if [[ -z "$version" ]]; then
     labwired_deps_warn "could not resolve sim release tag"
@@ -99,9 +107,40 @@ labwired_deps_install_sim() {
   labwired_deps_say "downloading simulator ${version} (${plat}) into prefix"
   tmp="$(mktemp -d)"
   if ! curl -fsSL --retry 3 -o "${cache}/${archive}" "$url"; then
-    labwired_deps_warn "prebuilt sim download failed: $url"
-    rm -rf "$tmp"
-    return 1
+    # Fallback: scan recent releases for an asset that matches this platform.
+    labwired_deps_warn "prebuilt sim download failed: $url — scanning releases for ${plat}"
+    local alt_tag alt_name
+    alt_tag=""
+    alt_name=""
+    while IFS=$'\t' read -r t n; do
+      [[ -n "$t" && -n "$n" ]] || continue
+      alt_tag="$t"
+      alt_name="$n"
+      break
+    done < <(
+      curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=30" \
+        | tr '{}' '\n' \
+        | awk -v plat="$plat" '
+            /"tag_name":/ { gsub(/[",]/, "", $2); tag=$2 }
+            /"name":/ && $0 ~ ("labwired-.*" plat "\\.tar\\.gz") {
+              gsub(/[",]/, "", $2); print tag "\t" $2; exit
+            }'
+    )
+    if [[ -n "$alt_tag" && -n "$alt_name" ]]; then
+      version="$alt_tag"
+      archive="$alt_name"
+      url="https://github.com/${repo}/releases/download/${version}/${archive}"
+      labwired_deps_say "retrying simulator ${version} (${archive})"
+      if ! curl -fsSL --retry 3 -o "${cache}/${archive}" "$url"; then
+        labwired_deps_warn "prebuilt sim download failed: $url"
+        rm -rf "$tmp"
+        return 1
+      fi
+    else
+      labwired_deps_warn "prebuilt sim download failed: $url"
+      rm -rf "$tmp"
+      return 1
+    fi
   fi
   tar -xzf "${cache}/${archive}" -C "$tmp"
   dest="$(find "$tmp" -type f \( -name labwired -o -name labwired-cli -o -name labwired-sim \) | head -1)"
