@@ -1,36 +1,75 @@
-# LabWired agent skills (organized)
+# LabWired agent skills (prepacked)
 
-**Too many skills confuses the agent.** We ship **five primary packs**.  
-Old names (verify-firmware, board-bringup, …) are **aliases** → load the pack.
+Two layers, one OpenCode install:
 
-## Primary packs (use these)
+1. **LabWired domain packs** (firmware / twin / claims)  
+2. **Superpowers process skills** (TDD, plans, debugging method)
 
-| Pack | When | Was (aliases) |
-|------|------|----------------|
-| **`golden-path`** | Default / stranger / “prove it” end-to-end | (entry) |
-| **`bringup`** | Pins, parts, diagram, minimal firmware skeleton | part-knowledge, board-bringup, scaffold-firmware |
-| **`prove`** | Twin verify, repair ≤3, evidence report | verify-firmware, diagnose-firmware, firmware-repair-loop, report-evidence, inspect-evidence |
-| **`observe`** | Plots / overlays from **elements** (not ready-made plots) | compose-observability |
-| **`desk-hw`** | Flash probe / promote → `hardware_observed` only | flash-firmware, hw-promote |
+MCP tools (`labwired_*`) — including **`labwired_part`** and **`labwired_datasheet`** — are the knowledge plane. Skills teach *when* to call them.
 
-## Claim rules (all packs)
+---
+
+## Domain packs (primary — use these for firmware)
+
+| Pack | When | Aliases |
+|------|------|---------|
+| **`golden-path`** | Default stranger / “prove it” loop | — |
+| **`bringup`** | Pins, parts, diagram, scaffold | part-knowledge, board-bringup, scaffold-firmware |
+| **`prove`** | Twin verify, repair ≤3, evidence | verify-*, diagnose-*, report-*, inspect-* |
+| **`observe`** | Plots from **elements** | compose-observability |
+| **`desk-hw`** | Flash + `hardware_observed` | flash-firmware, hw-promote |
+
+```text
+golden-path → bringup → prove → optional observe → optional desk-hw
+```
+
+### Claim rules
 
 | Claim | Source |
 |-------|--------|
-| `model_verified` | **Only** `labwired_verify` (prove pack) |
-| `hardware_observed` | Flash **and** serial/RTT marker (desk-hw) |
-| Observation / plot | Never upgrades either claim |
+| `model_verified` | **Only** `labwired_verify` |
+| `hardware_observed` | Flash **and** serial/RTT marker |
+| Datasheet / pin facts | MCP tools — never invent |
 
-Sim is **not** forced — debugger path is first-class when twin tools are missing (see golden-path / prove).
+Sim is **not** forced; debugger is first-class when twin is missing.
 
-## Default loop
+---
 
-```text
-bringup → (write) → prove → optional observe → optional desk-hw
-```
+## Superpowers (process — prepacked)
 
-Or just load **`golden-path`** and follow it.
+| Skill | When |
+|-------|------|
+| **`using-superpowers`** | How process + LabWired layers combine (read first) |
+| `brainstorming` | Design / ambiguous requirements |
+| `writing-plans` / `executing-plans` | Multi-step plans |
+| `test-driven-development` | Implementation discipline |
+| `systematic-debugging` | Unknown bugs (process) |
+| `verification-before-completion` | Before claiming done |
+| `dispatching-parallel-agents` | Parallel work |
+| `subagent-driven-development` | Subagent execution |
+| `requesting-code-review` / `receiving-code-review` | Review loop |
+| `finishing-a-development-branch` | Ship / merge decisions |
+| `using-git-worktrees` | Isolated worktrees |
+| `writing-skills` | Authoring skills |
 
-## Alias skills
+**Priority:** LabWired claims + MCP facts **override** generic Superpowers advice when they conflict.
 
-Thin `SKILL.md` stubs redirect to the pack above so older prompts and configs still resolve.
+---
+
+## Knowledge plane (MCP)
+
+| Tool | Role |
+|------|------|
+| `labwired_list` / `labwired_describe` | Catalog + pins |
+| `labwired_part` | Structured part facts |
+| `labwired_datasheet` | Datasheet text search/page |
+| `labwired_compile` / `run` / `verify` | Build + twin prove |
+| `labwired_inspect` | State slices |
+
+Skills do not embed datasheet PDFs; they force **tool use**.
+
+---
+
+## Aliases
+
+Old LabWired micro-skill names remain as **thin stubs** pointing at packs so older prompts still work.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.5 — 2026-08-06 — Superpowers prepacked + MCP knowledge
+
+### Process + domain in one kit
+- **Superpowers** skills prepacked under `skills/` (TDD, plans, systematic-debugging, …)
+- LabWired-adapted **`using-superpowers`**: claim rules + **`labwired_part` / `labwired_datasheet`** win over generic process advice
+- OpenCode allowlists include domain packs **and** Superpowers
+- `skills/README.md` documents both layers + MCP knowledge plane
+
+```bash
+labwired   # prepare copies all skills into ~/.config/opencode/skills
+```
+
 ## 0.3.4 — 2026-08-06 — Skill packs (5 primary, not 12)
 
 ### Organize skills

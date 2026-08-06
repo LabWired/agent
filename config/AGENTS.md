@@ -122,7 +122,9 @@ For first session or “prove it” asks, prefer skill **`golden-path`**:
 
 See `skills/README.md` — **5 packs**, not 12 micro-skills.
 
-## Skills (5 packs)
+## Skills (domain packs + Superpowers process)
+
+### LabWired domain (firmware)
 
 | Pack | When | Aliases (thin stubs) |
 |------|------|----------------------|
@@ -132,6 +134,17 @@ See `skills/README.md` — **5 packs**, not 12 micro-skills.
 | **`observe`** | Plots from **elements** (not ready-made) | compose-observability |
 | **`desk-hw`** | Flash + `hardware_observed` only | flash-firmware, hw-promote |
 
+### Superpowers (process — prepacked)
+
+Engineering process skills ship in the same kit (`using-superpowers`, TDD, plans,
+systematic-debugging, verification-before-completion, …). Use them for *how* to
+work. They **do not** mint `model_verified`.  
+
+**Knowledge:** pin/register/datasheet claims still go through MCP  
+(`labwired_part`, `labwired_datasheet`, list/describe) via **`bringup`**.
+
+See `skills/README.md`.
+
 ## Tool allowlist
 
 ### MCP tools (agent may call)
@@ -140,8 +153,8 @@ See `skills/README.md` — **5 packs**, not 12 micro-skills.
 |------|------|--------------|
 | `labwired_list` | Catalog boards / systems | none |
 | `labwired_describe` | Pins, defaults, beachhead metadata | none |
-| `labwired_part` / `labwired_part_*` | Structured part facts (when hosted) | none (not a pass) |
-| `labwired_datasheet` | Datasheet text search/page | none (not a pass) |
+| `labwired_part` / `labwired_part_*` | Structured part facts (MCP knowledge store) | none (not a pass) |
+| `labwired_datasheet` | Datasheet text via MCP (search/page) | none (not a pass) |
 | `labwired_validate` | Diagram / setup sanity | none (not a pass) |
 | `labwired_compile` | Source → `firmware_ref` (hosted) | none |
 | `labwired_run` | Observe twin serial / behavior | observation only |

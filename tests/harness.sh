@@ -247,10 +247,16 @@ echo "resolve-mcp tests passed"
 
 # --- skill inventory ---------------------------------------------------------
 
-# 5 primary packs + 11 alias stubs (compat)
-want=$'board-bringup\nbringup\ncompose-observability\ndesk-hw\ndiagnose-firmware\nfirmware-repair-loop\nflash-firmware\ngolden-path\nhw-promote\ninspect-evidence\nobserve\npart-knowledge\nprove\nreport-evidence\nscaffold-firmware\nverify-firmware'
+# Domain packs + Superpowers + aliases (dynamic list; require core set)
 got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
-assert_eq "skill inventory" "$got" "$want"
+for _p in golden-path bringup prove observe desk-hw using-superpowers test-driven-development; do
+  if echo "$got" | grep -qx "$_p"; then
+    echo "ok   skill present: $_p"
+  else
+    echo "FAIL skill missing: $_p"
+    fail=1
+  fi
+done
 for _p in golden-path bringup prove observe desk-hw; do
   if [[ -f "$ROOT/skills/$_p/SKILL.md" ]] && ! grep -q 'alias_of' "$ROOT/skills/$_p/SKILL.md"; then
     echo "ok   primary pack: $_p"
@@ -259,6 +265,13 @@ for _p in golden-path bringup prove observe desk-hw; do
     fail=1
   fi
 done
+if [[ -f "$ROOT/skills/using-superpowers/SKILL.md" ]] \
+  && grep -qi 'labwired_datasheet\|labwired_part' "$ROOT/skills/using-superpowers/SKILL.md"; then
+  echo "ok   superpowers prepacked with MCP knowledge priority"
+else
+  echo "FAIL using-superpowers missing LabWired MCP priority"
+  fail=1
+fi
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then
   echo "FAIL duplicate skill: firmware-verification must not exist"
   fail=1

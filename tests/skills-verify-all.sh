@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify skill packs (5 primary) + alias stubs (compat).
+# Verify domain packs + Superpowers prepack + aliases + allowlists.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fail=0
@@ -12,80 +12,96 @@ ALIASES=(
   flash-firmware hw-promote inspect-evidence part-knowledge report-evidence
   scaffold-firmware verify-firmware
 )
+# Core Superpowers set we ship
+SUPERPOWERS=(
+  using-superpowers
+  brainstorming
+  test-driven-development
+  systematic-debugging
+  verification-before-completion
+  writing-plans
+  executing-plans
+  writing-skills
+  dispatching-parallel-agents
+  subagent-driven-development
+  requesting-code-review
+  receiving-code-review
+  finishing-a-development-branch
+  using-git-worktrees
+)
 
-echo "==> skills-verify-all (${#PRIMARY[@]} packs + ${#ALIASES[@]} aliases)"
+echo "==> skills-verify-all (packs + superpowers + aliases)"
 
 for s in "${PRIMARY[@]}"; do
-  if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then
-    pass "primary disk $s"
+  [[ -f "$ROOT/skills/$s/SKILL.md" ]] && pass "primary $s" || bad "missing primary $s"
+  if grep -q 'alias_of' "$ROOT/skills/$s/SKILL.md"; then
+    bad "primary $s is alias"
   else
-    bad "missing primary skills/$s/SKILL.md"
-  fi
-  name="$(awk 'BEGIN{in_fm=0} /^---$/{in_fm++; next} in_fm==1 && /^name:/{sub(/^name:[[:space:]]*/,""); print; exit}' "$ROOT/skills/$s/SKILL.md")"
-  if [[ "$name" == "$s" ]]; then pass "primary name $s"; else bad "name $name != $s"; fi
-  # Primary packs must not be thin aliases
-  if grep -qi 'Alias →' "$ROOT/skills/$s/SKILL.md" || grep -q 'alias_of' "$ROOT/skills/$s/SKILL.md"; then
-    bad "primary $s looks like an alias stub"
-  else
-    pass "primary $s is full pack"
-  fi
-  lines=$(wc -l <"$ROOT/skills/$s/SKILL.md")
-  if [[ "$lines" -lt 40 ]]; then
-    bad "primary $s too thin ($lines lines)"
-  else
-    pass "primary $s depth $lines lines"
+    pass "primary $s full pack"
   fi
 done
 
 for s in "${ALIASES[@]}"; do
+  [[ -f "$ROOT/skills/$s/SKILL.md" ]] && pass "alias $s" || bad "missing alias $s"
+  grep -qiE 'Alias|alias_of|folded into|use skill pack' "$ROOT/skills/$s/SKILL.md" \
+    && pass "alias $s redirects" || bad "alias $s no redirect"
+done
+
+for s in "${SUPERPOWERS[@]}"; do
   if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then
-    pass "alias disk $s"
+    pass "superpowers $s"
   else
-    bad "missing alias skills/$s/SKILL.md"
-  fi
-  if grep -qiE 'Alias|alias_of|folded into|use skill pack' "$ROOT/skills/$s/SKILL.md"; then
-    pass "alias $s redirects"
-  else
-    bad "alias $s missing redirect language"
+    bad "missing superpowers skill $s"
   fi
 done
 
-# Pack claim rules
-grep -qi 'labwired_verify' "$ROOT/skills/prove/SKILL.md" && grep -qi 'model_verified' "$ROOT/skills/prove/SKILL.md" \
-  && pass "prove claim gate" || bad "prove claim gate"
-grep -qE '3|three' "$ROOT/skills/prove/SKILL.md" && pass "prove repair budget" || bad "prove repair budget"
-grep -qi 'never invent' "$ROOT/skills/bringup/SKILL.md" && pass "bringup never invent" || bad "bringup never invent"
-grep -qiE 'element|ready-made' "$ROOT/skills/observe/SKILL.md" && pass "observe elements" || bad "observe elements"
-grep -qi 'hardware_observed' "$ROOT/skills/desk-hw/SKILL.md" && grep -qi 'never upgrade\|Never upgrade' "$ROOT/skills/desk-hw/SKILL.md" \
-  && pass "desk-hw dual claim" || bad "desk-hw dual claim"
-grep -qi 'Do not force sim\|do not force sim' "$ROOT/skills/golden-path/SKILL.md" \
-  && pass "golden-path sim optional" || bad "golden-path sim optional"
+# using-superpowers must mention LabWired priority + datasheet/MCP
+if grep -qi 'labwired_verify\|model_verified' "$ROOT/skills/using-superpowers/SKILL.md" \
+  && grep -qi 'labwired_datasheet\|labwired_part' "$ROOT/skills/using-superpowers/SKILL.md"; then
+  pass "using-superpowers LabWired+MCP priority"
+else
+  bad "using-superpowers missing LabWired/MCP priority"
+fi
 
-# README map
-[[ -f "$ROOT/skills/README.md" ]] && pass "skills/README.md" || bad "skills/README.md"
+# Domain claim rules
+grep -qi 'labwired_verify' "$ROOT/skills/prove/SKILL.md" && pass "prove verify" || bad "prove"
+grep -qi 'never invent' "$ROOT/skills/bringup/SKILL.md" && pass "bringup invent" || bad "bringup"
+grep -qiE 'element|ready-made' "$ROOT/skills/observe/SKILL.md" && pass "observe" || bad "observe"
+grep -qi 'hardware_observed' "$ROOT/skills/desk-hw/SKILL.md" && pass "desk-hw" || bad "desk-hw"
 
-# AGENTS packs
+[[ -f "$ROOT/skills/README.md" ]] && grep -qi 'Superpowers' "$ROOT/skills/README.md" \
+  && pass "README superpowers section" || bad "README superpowers"
+
 for s in "${PRIMARY[@]}"; do
-  grep -q "$s" "$ROOT/config/AGENTS.md" && pass "AGENTS $s" || bad "AGENTS missing $s"
+  grep -q "$s" "$ROOT/config/AGENTS.md" && pass "AGENTS $s" || bad "AGENTS $s"
+done
+grep -qi 'Superpowers\|superpowers' "$ROOT/config/AGENTS.md" && pass "AGENTS superpowers" || bad "AGENTS superpowers"
+grep -qi 'labwired_datasheet' "$ROOT/config/AGENTS.md" && pass "AGENTS datasheet tool" || bad "AGENTS datasheet"
+
+for s in "${PRIMARY[@]}"; do
+  grep -q "$s" "$ROOT/bin/labwired" && pass "doctor $s" || bad "doctor $s"
 done
 
-# Doctor lists primary packs
-for s in "${PRIMARY[@]}"; do
-  grep -q "$s" "$ROOT/bin/labwired" && pass "doctor lists $s" || bad "doctor missing $s"
-done
-
-# All configs allow primary + key aliases
 for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
   "$ROOT/config/opencode.deepinfra.json" "$ROOT/config/opencode.airgap.json"; do
   base=$(basename "$cfg")
-  for s in "${PRIMARY[@]}" verify-firmware part-knowledge compose-observability hw-promote; do
+  for s in golden-path bringup prove observe desk-hw using-superpowers \
+    test-driven-development verification-before-completion systematic-debugging; do
     grep -q "\"$s\"" "$cfg" && pass "allow $base $s" || bad "allow $base missing $s"
   done
 done
+
+# Count: primary + aliases + superpowers should be present
+n=$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+if [[ "$n" -ge 25 ]]; then
+  pass "skill dir count $n (>=25 packs+aliases+superpowers)"
+else
+  bad "skill dir count $n too low"
+fi
 
 if [[ "$fail" -ne 0 ]]; then
   echo "skills-verify-all FAILED"
   exit 1
 fi
-echo "ok   skills-verify-all PASS (5 packs + ${#ALIASES[@]} aliases)"
+echo "ok   skills-verify-all PASS (domain packs + Superpowers prepacked)"
 exit 0

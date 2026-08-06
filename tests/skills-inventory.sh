@@ -18,6 +18,11 @@ need_skill() {
 for s in golden-path bringup prove observe desk-hw; do
   need_skill "$s"
 done
+# Superpowers (process — prepacked)
+for s in using-superpowers test-driven-development systematic-debugging \
+  verification-before-completion writing-plans brainstorming; do
+  need_skill "$s"
+done
 # Compat aliases (thin stubs)
 for s in \
   verify-firmware diagnose-firmware inspect-evidence compose-observability \

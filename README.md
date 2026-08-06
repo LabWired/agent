@@ -9,7 +9,7 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.3.5-blue)](CHANGELOG.md)
 
 ## Install
 
@@ -100,17 +100,23 @@ Board-agnostic by design. Chip/port/marker come from the task and env
 | `labwired serial-capture` | UART/CDC marker window |
 | `./demo.sh` | Smoke test |
 
-## Skills (5 packs — not 12 micro-skills)
+## Skills (prepacked)
+
+**Domain (LabWired)** — 5 packs:
 
 | Pack | Role |
 |------|------|
-| `golden-path` | Default stranger loop (entry) |
+| `golden-path` | Default stranger loop |
 | `bringup` | Pins, parts, diagram, scaffold |
 | `prove` | Twin verify, repair ≤3, evidence |
-| `observe` | Plots from **elements** (not ready-made) |
-| `desk-hw` | Flash + `hardware_observed` only |
+| `observe` | Plots from **elements** |
+| `desk-hw` | Flash + `hardware_observed` |
 
-Aliases (`verify-firmware`, `part-knowledge`, …) redirect to packs.  
+**Process (Superpowers)** — prepacked in the same kit: TDD, plans, systematic-debugging,
+verification-before-completion, … (see `using-superpowers`).  
+
+**Knowledge / datasheets:** MCP tools `labwired_part` + `labwired_datasheet` (not invent).  
+
 Map: [skills/README.md](skills/README.md) · [config/AGENTS.md](config/AGENTS.md).
 
 ### Boards (not OpenOCD)
