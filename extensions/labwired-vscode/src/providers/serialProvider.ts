@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { LabWiredBridge } from "../cli/bridge";
 import type { RpcClient } from "../cli/rpcClient";
 import type { PlotViewProvider } from "./plotProvider";
+import type { OverviewViewProvider } from "./overviewProvider";
 import { LiveSerial } from "../serial/live";
 import { shellHtml } from "../webview/theme";
 
@@ -29,7 +30,8 @@ export class SerialViewProvider implements vscode.WebviewViewProvider {
     private readonly extUri: vscode.Uri,
     private readonly bridge: LabWiredBridge,
     private readonly plot?: PlotViewProvider,
-    private readonly rpc?: RpcClient
+    private readonly rpc?: RpcClient,
+    private readonly overview?: OverviewViewProvider
   ) {
     this.live.on("data", (s: string) => {
       if (this.useRpc) return; // RPC path owns stream
@@ -82,6 +84,7 @@ export class SerialViewProvider implements vscode.WebviewViewProvider {
     }
     this.broadcast({ type: "live", text: s, tabId: this.activeId });
     this.plot?.ingestSerialText(s);
+    this.overview?.ingestSerialText(s);
   }
 
   dispose() {

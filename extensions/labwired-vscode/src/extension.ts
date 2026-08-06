@@ -15,6 +15,7 @@ import { ToolRunner } from "./tools/runner";
 import { TOOLS } from "./tools/registry";
 import { CatalogService } from "./catalog/service";
 import { CatalogViewProvider } from "./providers/catalogProvider";
+import { OverviewViewProvider } from "./providers/overviewProvider";
 import { AgentSession } from "./agent/session";
 import { RpcClient, resolveAgentRoot } from "./cli/rpcClient";
 import { DatasheetService } from "./datasheet/agentic";
@@ -45,14 +46,31 @@ export function activate(context: vscode.ExtensionContext): void {
   bridge.refresh();
 
   const plot = new PlotViewProvider(context.extensionUri);
+  const overview = new OverviewViewProvider(
+    context.extensionUri,
+    bridge,
+    catalog
+  );
   const evidence = new EvidenceViewProvider(context.extensionUri, bridge, rpc);
-  const serial = new SerialViewProvider(context.extensionUri, bridge, plot, rpc);
+  evidence.setOverview(overview);
+  const serial = new SerialViewProvider(
+    context.extensionUri,
+    bridge,
+    plot,
+    rpc,
+    overview
+  );
   billing.setRpc(rpc);
   // Prefer RPC plot stream when server emits plot/data
   rpc.on("notification", (method: string, params: Record<string, unknown>) => {
     if (method === "plot/data") {
       const vals = params.values as number[] | undefined;
-      if (vals?.length) for (const v of vals) plot.pushSample(v);
+      if (vals?.length) {
+        for (const v of vals) {
+          plot.pushSample(v);
+          overview.pushSample(v);
+        }
+      }
     }
   });
   const chat = new ChatViewProvider(
@@ -96,6 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => agent.stop() },
     { dispose: () => void rpc.stop() },
     { dispose: () => probeDebug.dispose() },
+    regView(OverviewViewProvider.viewType, overview),
     regView(ChatViewProvider.viewType, chat),
     regView(SerialViewProvider.viewType, serial),
     regView(EvidenceViewProvider.viewType, evidence),
@@ -120,6 +139,13 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const cmds: [string, (...args: never[]) => unknown][] = [
+    [
+      "labwired.openOverview",
+      async () => {
+        overview.openInEditor();
+        await focus("labwired.overview");
+      },
+    ],
     ["labwired.openChat", async () => focus("labwired.chat")],
     [
       "labwired.openChatInEditor",
@@ -825,10 +851,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const cli = bridge.getCli();
   store.append(
     "system",
-    `LabWired workbench v0.6.1 — same start-here as CLI\n` +
+    `LabWired workbench v0.6.2 — same start-here as CLI\n` +
       `1. Log in (labwired login) → hosted MCP + model\n` +
       `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
-      `3. “Blink the LED and prove it on the twin.”\n` +
+      `3. Overview: display · topology · serial · elements · evidence\n` +
+      `4. “Blink the LED and prove it on the twin.”\n` +
       `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
       `• Knowledge: MCP labwired_part / labwired_datasheet\n` +
       `• Compose: labwired compose … (elements, not ready-made plots)\n` +
@@ -836,8 +863,10 @@ export function activate(context: vscode.ExtensionContext): void {
       `• Catalog: ${cs.parts} parts · tools: /tools`
   );
   output.appendLine(
-    `LabWired workbench v0.6.1 — tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`
+    `LabWired workbench v0.6.2 — tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`
   );
+  // Surface overview on first activation so visual glass matches LabWired UI
+  void overview.pushState();
 }
 
 export function deactivate(): void {

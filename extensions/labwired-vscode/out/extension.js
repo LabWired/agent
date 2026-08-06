@@ -52,6 +52,7 @@ const runner_1 = require("./tools/runner");
 const registry_1 = require("./tools/registry");
 const service_1 = require("./catalog/service");
 const catalogProvider_1 = require("./providers/catalogProvider");
+const overviewProvider_1 = require("./providers/overviewProvider");
 const session_1 = require("./agent/session");
 const rpcClient_1 = require("./cli/rpcClient");
 const agentic_1 = require("./datasheet/agentic");
@@ -74,16 +75,21 @@ function activate(context) {
     const rpc = new rpcClient_1.RpcClient(output, agentRoot);
     bridge.refresh();
     const plot = new plotProvider_1.PlotViewProvider(context.extensionUri);
+    const overview = new overviewProvider_1.OverviewViewProvider(context.extensionUri, bridge, catalog);
     const evidence = new evidenceProvider_1.EvidenceViewProvider(context.extensionUri, bridge, rpc);
-    const serial = new serialProvider_1.SerialViewProvider(context.extensionUri, bridge, plot, rpc);
+    evidence.setOverview(overview);
+    const serial = new serialProvider_1.SerialViewProvider(context.extensionUri, bridge, plot, rpc, overview);
     billing.setRpc(rpc);
     // Prefer RPC plot stream when server emits plot/data
     rpc.on("notification", (method, params) => {
         if (method === "plot/data") {
             const vals = params.values;
-            if (vals?.length)
-                for (const v of vals)
+            if (vals?.length) {
+                for (const v of vals) {
                     plot.pushSample(v);
+                    overview.pushSample(v);
+                }
+            }
         }
     });
     const chat = new chatProvider_1.ChatViewProvider(context.extensionUri, bridge, store, session, tools, agent, rpc, evidence);
@@ -101,7 +107,7 @@ function activate(context) {
     }, (e) => {
         output.appendLine(`RPC server failed (using local agent fallback): ${e}`);
     });
-    context.subscriptions.push(output, { dispose: () => serial.dispose() }, { dispose: () => agent.stop() }, { dispose: () => void rpc.stop() }, { dispose: () => probeDebug.dispose() }, regView(chatProvider_1.ChatViewProvider.viewType, chat), regView(serialProvider_1.SerialViewProvider.viewType, serial), regView(evidenceProvider_1.EvidenceViewProvider.viewType, evidence), regView(historyProvider_1.HistoryViewProvider.viewType, history), regView(planProvider_1.PlanViewProvider.viewType, plan), regView(plotProvider_1.PlotViewProvider.viewType, plot), regView(catalogProvider_1.CatalogViewProvider.viewType, catalogView), vscode.window.registerCustomEditorProvider(schematicEditor_1.SchematicEditorProvider.viewType, schematic, { webviewOptions: { retainContextWhenHidden: true } }));
+    context.subscriptions.push(output, { dispose: () => serial.dispose() }, { dispose: () => agent.stop() }, { dispose: () => void rpc.stop() }, { dispose: () => probeDebug.dispose() }, regView(overviewProvider_1.OverviewViewProvider.viewType, overview), regView(chatProvider_1.ChatViewProvider.viewType, chat), regView(serialProvider_1.SerialViewProvider.viewType, serial), regView(evidenceProvider_1.EvidenceViewProvider.viewType, evidence), regView(historyProvider_1.HistoryViewProvider.viewType, history), regView(planProvider_1.PlanViewProvider.viewType, plan), regView(plotProvider_1.PlotViewProvider.viewType, plot), regView(catalogProvider_1.CatalogViewProvider.viewType, catalogView), vscode.window.registerCustomEditorProvider(schematicEditor_1.SchematicEditorProvider.viewType, schematic, { webviewOptions: { retainContextWhenHidden: true } }));
     const focus = async (viewId) => {
         await vscode.commands.executeCommand("workbench.view.extension.labwired");
         try {
@@ -112,6 +118,13 @@ function activate(context) {
         }
     };
     const cmds = [
+        [
+            "labwired.openOverview",
+            async () => {
+                overview.openInEditor();
+                await focus("labwired.overview");
+            },
+        ],
         ["labwired.openChat", async () => focus("labwired.chat")],
         [
             "labwired.openChatInEditor",
@@ -728,16 +741,19 @@ function activate(context) {
     }
     const cs = catalog.stats();
     const cli = bridge.getCli();
-    store.append("system", `LabWired workbench v0.6.1 — same start-here as CLI\n` +
+    store.append("system", `LabWired workbench v0.6.2 — same start-here as CLI\n` +
         `1. Log in (labwired login) → hosted MCP + model\n` +
         `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
-        `3. “Blink the LED and prove it on the twin.”\n` +
+        `3. Overview: display · topology · serial · elements · evidence\n` +
+        `4. “Blink the LED and prove it on the twin.”\n` +
         `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
         `• Knowledge: MCP labwired_part / labwired_datasheet\n` +
         `• Compose: labwired compose … (elements, not ready-made plots)\n` +
         `• CLI: ${cli.path || "(missing)"} (${cli.source}${cli.version ? ` v${cli.version}` : ""})\n` +
         `• Catalog: ${cs.parts} parts · tools: /tools`);
-    output.appendLine(`LabWired workbench v0.6.1 — tools=${registry_1.TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`);
+    output.appendLine(`LabWired workbench v0.6.2 — tools=${registry_1.TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`);
+    // Surface overview on first activation so visual glass matches LabWired UI
+    void overview.pushState();
 }
 function deactivate() {
     /* noop */

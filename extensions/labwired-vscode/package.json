@@ -2,7 +2,7 @@
   "name": "labwired-vscode",
   "displayName": "LabWired",
   "description": "Embedder-clone foundation for LabWired: agent chat, modes, monitor, evidence, plan — IDE-native UI.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "compatibleCliVersion": "0.3.7",
   "publisher": "labwired",
   "license": "MIT",
@@ -59,6 +59,12 @@
       "labwired": [
         {
           "type": "webview",
+          "id": "labwired.overview",
+          "name": "Overview",
+          "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
           "id": "labwired.chat",
           "name": "Agent",
           "icon": "media/labwired-mark.svg"
@@ -104,6 +110,7 @@
       ]
     },
     "commands": [
+      { "command": "labwired.openOverview", "title": "Open Overview (Display / Topology)", "category": "LabWired", "icon": "$(dashboard)" },
       { "command": "labwired.openChat", "title": "Open Agent Chat", "category": "LabWired" },
       { "command": "labwired.openChatInEditor", "title": "New Chat in Editor", "category": "LabWired", "icon": "media/labwired-mark.svg" },
       { "command": "labwired.openConversationFromHistory", "title": "Open Conversation", "category": "LabWired" },
@@ -252,6 +259,13 @@
             "description": "Opens a terminal and runs bare `labwired` — prepare skills + golden-path + shared labwired_* tools.\n\n[Start Agent](command:labwired.startAgent)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
             "completionEvents": ["onCommand:labwired.startAgent"]
+          },
+          {
+            "id": "overview",
+            "title": "Visual overview (like Playground glass)",
+            "description": "Board topology, OLED-style display, serial strip, element series, and twin evidence — same story as LabWired UI.\n\n[Open Overview](command:labwired.openOverview)",
+            "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
+            "completionEvents": ["onCommand:labwired.openOverview"]
           },
           {
             "id": "prove",

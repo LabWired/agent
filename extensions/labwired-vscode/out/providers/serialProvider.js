@@ -45,6 +45,7 @@ class SerialViewProvider {
     bridge;
     plot;
     rpc;
+    overview;
     static viewType = "labwired.serial";
     view;
     editorWebview;
@@ -52,11 +53,12 @@ class SerialViewProvider {
     activeId = "t1";
     live = new live_1.LiveSerial();
     useRpc = false;
-    constructor(extUri, bridge, plot, rpc) {
+    constructor(extUri, bridge, plot, rpc, overview) {
         this.extUri = extUri;
         this.bridge = bridge;
         this.plot = plot;
         this.rpc = rpc;
+        this.overview = overview;
         this.live.on("data", (s) => {
             if (this.useRpc)
                 return; // RPC path owns stream
@@ -111,6 +113,7 @@ class SerialViewProvider {
         }
         this.broadcast({ type: "live", text: s, tabId: this.activeId });
         this.plot?.ingestSerialText(s);
+        this.overview?.ingestSerialText(s);
     }
     dispose() {
         void this.live.close();

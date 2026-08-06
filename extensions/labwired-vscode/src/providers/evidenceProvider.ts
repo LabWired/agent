@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { LabWiredBridge } from "../cli/bridge";
 import type { RpcClient } from "../cli/rpcClient";
+import type { OverviewViewProvider } from "./overviewProvider";
 import { shellHtml } from "../webview/theme";
 
 type TwinResult = {
@@ -26,6 +27,8 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   private currentPath?: string;
   private currentJson?: unknown;
   private lastTwin?: TwinResult;
+
+  private overview?: OverviewViewProvider;
 
   constructor(
     private readonly extUri: vscode.Uri,
@@ -54,9 +57,23 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((msg) => void this.onMessage(msg));
   }
 
+  setOverview(overview: OverviewViewProvider | undefined) {
+    this.overview = overview;
+  }
+
   /** Called after twin/run from chat or command palette. */
   async showTwinResult(result: TwinResult): Promise<void> {
     this.lastTwin = result;
+    this.overview?.setEvidence({
+      status:
+        result.model_verified || result.twin_verified || result.ok
+          ? result.model_verified
+            ? "model_verified"
+            : "twin_verified"
+          : "failed",
+      path: result.evidencePath,
+      summary: result.summary,
+    });
     if (result.evidencePath) {
       const resultJson = path.join(result.evidencePath, "result.json");
       if (fs.existsSync(resultJson)) {
@@ -135,12 +152,14 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
       const raw = fs.readFileSync(file, "utf8");
       this.currentJson = JSON.parse(raw);
       this.pushEvidence();
+      this.syncOverviewFromJson(file, this.currentJson);
     } catch (e) {
       // try bridge helper
       try {
         this.currentPath = file;
         this.currentJson = this.bridge.readJsonFile(file);
         this.pushEvidence();
+        this.syncOverviewFromJson(file, this.currentJson);
       } catch (e2) {
         this.post({
           type: "error",
@@ -148,6 +167,27 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
         });
       }
     }
+  }
+
+  private syncOverviewFromJson(file: string, json: unknown) {
+    const j = (json || {}) as {
+      status?: string;
+      summary?: string;
+      model_verified?: boolean;
+      twin_verified?: boolean;
+    };
+    const status =
+      j.status ||
+      (j.model_verified
+        ? "model_verified"
+        : j.twin_verified
+          ? "twin_verified"
+          : "loaded");
+    this.overview?.setEvidence({
+      status,
+      path: file,
+      summary: j.summary,
+    });
   }
 
   private async onMessage(msg: { type: string; [k: string]: unknown }) {

@@ -76,6 +76,7 @@ labwired_cloud_session_clear() {
 }
 
 # Load session into env if present. Returns 0 if access token available.
+# Auto-refreshes when expires_at is within 120s (or already past).
 labwired_cloud_session_load() {
   local path
   path="$(labwired_cloud_session_path)"
@@ -88,7 +89,7 @@ labwired_cloud_session_load() {
   # shellcheck disable=SC1090
   eval "$(
     LABWIRED_SESSION_PATH="$path" python3 - <<'PY'
-import json, os, sys
+import json, os, sys, time, urllib.request, urllib.error
 from pathlib import Path
 path = Path(os.environ["LABWIRED_SESSION_PATH"])
 try:
@@ -99,22 +100,61 @@ access = data.get("access_token") or ""
 if not access:
     sys.exit(1)
 
+now = int(time.time())
+exp = int(data.get("expires_at") or 0)
+refresh = data.get("refresh_token") or ""
+api = (data.get("api_base") or "https://api.labwired.com").rstrip("/")
+# Refresh if expired or within 2 minutes of expiry
+if refresh and (exp <= now + 120):
+    try:
+        body = json.dumps({"refresh_token": refresh, "grant_type": "refresh_token"}).encode()
+        req = urllib.request.Request(
+            api + "/v1/auth/refresh",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "labwired-agent/0.3.7",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            j = json.loads(r.read().decode())
+        access = j.get("access_token") or access
+        if j.get("refresh_token"):
+            refresh = j["refresh_token"]
+        exp_in = int(j.get("expires_in") or 3600)
+        exp = now + exp_in
+        if j.get("email"):
+            data["email"] = j["email"]
+        data["access_token"] = access
+        data["refresh_token"] = refresh
+        data["expires_at"] = exp
+        data["updated_at"] = now
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    except Exception:
+        # Keep existing token; caller may still get 401 and need labwired login
+        pass
+
 def sh(s):
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
 
 print(f"export LABWIRED_ACCESS_TOKEN={sh(access)}")
-if data.get("refresh_token"):
-    print(f"export LABWIRED_REFRESH_TOKEN={sh(data['refresh_token'])}")
+if refresh:
+    print(f"export LABWIRED_REFRESH_TOKEN={sh(refresh)}")
 if data.get("project_id"):
     print(f"export LABWIRED_PROJECT={sh(data['project_id'])}")
 if data.get("email"):
     print(f"export LABWIRED_EMAIL={sh(data['email'])}")
-api = data.get("api_base") or "https://api.labwired.com"
 print(f"export LABWIRED_API_URL={sh(api)}")
 print(f"export LABWIRED_MODEL_URL={sh(api.rstrip('/') + '/v1')}")
 print(f"export LABWIRED_MODEL_KEY={sh(access)}")
 print("export LABWIRED_MODEL=labwired-default")
-print(f"export LABWIRED_SESSION_EXPIRES_AT={int(data.get('expires_at') or 0)}")
+print(f"export LABWIRED_SESSION_EXPIRES_AT={int(exp or 0)}")
 PY
   )" || return 1
   return 0

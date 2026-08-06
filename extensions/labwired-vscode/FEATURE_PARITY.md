@@ -72,8 +72,9 @@ Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only a
 | Twin evidence | Evidence + loadVerify JSON | ✅ ★ |
 | Doctor / smoke | doctor / smoke commands | ✅ ★ |
 | **Start agent = OpenCode** | startAgent → `labwired` (skills + labwired_*) | ✅ ★ |
-| **Hosted session from CLI login** | cloud.json → envForAgent | ✅ ★ |
+| **Hosted session from CLI login** | cloud.json → envForAgent (+ auto-refresh) | ✅ ★ |
 | **Walkthrough = start-here** | login → doctor → agent → prove | ✅ ★ |
+| **Visual overview (Playground glass)** | Overview: topology · OLED · serial · elements · evidence | ✅ ★ |
 | Subagents / instruments | skills + future | ⬜ |
 | Headless `--server` streaming | bridge tryStartServer | 🔶 |
 

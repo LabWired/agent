@@ -28,6 +28,7 @@ Packs: **golden-path · bringup · prove · observe · desk-hw** (+ Superpowers 
 
 | View | Role |
 |------|------|
+| **Overview** | Playground-style glass: session, board topology, OLED/display, serial strip, element series, evidence |
 | **Agent** | Multi-tab chat · Plan / Act / Debug / Verify · doctor/smoke · `@file` · `!shell` |
 | **History** | Conversation list · restore |
 | **Plan** | Plan review · save `.labwired/plan.md` · Approve → Act |
@@ -35,6 +36,8 @@ Packs: **golden-path · bringup · prove · observe · desk-hw** (+ Superpowers 
 | **Monitor** | Multi-tab UART · capture · probe list |
 | **Plot** | Element-backed series (live plot RPC with `--server`) |
 | **Schematic** | Custom editor for `.kicad_sch` / `.kicad_pcb` |
+
+**LabWired: Open Overview** opens the visual dashboard in an editor tab (same story as app.labwired.com glass — topology + display + serial + elements).
 
 Prefer **Start Agent (Terminal)** for the full twin + MCP path. In-panel chat is a fallback.
 

@@ -50,6 +50,7 @@ class EvidenceViewProvider {
     currentPath;
     currentJson;
     lastTwin;
+    overview;
     constructor(extUri, bridge, rpc) {
         this.extUri = extUri;
         this.bridge = bridge;
@@ -70,9 +71,21 @@ class EvidenceViewProvider {
         webviewView.webview.html = this.html();
         webviewView.webview.onDidReceiveMessage((msg) => void this.onMessage(msg));
     }
+    setOverview(overview) {
+        this.overview = overview;
+    }
     /** Called after twin/run from chat or command palette. */
     async showTwinResult(result) {
         this.lastTwin = result;
+        this.overview?.setEvidence({
+            status: result.model_verified || result.twin_verified || result.ok
+                ? result.model_verified
+                    ? "model_verified"
+                    : "twin_verified"
+                : "failed",
+            path: result.evidencePath,
+            summary: result.summary,
+        });
         if (result.evidencePath) {
             const resultJson = path.join(result.evidencePath, "result.json");
             if (fs.existsSync(resultJson)) {
@@ -152,6 +165,7 @@ class EvidenceViewProvider {
             const raw = fs.readFileSync(file, "utf8");
             this.currentJson = JSON.parse(raw);
             this.pushEvidence();
+            this.syncOverviewFromJson(file, this.currentJson);
         }
         catch (e) {
             // try bridge helper
@@ -159,6 +173,7 @@ class EvidenceViewProvider {
                 this.currentPath = file;
                 this.currentJson = this.bridge.readJsonFile(file);
                 this.pushEvidence();
+                this.syncOverviewFromJson(file, this.currentJson);
             }
             catch (e2) {
                 this.post({
@@ -167,6 +182,20 @@ class EvidenceViewProvider {
                 });
             }
         }
+    }
+    syncOverviewFromJson(file, json) {
+        const j = (json || {});
+        const status = j.status ||
+            (j.model_verified
+                ? "model_verified"
+                : j.twin_verified
+                    ? "twin_verified"
+                    : "loaded");
+        this.overview?.setEvidence({
+            status,
+            path: file,
+            summary: j.summary,
+        });
     }
     async onMessage(msg) {
         switch (msg.type) {
