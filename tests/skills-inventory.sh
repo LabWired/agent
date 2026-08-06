@@ -75,8 +75,10 @@ else
   echo "FAIL observe missing E3 recipe"
   fail=1
 fi
-if [[ -f "$ROOT/skills/README.md" ]] && grep -q 'Primary packs' "$ROOT/skills/README.md"; then
-  echo "ok   skills/README.md pack map"
+if [[ -f "$ROOT/skills/README.md" ]] \
+  && grep -qiE 'Domain packs|Primary packs|golden-path' "$ROOT/skills/README.md" \
+  && grep -qi 'Superpowers' "$ROOT/skills/README.md"; then
+  echo "ok   skills/README.md pack map + Superpowers"
 else
   echo "FAIL skills/README.md pack map"
   fail=1
