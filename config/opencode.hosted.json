@@ -12,6 +12,11 @@
   },
   "permission": {
     "skill": {
+      "golden-path": "allow",
+      "bringup": "allow",
+      "prove": "allow",
+      "observe": "allow",
+      "desk-hw": "allow",
       "verify-firmware": "allow",
       "diagnose-firmware": "allow",
       "inspect-evidence": "allow",
@@ -22,8 +27,7 @@
       "firmware-repair-loop": "allow",
       "hw-promote": "allow",
       "compose-observability": "allow",
-      "part-knowledge": "allow",
-      "golden-path": "allow"
+      "part-knowledge": "allow"
     }
   },
   "provider": {

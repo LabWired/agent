@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.4 — 2026-08-06 — Skill packs (5 primary, not 12)
+
+### Organize skills
+- **5 packs:** `golden-path` · `bringup` · `prove` · `observe` · `desk-hw`
+- **11 thin aliases** keep old names (`verify-firmware`, `part-knowledge`, …) → redirect to packs
+- `skills/README.md` map; AGENTS.md + doctor check primary packs only
+- Full content lives in packs (claim rules unchanged)
+
+```text
+bringup → prove → optional observe → optional desk-hw
+# or just: golden-path
+```
+
 ## 0.3.3 — 2026-08-06 — Remaining automatable Wave B/C
 
 ### Knowledge / coverage

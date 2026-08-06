@@ -1,74 +1,20 @@
 ---
 name: flash-firmware
 description: >-
-  Flash firmware to a physical debug probe (probe-rs: ST-Link, J-Link, CMSIS-DAP, …)
-  or to a virtual LabWired validation device (simulator). Prefer sim green before
-  hardware. Never claim hardware success from simulation alone.
+  Alias → use skill pack `desk-hw` instead. Kept for older prompts/configs.
+  flash-firmware is folded into desk-hw.
 license: MIT
 compatibility: opencode
 metadata:
-  gate: "workflow"
+  gate: "alias"
   labwired: "true"
+  alias_of: "desk-hw"
 ---
 
-# Flash firmware
+# Alias: flash-firmware → **desk-hw**
 
-## Hard rules
+This skill was merged into the **`desk-hw`** pack.
 
-1. Prefer **virtual LabWired** (`labwired_verify` / `labwired probe flash --target virtual`) until green.
-2. Physical flash uses **probe-rs** (bundled path) when available — not OpenOCD configs.
-3. **model_verified** = sim only. Flashing is not automatic hardware proof.
-4. After physical flash, observe UART/RTT before any hardware claim.
-5. For desk promote (flash + serial marker → `hardware_observed`), load **`hw-promote`**.
-   Flash alone never yields `hardware_observed` or `model_verified`.
+**Load `desk-hw`** (or **`golden-path`** for the full loop).
 
-## Discover
-
-```bash
-labwired probe list
-labwired probe chips stm32
-labwired probe doctor
-```
-
-## Virtual LabWired validation device
-
-Any catalog/sim board LabWired supports:
-
-```bash
-labwired probe flash build/app.elf --target virtual --chip <board-or-system>
-# or MCP: labwired_run / labwired_verify
-```
-
-## Physical (any popular probe probe-rs supports)
-
-```bash
-labwired probe flash build/app.elf --chip STM32L476RGTx
-labwired probe reset --chip STM32L476RGTx
-```
-
-Optional: `--probe <selector>` from `labwired probe list`.
-
-## USB-CDC / native-USB targets (ESP32, RP2040, …)
-
-Some boards expose **USB-CDC** (or USB-JTAG) as the serial console and flash path:
-
-- After flash, open the **host ACM/modem** port for the marker window — not only
-  the probe-rs session.
-- USB-CDC may re-enumerate on reset; re-resolve `LABWIRED_HW_PORT` if capture fails.
-- Baud and line endings must match the firmware (common: 115200 8N1).
-- When probe-rs is a poor fit, use **PlatformIO** or **esptool** for that family
-  (see `hw-promote`); still require serial marker capture for any
-  `hardware_observed` claim.
-- Arduino USB-CDC builds often need:
-  `-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1`
-
-Promote path (marker + dual status): **`hw-promote`**.
-
-## Procedure
-
-1. Obtain ELF (builder or local toolchain).
-2. Sim verify when possible (`verify-firmware` / `labwired_verify`).
-3. `labwired probe list` — pick virtual or physical.
-4. Flash with explicit `--chip` (or family backend when probe-rs is absent).
-5. Report paths separately: sim status vs flash vs observed serial.
-6. For hardware-observed claims, continue with `hw-promote` (serial oracle marker).
+See `skills/README.md`.

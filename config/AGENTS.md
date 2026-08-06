@@ -31,7 +31,7 @@ When the user wants a **plot, chart, scope, overlay, or “show X over time”**
 - Prefer existing surfaces (plot series, capture/export, thin Plot glass) over
   building a new plot product.
 
-Use skill **`compose-observability`**.
+Use skill pack **`observe`** (alias: `compose-observability`).
 
 ## Status words (use exactly)
 
@@ -104,7 +104,7 @@ help or stall because a local simulator binary is missing.
 |------|------|--------------------|
 | **Twin / sim** (`labwired_run` / `labwired_verify`) | Hosted MCP after login, or local sim present | `model_verified` **only** via verify |
 | **Debugger** (VS Code F5 / DAP reverse-step, probe-rs GDB) | No sim, or user prefers silicon/debug | Observe / step / flash; **not** `model_verified` unless twin verify also ran |
-| **Desk HW** (`flash-firmware` / `hw-promote`) | Probe + board available | `hardware_observed` only with marker capture |
+| **Desk HW** (`desk-hw` pack) | Probe + board available | `hardware_observed` only with marker capture |
 
 **Preference when both exist:** twin verify first (fast, CI-repeatable), then
 optional debugger or promote.  
@@ -117,27 +117,20 @@ Never invent a sim result. Never call debugger success `model_verified`.
 
 For first session or “prove it” asks, prefer skill **`golden-path`**:
 
-`part-knowledge` → `board-bringup` → `scaffold-firmware` →  
-**if twin tools available:** run → `verify-firmware` → repair ≤3 if red →  
-**else:** debugger / probe path (honest claims) →  
-`report-evidence` → optional `compose-observability`.
+`bringup` → **if twin:** `prove` → optional `observe` → optional `desk-hw`  
+**else:** debugger path (honest claims).
 
-## Skills
+See `skills/README.md` — **5 packs**, not 12 micro-skills.
 
-| Skill | When |
-|-------|------|
-| `golden-path` | End-to-end prove-before-silicon (default stranger path) |
-| `verify-firmware` | Before saying anything works on the twin |
-| `diagnose-firmware` | Capture a failing check, then fix and re-check |
-| `firmware-repair-loop` | Constrained multi-step repair: red → patch ≤3 re-verifies → same oracle |
-| `inspect-evidence` | Explain a result (read-only) |
-| `compose-observability` | Plot / chart / overlay / “show X over time” → assemble from **elements** |
-| `part-knowledge` | Pinout / part / datasheet facts — **tools only, never invent** |
-| `board-bringup` | New board or wiring |
-| `scaffold-firmware` | Minimal blink / serial hello |
-| `report-evidence` | Clear summary for the user or CI (twin + HW as separate fields) |
-| `flash-firmware` | Physical probes (probe-rs) or virtual LabWired device |
-| `hw-promote` | After (or without) twin green: flash + serial-capture marker → `hardware_observed` only |
+## Skills (5 packs)
+
+| Pack | When | Aliases (thin stubs) |
+|------|------|----------------------|
+| **`golden-path`** | Default end-to-end stranger path | — |
+| **`bringup`** | Pins, parts, diagram, scaffold | part-knowledge, board-bringup, scaffold-firmware |
+| **`prove`** | Twin verify, repair ≤3, evidence report | verify-firmware, diagnose-firmware, firmware-repair-loop, report-evidence, inspect-evidence |
+| **`observe`** | Plots from **elements** (not ready-made) | compose-observability |
+| **`desk-hw`** | Flash + `hardware_observed` only | flash-firmware, hw-promote |
 
 ## Tool allowlist
 

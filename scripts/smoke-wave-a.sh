@@ -71,12 +71,12 @@ else
   bad "E3 compose empty or missing JSON"
 fi
 
-# 5 skills present
-for s in golden-path part-knowledge compose-observability verify-firmware; do
-  if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then
-    pass "skill $s"
+# 5 primary skill packs present
+for s in golden-path bringup prove observe desk-hw; do
+  if [[ -f "$ROOT/skills/$s/SKILL.md" ]] && ! grep -q 'alias_of' "$ROOT/skills/$s/SKILL.md"; then
+    pass "skill pack $s"
   else
-    bad "skill $s"
+    bad "skill pack $s"
   fi
 done
 

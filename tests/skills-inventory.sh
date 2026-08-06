@@ -14,60 +14,66 @@ need_skill() {
   fi
 }
 
+# Primary packs (required full content)
+for s in golden-path bringup prove observe desk-hw; do
+  need_skill "$s"
+done
+# Compat aliases (thin stubs)
 for s in \
   verify-firmware diagnose-firmware inspect-evidence compose-observability \
-  part-knowledge golden-path \
-  board-bringup scaffold-firmware report-evidence flash-firmware \
+  part-knowledge board-bringup scaffold-firmware report-evidence flash-firmware \
   firmware-repair-loop hw-promote
 do
   need_skill "$s"
 done
 
-# Plots = elements (not ready-made Open Plot product)
-if grep -qi 'elements\|compose.*plot\|not.*ready-made\|ready-made plot' \
-  "$ROOT/skills/compose-observability/SKILL.md"; then
-  echo "ok   compose-observability elements rule"
+# Pack rules
+if grep -qiE 'element|ready-made' "$ROOT/skills/observe/SKILL.md"; then
+  echo "ok   observe elements rule"
 else
-  echo "FAIL compose-observability missing elements product rule"
+  echo "FAIL observe missing elements product rule"
   fail=1
 fi
-if grep -q 'compose-observability' "$ROOT/config/AGENTS.md" \
-  && grep -qi 'Plots = elements\|observability \*\*elements\*\*\|ready-made' \
+if grep -q 'observe' "$ROOT/config/AGENTS.md" \
+  && grep -qi 'Plots = elements\|elements\|ready-made' \
   "$ROOT/config/AGENTS.md"; then
   echo "ok   AGENTS plots=elements rule"
 else
-  echo "FAIL AGENTS.md missing compose-observability / plots=elements"
+  echo "FAIL AGENTS.md missing observe / plots=elements"
   fail=1
 fi
-
-# Wave A/B: golden path + part knowledge
-if grep -qi 'never invent\|tools first\|part-knowledge' \
-  "$ROOT/skills/part-knowledge/SKILL.md"; then
-  echo "ok   part-knowledge refuse-invent"
+if grep -qi 'never invent' "$ROOT/skills/bringup/SKILL.md"; then
+  echo "ok   bringup refuse-invent"
 else
-  echo "FAIL part-knowledge missing refuse-invent rule"
+  echo "FAIL bringup missing never invent"
   fail=1
 fi
 if grep -q 'golden-path' "$ROOT/config/AGENTS.md" \
-  && grep -qi 'labwired_verify\|model_verified' "$ROOT/skills/golden-path/SKILL.md"; then
+  && grep -qi 'labwired_verify\|model_verified\|prove' "$ROOT/skills/golden-path/SKILL.md"; then
   echo "ok   golden-path + AGENTS default loop"
 else
-  echo "FAIL golden-path missing from AGENTS or verify rule"
+  echo "FAIL golden-path missing from AGENTS or loop"
   fail=1
 fi
 if grep -qi 'do not force sim\|Do not force sim\|sim is not required\|debugger' \
   "$ROOT/config/AGENTS.md" \
-  && grep -qi 'Do not force sim\|debugger path\|no sim' \
+  && grep -qi 'Do not force sim\|debugger\|no sim' \
   "$ROOT/skills/golden-path/SKILL.md"; then
   echo "ok   sim optional / debugger first-class"
 else
   echo "FAIL missing sim-optional / debugger path rule"
   fail=1
 fi
-if grep -q 'E3 recipe' "$ROOT/skills/compose-observability/SKILL.md"; then
-  echo "ok   compose E3 LED vs UART recipe"
+if grep -q 'E3 recipe' "$ROOT/skills/observe/SKILL.md"; then
+  echo "ok   observe E3 LED vs UART recipe"
 else
-  echo "FAIL compose-observability missing E3 recipe"
+  echo "FAIL observe missing E3 recipe"
+  fail=1
+fi
+if [[ -f "$ROOT/skills/README.md" ]] && grep -q 'Primary packs' "$ROOT/skills/README.md"; then
+  echo "ok   skills/README.md pack map"
+else
+  echo "FAIL skills/README.md pack map"
   fail=1
 fi
 if [[ -f "$ROOT/docs/GOLDEN_PATH.md" ]]; then
@@ -123,14 +129,13 @@ else
   echo "FAIL share/catalog/coverage-latest.json missing — run scripts/coverage-ratchet.sh"
   fail=1
 fi
-# OpenCode skill allowlist includes new skills
+# OpenCode skill allowlist: primary packs + key aliases
 for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
   "$ROOT/config/opencode.deepinfra.json" "$ROOT/config/opencode.airgap.json"; do
-  if grep -q 'golden-path' "$cfg" && grep -q 'part-knowledge' "$cfg" \
-    && grep -q 'compose-observability' "$cfg" \
-    && grep -q 'firmware-repair-loop' "$cfg" \
-    && grep -q 'hw-promote' "$cfg"; then
-    echo "ok   $(basename "$cfg") skill allowlist"
+  if grep -q 'golden-path' "$cfg" && grep -q 'bringup' "$cfg" \
+    && grep -q 'prove' "$cfg" && grep -q 'observe' "$cfg" \
+    && grep -q 'desk-hw' "$cfg" && grep -q 'verify-firmware' "$cfg"; then
+    echo "ok   $(basename "$cfg") skill allowlist (packs+aliases)"
   else
     echo "FAIL $cfg incomplete skill allowlist"
     fail=1
@@ -162,19 +167,20 @@ else
   fail=1
 fi
 
-# Repair loop max 3
-if grep -qE '3|three' "$ROOT/skills/firmware-repair-loop/SKILL.md"; then
-  echo "ok   repair-loop budget documented"
+# Repair loop max 3 (lives in prove pack after skill reorganization)
+if grep -qE '3|three' "$ROOT/skills/prove/SKILL.md"; then
+  echo "ok   prove pack repair budget documented"
 else
-  echo "FAIL repair-loop budget not documented"
+  echo "FAIL prove pack repair budget not documented"
   fail=1
 fi
 
-# Product is board-agnostic (not a single-MCU tool)
-if grep -qi 'board-agnostic\|not a single-MCU\|not the product focus' "$ROOT/skills/hw-promote/SKILL.md"; then
-  echo "ok   hw-promote board-agnostic"
+# Product is board-agnostic (desk-hw pack; not a single-MCU tool)
+if grep -qi 'LABWIRED_HW_\|not a fixed product MCU\|board-agnostic\|any chip\|env/task' \
+  "$ROOT/skills/desk-hw/SKILL.md"; then
+  echo "ok   desk-hw board-agnostic"
 else
-  echo "FAIL hw-promote missing board-agnostic wording"
+  echo "FAIL desk-hw missing board-agnostic / env target wording"
   fail=1
 fi
 if grep -qi 'ESP32-C3 beachhead\|C3 baseline marker' "$ROOT/config/AGENTS.md"; then

@@ -1,58 +1,20 @@
 ---
 name: verify-firmware
 description: >-
-  Model-verify firmware on LabWired's digital twin with a mandatory oracle.
-  Use before claiming boots, blinks, prints, or passes. Returns typed status
-  model_verified|failed|inconclusive|unsupported via labwired_verify.
-  On red, hand off to firmware-repair-loop (max 3 repairs); never soft-pass.
+  Alias → use skill pack `prove` instead. Kept for older prompts/configs.
+  verify-firmware is folded into prove.
 license: MIT
 compatibility: opencode
 metadata:
-  gate: "1"
+  gate: "alias"
   labwired: "true"
+  alias_of: "prove"
 ---
 
-# Verify firmware
+# Alias: verify-firmware → **prove**
 
-## Hard rule
+This skill was merged into the **`prove`** pack.
 
-You may tell the user firmware is **model-verified** only when `labwired_verify`
-returns `status: model_verified`. Compile success, `labwired_run` output, reading
-the source, or **debugger / probe success** is never enough. LLM judgment is never enough.
+**Load `prove`** (or **`golden-path`** for the full loop).
 
-If twin tools are **unavailable**, do not invent a verify result — hand off to the
-**debugger path** (VS Code F5 / probe-rs) and report observations without the
-`model_verified` label. Sim is not forced; debugger is first-class.
-
-## Claim vocabulary
-
-- **model-verified** — `status: model_verified`
-- **failed** — observed behavior contradicted the oracle or the firmware faulted
-- **inconclusive** — required evidence missing or runner failed
-- **unsupported** — unmodeled instruction/MMIO/peripheral/clause
-- `proven: true` is a deprecated alias for model_verified — never upgrade it to a hardware claim
-- **hardware-confirmed** is out of scope until a hardware worker exists
-- On budgeted repair stop without green, the repair loop may report **abstain**
-  (not a soft pass and not `model_verified`)
-
-## Procedure
-
-1. Ensure a content-addressed `firmware_ref` (builder compile path, or prebuilt artifact).
-2. Build a valid `diagram` with MCU part type matching the target board.
-3. Write an `oracle` with at least one clause for the behavior the user cares about.
-4. Call `labwired_verify` with `firmware_ref`, board/target, `diagram`, `oracle`.
-5. Report `status`, `gaps`, and (when present) `evidence_ref`. Quote failing clauses and diagnosis on non-pass.
-6. **On green:** hand off to **`report-evidence`** (or run
-   `python3 scripts/report-evidence.py --twin <verify.json>`). Prefer a report
-   that includes `evidence_ref` when the tool returned one — do not celebrate
-   green without stating evidence.
-7. Never weaken the oracle to obtain a pass. Fix firmware or report unsupported honestly.
-8. **On red / non-green:** hand off to `firmware-repair-loop` (entry also via
-   `diagnose-firmware`). That loop freezes this oracle, allows at most **3**
-   repair iterations, scores deterministically, and **abstains** when the budget
-   or gaps block progress. Re-entry here is only for dispose; status minting
-   remains solely `labwired_verify`.
-
-## Tools
-
-Prefer `labwired_verify`. Use `labwired_run` only for observation. Use `labwired_validate` if the diagram is rejected.
+See `skills/README.md`.

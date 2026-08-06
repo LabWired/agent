@@ -247,9 +247,18 @@ echo "resolve-mcp tests passed"
 
 # --- skill inventory ---------------------------------------------------------
 
-want=$'board-bringup\ncompose-observability\ndiagnose-firmware\nfirmware-repair-loop\nflash-firmware\ngolden-path\nhw-promote\ninspect-evidence\npart-knowledge\nreport-evidence\nscaffold-firmware\nverify-firmware'
+# 5 primary packs + 11 alias stubs (compat)
+want=$'board-bringup\nbringup\ncompose-observability\ndesk-hw\ndiagnose-firmware\nfirmware-repair-loop\nflash-firmware\ngolden-path\nhw-promote\ninspect-evidence\nobserve\npart-knowledge\nprove\nreport-evidence\nscaffold-firmware\nverify-firmware'
 got="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)"
 assert_eq "skill inventory" "$got" "$want"
+for _p in golden-path bringup prove observe desk-hw; do
+  if [[ -f "$ROOT/skills/$_p/SKILL.md" ]] && ! grep -q 'alias_of' "$ROOT/skills/$_p/SKILL.md"; then
+    echo "ok   primary pack: $_p"
+  else
+    echo "FAIL primary pack missing or is alias: $_p"
+    fail=1
+  fi
+done
 if [[ -d "$ROOT/skills/firmware-verification" ]]; then
   echo "FAIL duplicate skill: firmware-verification must not exist"
   fail=1

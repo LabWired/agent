@@ -200,20 +200,15 @@ cmd_doctor() {
     printf '\033[33mwarn\033[0m branding: missing — re-run ./install.sh\n'
   fi
 
+  # Five primary packs (ship surface). Aliases optional.
   local skill
-  for skill in \
-    verify-firmware diagnose-firmware inspect-evidence \
-    board-bringup scaffold-firmware report-evidence flash-firmware \
-    firmware-repair-loop hw-promote \
-    compose-observability part-knowledge golden-path
-  do
-    # Prefer OpenCode install dir; fall back to this kit's skills/ (checkout/doctor)
+  for skill in golden-path bringup prove observe desk-hw; do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     elif [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill (kit)"
     else
-      printf '\033[31mFAIL\033[0m skill: missing %s — run labwired (prepare) or ./install.sh\n' "$skill"
+      printf '\033[31mFAIL\033[0m skill: missing pack %s — run labwired (prepare) or ./install.sh\n' "$skill"
       ok=1
     fi
   done

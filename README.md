@@ -9,7 +9,7 @@ Write firmware. Run it on a virtual board.
 [Product](https://labwired.com/agent.html) · [Playground](https://app.labwired.com/) · [Pro](https://labwired.com/pro.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![version](https://img.shields.io/badge/version-0.3.3-blue)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-0.3.4-blue)](CHANGELOG.md)
 
 ## Install
 
@@ -100,17 +100,18 @@ Board-agnostic by design. Chip/port/marker come from the task and env
 | `labwired serial-capture` | UART/CDC marker window |
 | `./demo.sh` | Smoke test |
 
-## Skills (SOTA loop)
+## Skills (5 packs — not 12 micro-skills)
 
-| Skill | Role |
-|-------|------|
-| `golden-path` | Stranger path: prove on twin end-to-end |
-| `part-knowledge` | Pins/facts from tools — never invent |
-| `verify-firmware` | Only path to `model_verified` |
-| `firmware-repair-loop` | Max 3 repairs, same oracle |
-| `compose-observability` | Plots = elements, not ready-made Open Plot |
+| Pack | Role |
+|------|------|
+| `golden-path` | Default stranger loop (entry) |
+| `bringup` | Pins, parts, diagram, scaffold |
+| `prove` | Twin verify, repair ≤3, evidence |
+| `observe` | Plots from **elements** (not ready-made) |
+| `desk-hw` | Flash + `hardware_observed` only |
 
-See [config/AGENTS.md](config/AGENTS.md).
+Aliases (`verify-firmware`, `part-knowledge`, …) redirect to packs.  
+Map: [skills/README.md](skills/README.md) · [config/AGENTS.md](config/AGENTS.md).
 
 ### Boards (not OpenOCD)
 
