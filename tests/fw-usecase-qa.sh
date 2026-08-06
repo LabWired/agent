@@ -457,7 +457,8 @@ else
   record "FW-FIX-01" fail "diagnose skill missing rule"
 fi
 
-if grep -q "Max 3" "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
+# Repair budget lives in prove pack (legacy firmware-repair-loop was folded in).
+if grep -qiE 'max 3|repairs_used < 3|repair ≤3|repair <= 3' "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
   record "FW-FIX-02" pass "repair budget skill"
 else
   record "FW-FIX-02" fail "repair loop skill"

@@ -225,7 +225,14 @@ from pathlib import Path
 p = Path(os.environ["CFG_DIR"]) / "opencode.json"
 cfg = json.loads(p.read_text())
 perm = cfg.setdefault("permission", {}).setdefault("skill", {})
-for s in ("firmware-repair-loop", "hw-promote"):
+for s in (
+    "golden-path",
+    "bringup",
+    "prove",
+    "observe",
+    "desk-hw",
+    "using-superpowers",
+):
     perm.setdefault(s, "allow")
 p.write_text(json.dumps(cfg, indent=2) + "\n")
 PY

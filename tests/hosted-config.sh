@@ -34,9 +34,14 @@ models = prov.get("models") or {}
 assert "labwired-default" in models, prov
 assert "labwired-fast" in models, prov
 assert cfg.get("model") == "labwired/labwired-default", cfg.get("model")
-# Skills allowlist must include verify gate
+# Skills allowlist must include primary LabWired packs (legacy verify-firmware → prove)
 skills = (cfg.get("permission") or {}).get("skill") or {}
-assert skills.get("verify-firmware") == "allow", skills
+for required in ("golden-path", "bringup", "prove", "observe", "desk-hw"):
+    assert skills.get(required) == "allow", (required, skills)
+# Agent description must point at golden-path / prove (oracle dispose)
+desc = ((cfg.get("agent") or {}).get("labwired") or {}).get("description") or ""
+assert "golden-path" in desc.lower() or "prove" in desc.lower(), desc
+assert "model_verified" in desc or "labwired_verify" in desc or "never invent" in desc.lower(), desc
 print("ok   hosted config schema")
 PY
 
