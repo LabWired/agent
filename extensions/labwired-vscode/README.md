@@ -39,6 +39,18 @@ Packs: **golden-path · bringup · prove · observe · desk-hw** (+ Superpowers 
 
 **LabWired: Open Overview** opens the visual dashboard in an editor tab (same story as app.labwired.com glass — topology + display + serial + elements).
 
+### Twin display (real buffers)
+
+Overview can paint **real** twin framebuffers (not only the demo OLED):
+
+1. Agent / MCP: `labwired_run` → note `snapshot_id`  
+2. **LabWired: Pull Twin Display → Overview** (or Overview → *Pull twin display*)  
+   → `labwired_inspect` with `output=full|peripherals`  
+   → `peripherals[].artifacts[]` with `bytes` (SSD1306 page, RGB565 TFT, …)  
+3. Or drop / load a run JSON under `.labwired/` (also auto-saves `.labwired/display-latest.json`)
+
+Evidence load paths that include peripherals also feed the OLED/TFT canvas.
+
 Prefer **Start Agent (Terminal)** for the full twin + MCP path. In-panel chat is a fallback.
 
 ## Install (dev)

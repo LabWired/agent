@@ -75,6 +75,7 @@ Legend: ✅ working · 🔶 stub / partial · ⬜ missing · ★ LabWired-only a
 | **Hosted session from CLI login** | cloud.json → envForAgent (+ auto-refresh) | ✅ ★ |
 | **Walkthrough = start-here** | login → doctor → agent → prove | ✅ ★ |
 | **Visual overview (Playground glass)** | Overview: topology · OLED · serial · elements · evidence | ✅ ★ |
+| **Twin display buffers** | inspect/run peripherals → OLED/TFT canvas (ssd1306_page, rgb565) | ✅ ★ |
 | Subagents / instruments | skills + future | ⬜ |
 | Headless `--server` streaming | bridge tryStartServer | 🔶 |
 

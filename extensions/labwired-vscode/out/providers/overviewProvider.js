@@ -42,6 +42,8 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const cloudSession_1 = require("../cli/cloudSession");
+const hostedMcp_1 = require("../cli/hostedMcp");
+const fromPeripherals_1 = require("../display/fromPeripherals");
 const theme_1 = require("../webview/theme");
 class OverviewViewProvider {
     extUri;
@@ -54,6 +56,8 @@ class OverviewViewProvider {
     series = { uart: [] };
     evidence;
     display;
+    lastSnapshotId;
+    displayStatus = "";
     constructor(extUri, bridge, catalog) {
         this.extUri = extUri;
         this.bridge = bridge;
@@ -104,6 +108,128 @@ class OverviewViewProvider {
     setDisplay(display) {
         this.display = display;
         void this.pushState();
+    }
+    /** Apply a twin display frame (from run/inspect peripherals). */
+    applyTwinFrame(frame, snapshotId) {
+        if (snapshotId)
+            this.lastSnapshotId = snapshotId;
+        this.display = {
+            kind: frame.kind,
+            width: frame.width,
+            height: frame.height,
+            format: frame.format,
+            pixelBase64: frame.pixelBase64 || frame.monoBase64,
+            monoBase64: frame.monoBase64 || (frame.format === "ssd1306_page" ? frame.pixelBase64 : undefined),
+            label: frame.label,
+            metaOnly: frame.metaOnly,
+            snapshotId: snapshotId || this.lastSnapshotId,
+        };
+        this.displayStatus = frame.metaOnly
+            ? "Twin display meta only (no pixels in payload)"
+            : `Twin display · ${frame.kind} ${frame.width}×${frame.height}`;
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (root && !frame.metaOnly && (frame.pixelBase64 || frame.monoBase64)) {
+            try {
+                (0, fromPeripherals_1.writeDisplayLatest)(root, frame, {
+                    snapshot_id: snapshotId || this.lastSnapshotId,
+                });
+            }
+            catch {
+                /* ignore */
+            }
+        }
+        void this.pushState();
+    }
+    /** Ingest a full run/inspect/verify JSON (from agent, RPC, or file). */
+    ingestRunJson(json, source = "run") {
+        const snap = (0, fromPeripherals_1.extractSnapshotId)(json);
+        if (snap)
+            this.lastSnapshotId = snap;
+        const frame = (0, fromPeripherals_1.extractDisplayFromRunJson)(json);
+        if (frame) {
+            this.applyTwinFrame(frame, snap);
+            this.displayStatus = `${this.displayStatus} · via ${source}`;
+            return true;
+        }
+        if (snap) {
+            this.displayStatus = `snapshot ${snap} (no display bytes in ${source}) — try Pull twin display`;
+            void this.pushState();
+        }
+        return false;
+    }
+    /** Scan workspace for run/inspect JSON and load the first display frame found. */
+    async pullFromWorkspaceFiles() {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!root) {
+            this.displayStatus = "Open a workspace to load twin display JSON";
+            await this.pushState();
+            return false;
+        }
+        for (const file of (0, fromPeripherals_1.findRunJsonCandidates)(root)) {
+            try {
+                const j = JSON.parse(fs.readFileSync(file, "utf8"));
+                if (this.ingestRunJson(j, path.basename(file))) {
+                    this.displayStatus = `Loaded from ${path.relative(root, file)}`;
+                    await this.pushState();
+                    return true;
+                }
+                const sid = (0, fromPeripherals_1.extractSnapshotId)(j);
+                if (sid)
+                    this.lastSnapshotId = sid;
+            }
+            catch {
+                /* next */
+            }
+        }
+        this.displayStatus = "No display buffer in workspace run JSON";
+        await this.pushState();
+        return false;
+    }
+    /** labwired_inspect(snapshot_id) → peripherals → OLED/TFT canvas. */
+    async pullFromTwinInspect(snapshotId) {
+        const id = snapshotId ||
+            this.lastSnapshotId ||
+            (await vscode.window.showInputBox({
+                prompt: "snapshot_id from labwired_run",
+                value: this.lastSnapshotId || "",
+                ignoreFocusOut: true,
+            }));
+        if (!id) {
+            this.displayStatus = "Need snapshot_id from labwired_run";
+            await this.pushState();
+            return false;
+        }
+        this.displayStatus = `Inspecting ${id}…`;
+        await this.pushState();
+        // Prefer full for pixel bytes; fall back to peripherals
+        let res = await (0, hostedMcp_1.inspectSnapshot)(id, "full");
+        if (!res.ok) {
+            res = await (0, hostedMcp_1.inspectSnapshot)(id, "peripherals");
+        }
+        if (!res.ok) {
+            this.displayStatus = res.error || "inspect failed";
+            await this.pushState();
+            void vscode.window.showWarningMessage(`Twin display: ${res.error || "inspect failed"}`);
+            return false;
+        }
+        this.lastSnapshotId = id;
+        if (this.ingestRunJson(res.raw, "labwired_inspect")) {
+            return true;
+        }
+        // Sometimes tool wraps text only
+        if (res.text) {
+            try {
+                if (this.ingestRunJson(JSON.parse(res.text), "labwired_inspect")) {
+                    return true;
+                }
+            }
+            catch {
+                /* */
+            }
+        }
+        this.displayStatus = `Inspect ok but no display artifact on ${id}`;
+        await this.pushState();
+        return false;
     }
     /** Demo OLED frame matching Playground-style monochrome panel. */
     showDemoDisplay() {
@@ -181,13 +307,17 @@ class OverviewViewProvider {
                     set(w - 14 + dx, 14 + dy);
             }
         }
+        const b64 = Buffer.from(buf).toString("base64");
         this.display = {
             kind: "ssd1306",
             width: w,
             height: h,
-            monoBase64: Buffer.from(buf).toString("base64"),
+            format: "ssd1306_page",
+            monoBase64: b64,
+            pixelBase64: b64,
             label: "Demo OLED (SSD1306-style) — same glass as Playground display",
         };
+        this.displayStatus = "Demo frame (not twin)";
         void this.pushState();
     }
     ingestNumbers(text, series) {
@@ -278,6 +408,8 @@ class OverviewViewProvider {
             series: this.series,
             evidence: this.evidence,
             display: this.display,
+            lastSnapshotId: this.lastSnapshotId,
+            displayStatus: this.displayStatus,
         };
     }
     post(target, msg) {
@@ -290,9 +422,23 @@ class OverviewViewProvider {
     }
     async onMessage(msg) {
         if (msg.type === "ready" || msg.type === "refresh") {
-            if (!this.display)
+            // Prefer real twin buffer from workspace, else demo glass
+            const loaded = await this.pullFromWorkspaceFiles();
+            if (!loaded && !this.display)
                 this.showDemoDisplay();
             await this.pushState();
+            return;
+        }
+        if (msg.type === "pullTwinDisplay") {
+            const ok = await this.pullFromTwinInspect(msg.snapshotId);
+            if (!ok) {
+                // try local files as fallback
+                await this.pullFromWorkspaceFiles();
+            }
+            return;
+        }
+        if (msg.type === "pullWorkspaceDisplay") {
+            await this.pullFromWorkspaceFiles();
             return;
         }
         if (msg.type === "startAgent") {
@@ -329,7 +475,26 @@ class OverviewViewProvider {
                     path: uris[0].fsPath,
                     summary: j.summary || JSON.stringify(j).slice(0, 200),
                 });
+                this.ingestRunJson(j, path.basename(uris[0].fsPath));
                 await vscode.commands.executeCommand("labwired.loadEvidence");
+            }
+            catch (e) {
+                void vscode.window.showErrorMessage(String(e));
+            }
+            return;
+        }
+        if (msg.type === "loadRunJson") {
+            const uris = await vscode.window.showOpenDialog({
+                canSelectMany: false,
+                filters: { JSON: ["json"] },
+            });
+            if (!uris?.[0])
+                return;
+            try {
+                const j = JSON.parse(fs.readFileSync(uris[0].fsPath, "utf8"));
+                if (!this.ingestRunJson(j, path.basename(uris[0].fsPath))) {
+                    void vscode.window.showWarningMessage("No display buffer in that JSON (need peripherals[].artifacts[].bytes)");
+                }
             }
             catch (e) {
                 void vscode.window.showErrorMessage(String(e));
@@ -349,7 +514,7 @@ class OverviewViewProvider {
                     this.series = { ...this.series, ...j.series };
                 if (j.display)
                     this.display = j.display;
-                // common compose shape: { series: { led: [], uart: [] } } or elements array
+                this.ingestRunJson(j, "compose");
                 const any = j;
                 for (const [k, v] of Object.entries(any)) {
                     if (Array.isArray(v) && v.every((x) => typeof x === "number")) {
@@ -407,10 +572,14 @@ class OverviewViewProvider {
     <div class="ov-grid">
       <div class="ov-card">
         <div class="ov-card-h">Display <span class="muted" id="dispLabel"></span></div>
+        <div class="muted xs" id="dispStatus"></div>
         <div class="ov-oled-wrap">
           <canvas id="oled" width="256" height="128" class="ov-oled"></canvas>
         </div>
         <div class="ov-actions">
+          <button class="primary" id="pullTwin" type="button">Pull twin display</button>
+          <button class="ghost" id="pullWs" type="button">From workspace</button>
+          <button class="ghost" id="loadRun" type="button">Load run JSON…</button>
           <button class="ghost" id="demoDisp" type="button">Demo OLED</button>
           <button class="ghost" id="playground" type="button">Open Playground UI</button>
         </div>
@@ -502,51 +671,94 @@ $('loadEv').onclick = () => vscode.postMessage({ type: 'loadEvidence' });
 $('demoDisp').onclick = () => vscode.postMessage({ type: 'demoDisplay' });
 $('playground').onclick = () => vscode.postMessage({ type: 'openPlayground' });
 $('loadCompose').onclick = () => vscode.postMessage({ type: 'loadCompose' });
+$('pullTwin').onclick = () => vscode.postMessage({ type: 'pullTwinDisplay' });
+$('pullWs').onclick = () => vscode.postMessage({ type: 'pullWorkspaceDisplay' });
+$('loadRun').onclick = () => vscode.postMessage({ type: 'loadRunJson' });
 
 function drawDisplay(d) {
   const canvas = $('oled');
   const ctx = canvas.getContext('2d');
   const w = d?.width || 128, h = d?.height || 64;
-  canvas.width = w * 2; canvas.height = h * 2;
+  const scale = Math.max(1, Math.min(3, Math.floor(320 / w)));
+  canvas.width = w * scale; canvas.height = h * scale;
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (!d?.monoBase64) {
+  const b64 = d?.pixelBase64 || d?.monoBase64;
+  if (!b64) {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = '#38bdf8';
     ctx.font = '12px monospace';
-    ctx.fillText('No display buffer', 12, 36);
+    ctx.fillText(d?.metaOnly ? 'Meta only (no pixels)' : 'No display buffer', 12, 36);
     ctx.fillStyle = '#64748b';
-    ctx.fillText('Run twin or Demo OLED', 12, 54);
+    ctx.fillText('Pull twin display / run JSON / Demo', 12, 54);
+    $('dispLabel').textContent = d?.label || '';
     return;
   }
-  const raw = Uint8Array.from(atob(d.monoBase64), c => c.charCodeAt(0));
+  const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const img = ctx.createImageData(w, h);
-  // SSD1306 page packing: page * width + x, bit = y%8
-  const pages = Math.ceil(h / 8);
-  for (let page = 0; page < pages; page++) {
-    for (let x = 0; x < w; x++) {
-      const byte = raw[page * w + x] || 0;
-      for (let bit = 0; bit < 8; bit++) {
-        const y = page * 8 + bit;
-        if (y >= h) continue;
-        const on = (byte >> bit) & 1;
+  const fmt = d.format || (d.monoBase64 ? 'ssd1306_page' : 'unknown');
+  if (fmt === 'ssd1306_page' || (!d.format && raw.length === (w*h)/8)) {
+    const pages = Math.ceil(h / 8);
+    for (let page = 0; page < pages; page++) {
+      for (let x = 0; x < w; x++) {
+        const byte = raw[page * w + x] || 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const y = page * 8 + bit;
+          if (y >= h) continue;
+          const on = (byte >> bit) & 1;
+          const i = (y * w + x) * 4;
+          img.data[i] = on ? 180 : 0;
+          img.data[i+1] = on ? 220 : 0;
+          img.data[i+2] = on ? 255 : 8;
+          img.data[i+3] = 255;
+        }
+      }
+    }
+  } else if (fmt === 'rgb565_be' || fmt === 'rgb565_le' || raw.length >= w*h*2) {
+    const le = fmt === 'rgb565_le';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const o = (y * w + x) * 2;
+        const v = le ? (raw[o] | (raw[o+1] << 8)) : ((raw[o] << 8) | raw[o+1]);
+        const r = ((v >> 11) & 0x1f) * 255 / 31;
+        const g = ((v >> 5) & 0x3f) * 255 / 63;
+        const b = (v & 0x1f) * 255 / 31;
         const i = (y * w + x) * 4;
-        // OLED blue-white phosphor look
-        img.data[i] = on ? 180 : 0;
-        img.data[i+1] = on ? 220 : 0;
-        img.data[i+2] = on ? 255 : 8;
-        img.data[i+3] = 255;
+        img.data[i] = r; img.data[i+1] = g; img.data[i+2] = b; img.data[i+3] = 255;
+      }
+    }
+  } else if (fmt === 'raw_gray' || raw.length >= w*h) {
+    for (let i = 0; i < w*h; i++) {
+      const g = raw[i] || 0;
+      const p = i * 4;
+      img.data[p] = g; img.data[p+1] = g; img.data[p+2] = g; img.data[p+3] = 255;
+    }
+  } else {
+    // best-effort mono page
+    const pages = Math.ceil(h / 8);
+    for (let page = 0; page < pages; page++) {
+      for (let x = 0; x < w; x++) {
+        const byte = raw[page * w + x] || 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const y = page * 8 + bit;
+          if (y >= h) continue;
+          const on = (byte >> bit) & 1;
+          const i = (y * w + x) * 4;
+          img.data[i] = on ? 200 : 0;
+          img.data[i+1] = on ? 220 : 0;
+          img.data[i+2] = on ? 255 : 8;
+          img.data[i+3] = 255;
+        }
       }
     }
   }
-  // scale 2x nearest
   const off = document.createElement('canvas');
   off.width = w; off.height = h;
   off.getContext('2d').putImageData(img, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
-  $('dispLabel').textContent = d.label || (d.kind + ' ' + w + '×' + h);
+  $('dispLabel').textContent = d.label || (d.kind + ' ' + w + '×' + h + ' · ' + fmt);
 }
 
 function drawSpark(series) {
@@ -661,6 +873,10 @@ window.addEventListener('message', (e) => {
   drawDisplay(s.display);
   drawSpark(s.series || {});
   $('serial').textContent = s.serialTail || '(serial idle — open Monitor or run agent)';
+  const ds = $('dispStatus');
+  if (ds) {
+    ds.textContent = [s.displayStatus, s.lastSnapshotId ? ('snapshot ' + s.lastSnapshotId) : ''].filter(Boolean).join(' · ');
+  }
 });
 
 vscode.postMessage({ type: 'ready' });

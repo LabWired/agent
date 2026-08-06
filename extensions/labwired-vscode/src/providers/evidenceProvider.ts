@@ -188,6 +188,8 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
       path: file,
       summary: j.summary,
     });
+    // If verify/run JSON carries peripherals with display artifacts, paint them
+    this.overview?.ingestRunJson(json, path.basename(file));
   }
 
   private async onMessage(msg: { type: string; [k: string]: unknown }) {

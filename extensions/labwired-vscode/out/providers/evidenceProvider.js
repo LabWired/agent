@@ -196,6 +196,8 @@ class EvidenceViewProvider {
             path: file,
             summary: j.summary,
         });
+        // If verify/run JSON carries peripherals with display artifacts, paint them
+        this.overview?.ingestRunJson(json, path.basename(file));
     }
     async onMessage(msg) {
         switch (msg.type) {

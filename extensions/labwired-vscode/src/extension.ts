@@ -146,6 +146,15 @@ export function activate(context: vscode.ExtensionContext): void {
         await focus("labwired.overview");
       },
     ],
+    [
+      "labwired.pullTwinDisplay",
+      async () => {
+        overview.openInEditor();
+        const ok = await overview.pullFromTwinInspect();
+        if (!ok) await overview.pullFromWorkspaceFiles();
+        await focus("labwired.overview");
+      },
+    ],
     ["labwired.openChat", async () => focus("labwired.chat")],
     [
       "labwired.openChatInEditor",
@@ -851,10 +860,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const cli = bridge.getCli();
   store.append(
     "system",
-    `LabWired workbench v0.6.2 — same start-here as CLI\n` +
+    `LabWired workbench v0.6.3 — same start-here as CLI\n` +
       `1. Log in (labwired login) → hosted MCP + model\n` +
       `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
-      `3. Overview: display · topology · serial · elements · evidence\n` +
+      `3. Overview: twin display (inspect) · topology · serial · elements\n` +
       `4. “Blink the LED and prove it on the twin.”\n` +
       `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
       `• Knowledge: MCP labwired_part / labwired_datasheet\n` +
@@ -863,7 +872,7 @@ export function activate(context: vscode.ExtensionContext): void {
       `• Catalog: ${cs.parts} parts · tools: /tools`
   );
   output.appendLine(
-    `LabWired workbench v0.6.2 — tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`
+    `LabWired workbench v0.6.3 — tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`
   );
   // Surface overview on first activation so visual glass matches LabWired UI
   void overview.pushState();
