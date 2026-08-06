@@ -84,22 +84,30 @@ labwired_deps_install_sim() {
   version="${LABWIRED_CORE_VERSION:-latest}"
   plat="$(labwired_prefix_platform)"
 
+  # Authenticated GitHub API when available (CI tokens avoid shared-IP rate limits).
+  local gh_auth=()
+  if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
+    gh_auth=(-H "Authorization: Bearer ${GITHUB_TOKEN:-$GH_TOKEN}" -H "Accept: application/vnd.github+json")
+  fi
+
   if [[ "$version" == "latest" ]]; then
     labwired_deps_say "resolving latest LabWired sim release (${repo})"
     # GitHub "latest" may be a demos-only tag (e.g. firmware-demos-v2) without
     # platform tarballs. Prefer newest semver-style tag (v0.21.0, …).
-    version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=30" \
+    version="$(curl -fsSL "${gh_auth[@]}" "https://api.github.com/repos/${repo}/releases?per_page=30" \
       | tr ',' '\n' \
       | sed -n 's/.*"tag_name": *"\(v[0-9][^"]*\)".*/\1/p' \
       | head -1)"
     if [[ -z "$version" ]]; then
-      version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+      version="$(curl -fsSL "${gh_auth[@]}" "https://api.github.com/repos/${repo}/releases/latest" \
         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
     fi
   fi
+  # Last-resort pin when API is rate-limited / empty (keep in sync with latest
+  # versioned labwired-core release that ships platform tarballs).
   if [[ -z "$version" ]]; then
-    labwired_deps_warn "could not resolve sim release tag"
-    return 1
+    version="${LABWIRED_CORE_VERSION_FALLBACK:-v0.21.0}"
+    labwired_deps_warn "API did not return a sim tag; using fallback ${version}"
   fi
 
   archive="labwired-${version}-${plat}.tar.gz"
@@ -118,7 +126,7 @@ labwired_deps_install_sim() {
       alt_name="$n"
       break
     done < <(
-      curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=30" \
+      curl -fsSL "${gh_auth[@]}" "https://api.github.com/repos/${repo}/releases?per_page=30" \
         | tr '{}' '\n' \
         | awk -v plat="$plat" '
             /"tag_name":/ { gsub(/[",]/, "", $2); tag=$2 }
