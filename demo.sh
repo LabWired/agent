@@ -11,8 +11,8 @@ bash tests/harness.sh
 
 echo "==> skill + fixture shape"
 for skill in \
-  verify-firmware diagnose-firmware inspect-evidence \
-  board-bringup scaffold-firmware report-evidence flash-firmware
+  golden-path bringup prove observe desk-hw \
+  using-superpowers test-driven-development
 do
   test -f "skills/$skill/SKILL.md"
 done
