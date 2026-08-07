@@ -160,6 +160,7 @@ Contract: `docs/KNOWLEDGE.md`.
 
 | Tool | Role | Claim impact |
 |------|------|--------------|
+| `labwired_search` | Full notes for a tool / topic | none |
 | `labwired_list` | Catalog boards / systems | none |
 | `labwired_describe` | Pins, defaults, beachhead metadata | none |
 | `labwired_part` / `labwired_part_*` | Structured part facts (preferred) | none (not a pass) |
@@ -169,6 +170,11 @@ Contract: `docs/KNOWLEDGE.md`.
 | `labwired_run` | Observe twin serial / behavior | observation only |
 | `labwired_verify` | Mandatory-oracle dispose | **only** path to `model_verified` |
 | `labwired_inspect` | State / evidence slice | read-only |
+
+Tool descriptions are **deliberately terse** — they are resent every request.
+The rest (worked examples, target-specific paths, edge cases) is only returned
+by `labwired_search("<topic>")`. Call it before first use of an unfamiliar
+tool, and whenever a description points at it. That pointer is not optional.
 
 ### CLI surfaces (agent / human)
 
