@@ -20,8 +20,10 @@ labwired_dispatch_core_bin() {
   registered="$home/components/core/bin/labwired"
   if [[ -x "$registered" ]]; then
     printf '%s\n' "$registered"
-  else
+  elif [[ -x "$home/tools/sim/labwired-sim" ]]; then
     printf '%s\n' "$home/tools/sim/labwired-sim"
+  else
+    return 1
   fi
 }
 

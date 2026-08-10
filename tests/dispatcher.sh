@@ -67,6 +67,15 @@ assert_equals "$(run_dispatcher core test board.yml)" 'core:test board.yml'
 assert_equals "$(run_dispatcher test board.yml)" 'core:test board.yml'
 assert_equals "$(run_dispatcher core argv 'spaced argument' '')" $'argc:2\narg:spaced\\ argument\narg:\x27\x27'
 
+missing_core_output="$TMP/missing-core.output"
+if HOME="$TMP/home" LABWIRED_HOME="$TMP/missing-home" LABWIRED_CORE_BIN= \
+  bash -c 'source "$1/lib/dispatch.sh"; labwired_dispatch_core_bin' _ "$ROOT" \
+  >"$missing_core_output"; then
+  echo "FAIL missing Core unexpectedly resolved" >&2
+  exit 1
+fi
+assert_equals "$(cat "$missing_core_output")" ''
+
 editor_stderr="$TMP/editor.stderr"
 if run_dispatcher editor 2>"$editor_stderr"; then
   echo "FAIL editor unexpectedly succeeded" >&2
