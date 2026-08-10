@@ -57,6 +57,7 @@ unknown files in the LabWired directory.
 
 - If `labwired` is not found, open a new terminal and try again.
 - If that does not help, add `$HOME/.local/bin` to `PATH` on macOS or Linux.
-- On Windows, add `%USERPROFILE%\.local\bin` to `PATH`.
+- The Windows installer normally adds `%LOCALAPPDATA%\LabWired\bin` to your user
+  `PATH`. Add that directory manually if the command is still unavailable.
 - Run `labwired agent doctor` and follow the first reported error.
 - Run the install command again to repair or refresh the Agent.

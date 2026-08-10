@@ -14,11 +14,58 @@ bash -n "$ROOT/lib/install-deps.sh" || fail=1
 bash -n "$ROOT/bin/labwired" || fail=1
 bash -n "$ROOT/bin/labwired-agent" || fail=1
 
+if bash "$ROOT/scripts/check-public-package.sh"; then
+  echo "ok   public documentation check"
+else
+  echo "FAIL public documentation check"
+  fail=1
+fi
+
+for doc in INSTALL USAGE VERIFY DEVELOPMENT TESTING; do
+  if node -e 'const p=require(process.argv[1]); process.exit(p.files.includes(`docs/${process.argv[2]}.md`) ? 0 : 1)' \
+    "$ROOT/package.json" "$doc"; then
+    echo "ok   package includes docs/$doc.md"
+  else
+    echo "FAIL package missing docs/$doc.md"
+    fail=1
+  fi
+done
+
 # Public install must mention windows redirect and tarball/codeload
 if grep -q 'win32\|Windows' "$ROOT/scripts/public/install"; then
   echo "ok   public/install mentions Windows path"
 else
   echo "FAIL public/install missing Windows note"
+  fail=1
+fi
+
+llm_home="$(mktemp -d)"
+llm_missing="$(HOME="$llm_home" env -u DEEPINFRA_API_KEY bash "$ROOT/tests/llm-deepinfra.sh")"
+if grep -q '^not run llm-deepinfra:' <<<"$llm_missing" \
+  && ! grep -q 'PASS llm-deepinfra' <<<"$llm_missing"; then
+  echo "ok   missing model key is not run"
+else
+  echo "FAIL missing model key result is dishonest"
+  fail=1
+fi
+
+llm_matrix="$(HOME="$llm_home" env -u DEEPINFRA_API_KEY bash "$ROOT/tests/run-optional-llm.sh")"
+if grep -q '^not run llm-deepinfra:' <<<"$llm_matrix" \
+  && ! grep -q 'PASS llm-deepinfra' <<<"$llm_matrix"; then
+  echo "ok   default matrix model lane is not run"
+else
+  echo "FAIL default matrix model lane result is dishonest"
+  fail=1
+fi
+
+llm_fixture="$llm_home/response.json"
+printf '%s\n' '{"choices":[{"message":{"content":"Twin verification requires matching the fixed expected behavior."}}]}' >"$llm_fixture"
+if HOME="$llm_home" DEEPINFRA_API_KEY=fixture \
+  LABWIRED_LLM_RESPONSE_FILE="$llm_fixture" bash "$ROOT/tests/llm-deepinfra.sh" \
+  | grep -q 'ok   llm-deepinfra PASS'; then
+  echo "ok   model response fixture parses without network"
+else
+  echo "FAIL model response fixture parser"
   fail=1
 fi
 if grep -q 'codeload\|tar.gz\|tarball' "$ROOT/scripts/public/install"; then
@@ -58,11 +105,12 @@ else
 fi
 
 if grep -Eq 'echo .*\bskip(ped)?\b' \
-  "$ROOT/tests/llm-deepinfra.sh" "$ROOT/tests/all.sh" "$ROOT/scripts/dev-cycle.sh"; then
+  "$ROOT/tests/llm-deepinfra.sh" "$ROOT/tests/run-optional-llm.sh" "$ROOT/tests/all.sh" "$ROOT/scripts/dev-cycle.sh"; then
   echo "FAIL optional lanes must report not run"
   fail=1
 elif grep -q 'not run llm-deepinfra' "$ROOT/tests/llm-deepinfra.sh" \
   && grep -q 'not run install-smoke' "$ROOT/tests/all.sh" \
+  && grep -q 'not run llm-deepinfra' "$ROOT/tests/run-optional-llm.sh" \
   && grep -q 'twin not run' "$ROOT/scripts/dev-cycle.sh" \
   && grep -q 'desk not run' "$ROOT/scripts/dev-cycle.sh"; then
   echo "ok   optional lanes report not run"

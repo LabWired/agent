@@ -2,8 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PUBLIC_DOCS=(README.md docs/INSTALL.md docs/USAGE.md docs/VERIFY.md)
+PUBLIC_DOCS=(README.md docs/INSTALL.md docs/USAGE.md docs/VERIFY.md docs/DEVELOPMENT.md docs/TESTING.md scripts/public/DEPLOY.md)
 fail=0
+
+for file in "${PUBLIC_DOCS[@]}"; do
+  if [[ ! -f "$ROOT/$file" ]]; then
+    printf 'FAIL %s: required public document is missing\n' "$file" >&2
+    fail=1
+  fi
+done
 
 reject() {
   local pattern="$1" message="$2" file matches
@@ -19,7 +26,7 @@ reject() {
   done
 }
 
-reject 'https://labwired\.com/install([[:space:]]|`|\||$)' 'use https://labwired.com/install/agent'
+reject 'https://labwired\.com/install([^/[:alnum:]]|$)' 'use https://labwired.com/install/agent'
 reject '/agent-install\.sh' 'use the public /install/agent endpoint'
 reject '(^|[^[:alnum:]_-])labwired doctor([^[:alnum:]_-]|$)' 'use labwired agent doctor'
 reject '(^|[^[:alnum:]_-])labwired login([^[:alnum:]_-]|$)' 'use labwired agent login'
@@ -28,7 +35,7 @@ reject 'harness dump' 'replace the internal test term with plain language'
 reject 'distribution layer' 'replace the internal architecture term with plain language'
 
 STATUS_PATTERN='(^|[^[:alnum:]_])(model_verified|hardware_observed|failed|inconclusive|unsupported)([^[:alnum:]_]|$)'
-for file in README.md docs/INSTALL.md docs/USAGE.md; do
+for file in README.md docs/INSTALL.md docs/USAGE.md docs/DEVELOPMENT.md docs/TESTING.md scripts/public/DEPLOY.md; do
   [[ -f "$ROOT/$file" ]] || continue
   matches="$(grep -nE "$STATUS_PATTERN" "$ROOT/$file" || true)"
   if [[ -n "$matches" ]]; then

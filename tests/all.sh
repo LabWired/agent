@@ -30,6 +30,7 @@ run "smoke-doctor-gate" "$ROOT/tests/smoke-doctor-gate.sh"
 run "smoke-wave-a"      "$ROOT/scripts/smoke-wave-a.sh"
 run "smoke-remaining"   "$ROOT/scripts/smoke-remaining.sh"
 run "ship-gate"         "$ROOT/scripts/ship-gate.sh"
+run "public-docs"       "$ROOT/scripts/check-public-package.sh"
 run "public-install"    "$ROOT/tests/public-install.sh"
 run "public-install-safety" "$ROOT/tests/public-install-safety.sh"
 run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
@@ -43,13 +44,11 @@ run "gap-ready-qa"      "$ROOT/tests/gap-ready-qa.sh"
 if [[ "${LABWIRED_TEST_INSTALL_SMOKE:-1}" == "1" ]]; then
   run "install-smoke"   "$ROOT/tests/install-smoke.sh"
 else
-  echo "not run install-smoke (LABWIRED_TEST_INSTALL_SMOKE=0)"
+  echo "not run install-smoke: LABWIRED_TEST_INSTALL_SMOKE=0"
 fi
 
-if [[ "${LABWIRED_TEST_LLM:-1}" == "1" ]]; then
-  run "llm-deepinfra"   "$ROOT/tests/llm-deepinfra.sh"
-else
-  echo "not run llm-deepinfra (LABWIRED_TEST_LLM=0)"
+if ! bash "$ROOT/tests/run-optional-llm.sh"; then
+  fail=1
 fi
 
 echo ""

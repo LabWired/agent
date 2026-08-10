@@ -1,7 +1,7 @@
 {
   "name": "@labwired/agent",
   "version": "0.3.7",
-  "description": "LabWired Agent \u2014 portable verified firmware agent for macOS, Linux, and Windows",
+  "description": "Firmware agent with LabWired twin verification",
   "license": "MIT",
   "homepage": "https://labwired.com",
   "repository": {
@@ -39,6 +39,11 @@
     "install.sh",
     "demo.sh",
     "docs/PORTABLE_INSTALL.md",
+    "docs/INSTALL.md",
+    "docs/USAGE.md",
+    "docs/VERIFY.md",
+    "docs/DEVELOPMENT.md",
+    "docs/TESTING.md",
     "VERSION",
     "README.md",
     "LICENSE"
