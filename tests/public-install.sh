@@ -58,7 +58,7 @@ else
 fi
 
 # Windows scripts exist
-for f in scripts/public/install.ps1 scripts/install.ps1 bin/labwired.ps1 bin/labwired.cmd; do
+for f in scripts/public/install.ps1 scripts/install.ps1 bin/labwired.ps1 bin/labwired-agent.ps1 bin/labwired.cmd tests/windows-contract.ps1; do
   if [[ -f "$ROOT/$f" ]]; then
     echo "ok   $f"
   else
@@ -66,6 +66,17 @@ for f in scripts/public/install.ps1 scripts/install.ps1 bin/labwired.ps1 bin/lab
     fail=1
   fi
 done
+
+if grep -q '\[switch\]\$AgentOnly' "$ROOT/scripts/install.ps1" \
+  && grep -q -- '-AgentOnly' "$ROOT/scripts/public/install.ps1" \
+  && grep -Fq 'components\core\bin' "$ROOT/scripts/install.ps1" \
+  && grep -Fq 'Join-Path $UserBin "labwired.exe"' "$ROOT/scripts/install.ps1" \
+  && grep -q 'Assert-NoReparseAncestors' "$ROOT/scripts/install.ps1"; then
+  echo "ok   Windows installer/dispatcher static checks"
+else
+  echo "FAIL Windows installer/dispatcher static checks incomplete"
+  fail=1
+fi
 
 # Deploy notes
 if [[ -f "$ROOT/scripts/public/DEPLOY.md" ]]; then

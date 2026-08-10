@@ -36,6 +36,37 @@ jobs:
           LABWIRED_CORE_VERSION: v0.21.0
         run: bash tests/install-smoke.sh
 
+  windows-contract:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows dispatcher contract
+        shell: powershell
+        run: .\tests\windows-contract.ps1
+      - name: Windows dispatcher contract (PowerShell Core)
+        shell: pwsh
+        run: .\tests\windows-contract.ps1
+      - name: Parse Windows PowerShell sources
+        shell: powershell
+        run: |
+          $errors = @()
+          foreach ($file in @(
+            ".\bin\labwired.ps1",
+            ".\bin\labwired-agent.ps1",
+            ".\scripts\install.ps1",
+            ".\scripts\public\install.ps1",
+            ".\tests\windows-contract.ps1"
+          )) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
+            $errors += @($parseErrors)
+          }
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
   llm-deepinfra:
     runs-on: ubuntu-latest
     steps:
