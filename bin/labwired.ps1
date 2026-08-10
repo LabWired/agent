@@ -39,7 +39,7 @@ function Get-CoreBin {
 
 function ConvertTo-WindowsNativeArgument([AllowEmptyString()][string]$Value) {
   # Quote when empty, whitespace/quotes present, or cmd.exe metacharacters so
-  # values like a&b survive CreateProcess → cmd (.cmd/.bat Core launchers).
+  # values like a&b survive CreateProcess -> cmd (.cmd/.bat Core launchers).
   if ($Value.Length -gt 0 -and $Value -notmatch '[\s"&|<>()^%!]') { return $Value }
   $encoded = New-Object Text.StringBuilder
   $backslash = [char]92
@@ -75,7 +75,7 @@ function Invoke-NativeComponent {
   $startInfo.CreateNoWindow = $true
   $startInfo.RedirectStandardOutput = $true
   $startInfo.RedirectStandardError = $true
-  # Prefer ArgumentList when present (pwsh / .NET Core) — it preserves empty argv.
+  # Prefer ArgumentList when present (pwsh / .NET Core) - it preserves empty argv.
   $argList = $null
   try { $argList = $startInfo.ArgumentList } catch { $argList = $null }
   if ($null -ne $argList) {

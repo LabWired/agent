@@ -1,4 +1,4 @@
-# LabWired Agent — one-line install (Windows, Cursor-style)
+# LabWired Agent - one-line install (Windows, Cursor-style)
 #
 #   irm https://labwired.com/install.ps1 | iex
 #   irm 'https://labwired.com/install?win32=true' | iex
@@ -31,8 +31,8 @@ function Assert-SafePath([string]$Path) {
   }
 }
 
-Say "Installing LabWired Agent…"
-Say "  → $Prefix"
+Say "Installing LabWired Agent..."
+Say "  -> $Prefix"
 
 Assert-SafePath $Prefix
 Assert-SafePath $StageRoot
@@ -51,7 +51,7 @@ function Install-KitFromZip {
   New-Item -ItemType Directory -Path $tmp -Force | Out-Null
   $zip = Join-Path $tmp "kit.zip"
   try {
-    Say "downloading kit…"
+    Say "downloading kit..."
     Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
     Expand-Archive -Path $zip -DestinationPath $tmp -Force
     $top = Get-ChildItem $tmp -Directory | Where-Object { $_.Name -ne $null } | Select-Object -First 1
@@ -70,7 +70,7 @@ function Install-KitFromZip {
 
 function Install-KitFromGit {
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Die "need git on PATH (https://git-scm.com/download/win) — or fix network for zip download"
+    Die "need git on PATH (https://git-scm.com/download/win) - or fix network for zip download"
   }
   $gitStage = Join-Path $StageRoot "git"
   try {
@@ -96,7 +96,7 @@ try {
     $InstallSource = $AgentHome
   } else {
     if (-not (Install-KitFromZip)) {
-      Say "zip failed — trying git"
+      Say "zip failed - trying git"
       Install-KitFromGit
     }
   }
@@ -104,7 +104,7 @@ try {
   $installer = Join-Path $InstallSource "scripts\install.ps1"
   if (-not (Test-Path $installer)) { Die "install.ps1 missing at $installer" }
 
-  Say "finishing install…"
+  Say "finishing install..."
   & $installer -Prefix $Prefix -AgentOnly
 } finally {
   Assert-SafePath $StageRoot
