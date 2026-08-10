@@ -58,7 +58,10 @@ if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" LABWIRED_HOME="$TMP/prefix" LA
   >"$TMP/failure.out" 2>&1; then
   echo "FAIL broken replacement unexpectedly installed"
   exit 1
+else
+  failure_status=$?
 fi
+[[ "$failure_status" -eq 42 ]]
 if ! grep -Eq 'previous Agent.*restored' "$TMP/failure.out"; then
   cat "$TMP/failure.out" >&2
   echo "FAIL replacement installer was not reached" >&2
@@ -76,6 +79,66 @@ test ! -e "$OPENCODE_CONFIG_DIR/labwired-agent.manifest"
 test ! -e "$TMP/prefix/env.sh"
 test ! -e "$TMP/prefix/MANIFEST.json"
 echo "ok   failed install rolled back Agent and shared state"
+
+assert_no_transaction_dirs() {
+  if find "$TMP/prefix" -maxdepth 1 -type d \( -name '.agent-stage.*' -o -name '.agent-backup.*' -o -name '.agent-rollback.*' \) | grep -q .; then
+    echo "FAIL transaction temporary data remains" >&2
+    return 1
+  fi
+}
+assert_no_transaction_dirs
+
+# A signal delivered while the replacement child runs must take the same
+# rollback path and preserve the signal-derived exit status.
+mkdir -p "$TMP/archive-term/new-agent"
+cat >"$TMP/archive-term/new-agent/install.sh" <<'TERM_INSTALL'
+#!/usr/bin/env bash
+printf 'term mutation\n' >"$OPENCODE_CONFIG_DIR/opencode.json"
+printf 'term env\n' >"$LABWIRED_HOME/env.sh"
+kill -TERM "$PPID"
+sleep 2
+TERM_INSTALL
+chmod +x "$TMP/archive-term/new-agent/install.sh"
+tar -czf "$TMP/agent-term.tar.gz" -C "$TMP/archive-term" new-agent
+if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" LABWIRED_HOME="$TMP/prefix" LABWIRED_AGENT_HOME="$TMP/prefix/agent" \
+  LABWIRED_TEST_TARBALL="$TMP/agent-term.tar.gz" bash "$ROOT/scripts/public/install" \
+  >"$TMP/term.out" 2>&1; then
+  echo "FAIL interrupted replacement unexpectedly succeeded"
+  exit 1
+else
+  term_status=$?
+fi
+[[ "$term_status" -eq 143 ]]
+grep -qx 'old agent' "$TMP/prefix/agent/marker"
+grep -qx 'old config' "$OPENCODE_CONFIG_DIR/opencode.json"
+test ! -e "$TMP/prefix/env.sh"
+assert_no_transaction_dirs
+echo "ok   interrupted install rolled back transaction"
+
+# Failure of the replacement rename after the old Agent moved must also roll
+# back. The wrapper delegates every mv except the one into the live Agent path.
+cat >"$TMP/bin/mv" <<'MV'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [[ "$arg" == "$LABWIRED_HOME/agent" ]]; then exit 73; fi
+done
+exec /bin/mv "$@"
+MV
+chmod +x "$TMP/bin/mv"
+if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" LABWIRED_HOME="$TMP/prefix" LABWIRED_AGENT_HOME="$TMP/prefix/agent" \
+  LABWIRED_TEST_TARBALL="$TMP/agent.tar.gz" bash "$ROOT/scripts/public/install" \
+  >"$TMP/move.out" 2>&1; then
+  echo "FAIL forced replacement move unexpectedly succeeded"
+  exit 1
+else
+  move_status=$?
+fi
+[[ "$move_status" -eq 73 ]]
+grep -qx 'old agent' "$TMP/prefix/agent/marker"
+grep -qx 'old config' "$OPENCODE_CONFIG_DIR/opencode.json"
+assert_no_transaction_dirs
+rm -f "$TMP/bin/mv"
+echo "ok   replacement move failure rolled back transaction"
 
 # A symlinked agent target must never be followed or replaced.
 rm -rf "$TMP/prefix/agent"
