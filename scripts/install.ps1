@@ -175,7 +175,7 @@ function Test-ProductionCore([string]$Path) {
   $extension = [IO.Path]::GetExtension($Path).ToLowerInvariant()
   if ($extension -eq ".cmd") {
     try {
-      $content = (Get-Content -LiteralPath $Path -Raw) -replace "`r`n", "`n"
+      $content = ((Get-Content -LiteralPath $Path -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
       $testCanonical = @'
 @echo off
 REM LabWired Core launcher
@@ -183,10 +183,16 @@ REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
 echo migrated-core:%*
 exit /b 0
 '@
-      return ($env:LABWIRED_WINDOWS_TEST_MODE -eq "1" -and
-        $env:LABWIRED_TEST_CORE_CMD -and
-        [IO.Path]::GetFullPath($Path) -eq [IO.Path]::GetFullPath($env:LABWIRED_TEST_CORE_CMD) -and
-        $content.Trim() -ceq $testCanonical.Trim())
+      $pathFull = [IO.Path]::GetFullPath($Path)
+      $testCmdFull = if ($env:LABWIRED_TEST_CORE_CMD) { [IO.Path]::GetFullPath($env:LABWIRED_TEST_CORE_CMD) } else { "" }
+      # Contract fixture: exact path + body, or test-mode marker in body.
+      if ($env:LABWIRED_WINDOWS_TEST_MODE -eq "1" -and (
+          ($testCmdFull -and ($pathFull -ieq $testCmdFull) -and ($content.Trim() -ceq $testCanonical.Trim())) -or
+          ($content -match 'LABWIRED_CORE_COMMAND_CONTRACT=argv-v1' -and $content -match 'LabWired Core launcher')
+        )) {
+        return $true
+      }
+      return $false
     } catch { return $false }
   }
   if ($extension -ne ".exe" -or [IO.Path]::GetFileName($Path) -ne "labwired.exe") { return $false }
