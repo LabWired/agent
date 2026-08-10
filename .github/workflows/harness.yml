@@ -19,6 +19,7 @@ jobs:
         run: |
           bash tests/dispatcher.sh
           bash tests/agent-lifecycle.sh
+          bash tests/rpc-agent-resolution.sh
           bash scripts/check-public-package.sh
       - name: demo
         run: ./demo.sh
