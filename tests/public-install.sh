@@ -75,6 +75,9 @@ if grep -q '\[switch\]\$AgentOnly' "$ROOT/scripts/install.ps1" \
   && grep -q 'Stage-AgentKit' "$ROOT/scripts/install.ps1" \
   && grep -q 'Restore-AgentKit' "$ROOT/scripts/install.ps1" \
   && grep -q 'LABWIRED_CORE_COMMAND_CONTRACT=argv-v1' "$ROOT/scripts/install.ps1" \
+  && grep -q 'ConvertTo-WindowsNativeArgument' "$ROOT/bin/labwired.ps1" \
+  && grep -q 'Diagnostics.ProcessStartInfo' "$ROOT/bin/labwired.ps1" \
+  && grep -q 'native-argv-echo.cs' "$ROOT/tests/windows-contract.ps1" \
   && ! grep -q '& \$Path --version' "$ROOT/scripts/install.ps1"; then
   echo "ok   Windows installer/dispatcher static checks"
 else

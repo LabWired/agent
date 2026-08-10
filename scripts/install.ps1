@@ -176,16 +176,6 @@ function Test-ProductionCore([string]$Path) {
   if ($extension -eq ".cmd") {
     try {
       $content = (Get-Content -LiteralPath $Path -Raw) -replace "`r`n", "`n"
-      $productionCanonical = @'
-@echo off
-REM LabWired Core launcher
-REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
-setlocal
-set "LABWIRED_CORE_EXE=%~dp0labwired-core.exe"
-if not exist "%LABWIRED_CORE_EXE%" exit /b 1
-"%LABWIRED_CORE_EXE%" %*
-exit /b %ERRORLEVEL%
-'@
       $testCanonical = @'
 @echo off
 REM LabWired Core launcher
@@ -193,14 +183,13 @@ REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
 echo migrated-core:%*
 exit /b 0
 '@
-      if ($content.Trim() -ceq $productionCanonical.Trim()) { return $true }
       return ($env:LABWIRED_WINDOWS_TEST_MODE -eq "1" -and
         $env:LABWIRED_TEST_CORE_CMD -and
         [IO.Path]::GetFullPath($Path) -eq [IO.Path]::GetFullPath($env:LABWIRED_TEST_CORE_CMD) -and
         $content.Trim() -ceq $testCanonical.Trim())
     } catch { return $false }
   }
-  if ($extension -ne ".exe" -or [IO.Path]::GetFileName($Path) -notin @("labwired.exe", "labwired-core.exe")) { return $false }
+  if ($extension -ne ".exe" -or [IO.Path]::GetFileName($Path) -ne "labwired.exe") { return $false }
   try {
     $bytes = [IO.File]::ReadAllBytes($Path)
     if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { return $false }
@@ -213,9 +202,21 @@ exit /b 0
 function Test-LegacyAgentLauncher([string]$Path) {
   if ([IO.Path]::GetExtension($Path) -ne ".cmd") { return $false }
   try {
-    $content = Get-Content -LiteralPath $Path -Raw
-    return ($content -match '(?im)^REM LabWired (Agent|product dispatcher).*$' -and
-      $content -match '(?im)^powershell -NoProfile -ExecutionPolicy Bypass -File ".+" %\*$')
+    $content = ((Get-Content -LiteralPath $Path -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
+    $current = ((Get-Content -LiteralPath (Join-Path $Src "bin\labwired.cmd") -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
+    $priorCanonical = $current.Replace(
+      "REM LabWired product dispatcher — Windows entry (cmd.exe)",
+      "REM LabWired Agent — Windows entry (cmd.exe)"
+    )
+    $generatedLegacy = @"
+@echo off
+set LABWIRED_HOME=$Prefix
+set LABWIRED_AGENT_HOME=%LABWIRED_HOME%\agent
+if exist "%LABWIRED_HOME%\tools\sim\labwired-sim.exe" set LABWIRED_CLI=%LABWIRED_HOME%\tools\sim\labwired-sim.exe
+if exist "%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe" set LABWIRED_PROBE_RS=%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File "%LABWIRED_AGENT_HOME%\bin\labwired.ps1" %*
+"@ -replace "`r`n", "`n"
+    return ($content -ceq $current -or $content -ceq $priorCanonical -or $content -ceq $generatedLegacy)
   } catch { return $false }
 }
 
@@ -223,10 +224,8 @@ function Register-ExistingCore {
   $prefixBin = Join-Path $Prefix "bin"
   foreach ($candidate in @(
     (Join-Path $prefixBin "labwired.exe"),
-    (Join-Path $prefixBin "labwired-core.exe"),
     (Join-Path $prefixBin "labwired.cmd"),
     (Join-Path $UserBin "labwired.exe"),
-    (Join-Path $UserBin "labwired-core.exe"),
     (Join-Path $UserBin "labwired.cmd")
   )) {
     if (-not (Test-Path -LiteralPath $candidate)) { continue }
@@ -237,12 +236,6 @@ function Register-ExistingCore {
       Die "existing launcher is not an identified LabWired Core or Agent dispatcher: $candidate"
     }
     $coreBin = Assert-SafeComponentPath
-    if ([IO.Path]::GetExtension($candidate) -eq ".cmd" -and $env:LABWIRED_WINDOWS_TEST_MODE -ne "1") {
-      $registeredCompanion = Join-Path $coreBin "labwired-core.exe"
-      if (-not (Test-ProductionCore $registeredCompanion)) {
-        Die "identified Core cmd requires a statically identified labwired-core.exe companion"
-      }
-    }
     $destination = Join-Path $coreBin ([IO.Path]::GetFileName($candidate))
     if (Test-ReparsePoint $destination) { Die "refusing reparse-point Core destination: $destination" }
     $staged = Join-Path $coreBin (".labwired-core-" + [guid]::NewGuid().ToString("n") + [IO.Path]::GetExtension($candidate))

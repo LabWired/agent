@@ -30,6 +30,21 @@ function Invoke-Dispatcher([string[]]$Arguments) {
   return @{ Output = $output; Status = $LASTEXITCODE }
 }
 
+function Invoke-DispatcherWithExactArgs([string[]]$Arguments) {
+  $path64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Dispatcher))
+  $encodedArgs = @($Arguments | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) })
+  $literals = @($encodedArgs | ForEach-Object { "'$_'" }) -join ","
+  $command = @"
+`$path = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$path64'))
+`$encoded = @($literals)
+`$argv = @(`$encoded | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$_)) })
+& `$path @argv
+"@
+  $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand 2>&1 | Out-String
+  return @{ Output = $output; Status = $LASTEXITCODE }
+}
+
 function Invoke-Installer([string[]]$Arguments) {
   $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $Installer @Arguments 2>&1 | Out-String
   return @{ Output = $output; Status = $LASTEXITCODE }
@@ -77,10 +92,6 @@ exit /b 0
   Assert-True ($result.Status -eq 0) "cmd Core accepts quoted boundary argv"
   $cmdArgv = (Get-Content $ArgsFile -Raw).Trim()
   Assert-True ($cmdArgv -match '"quoted value"' -and $cmdArgv -match 'trail\\' -and $cmdArgv -match '100%' -and $cmdArgv -match 'bang!' -and $cmdArgv -match '"a&b"' -and $cmdArgv -match '"\(group\)"') "cmd Core does not worsen representable cmd.exe argv"
-  # Windows PowerShell 5.1 cannot represent an empty native-process argument
-  # reliably. Empty argv is therefore asserted on the script component and
-  # public cmd shim below; all representable native/cmd boundaries are covered.
-
   $result = Invoke-Dispatcher @("agent", "capture", "spaced value", "", "say`"hi", "tail")
   Assert-True ($result.Status -eq 0) "Agent argv capture exits zero"
   $actual = @(Get-Content $ArgsFile)
@@ -93,11 +104,40 @@ exit /b 0
   $actual = @(Get-Content $ArgsFile)
   Assert-True (($actual -join '|') -eq '<capture>|<spaced value>|<>|<tail>') "cmd shim preserves spaced and empty argv"
 
-  $env:LABWIRED_CORE_BIN = $PowerShellExe
-  $result = Invoke-Dispatcher @("core", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Agent, "native", "spaced value", "trail\", "100%", "bang!", "a&b", "(group)")
+  $nativeEcho = Join-Path $TempRoot "native-argv-echo.exe"
+  $nativeSourcePath = Join-Path $TempRoot "native-argv-echo.cs"
+  $nativeSource = @'
+using System;
+using System.Text;
+public static class NativeArgvEcho {
+  public static int Main(string[] args) {
+    if (args.Length == 1 && args[0].StartsWith("--exit=")) return Int32.Parse(args[0].Substring(7));
+    if (args.Length == 1 && args[0] == "--streams") { Console.Out.Write("native-out"); Console.Error.Write("native-err"); return 0; }
+    foreach (string value in args) Console.WriteLine(Convert.ToBase64String(Encoding.UTF8.GetBytes(value)));
+    return 0;
+  }
+}
+'@
+  [IO.File]::WriteAllText($nativeSourcePath, $nativeSource, (New-Object Text.UTF8Encoding($false)))
+  $cscCandidates = @(
+    (Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
+    (Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe")
+  )
+  $csc = $cscCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+  Assert-True ([bool]$csc) "C# compiler fixture dependency is available"
+  & $csc /nologo /target:exe "/out:$nativeEcho" $nativeSourcePath
+  Assert-True ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $nativeEcho -PathType Leaf)) "native argv fixture compiles"
+  $env:LABWIRED_CORE_BIN = $nativeEcho
+  $nativeArgs = @("spaced value", "", "say`"hi", "trail\", "slashes\\`"quote", "100%", "bang!", "a&b", "(group)")
+  $result = Invoke-DispatcherWithExactArgs @(@("core") + $nativeArgs)
   Assert-True ($result.Status -eq 0) "native Core executable route exits zero"
-  $actual = @(Get-Content $ArgsFile)
-  Assert-True (($actual -join '|') -eq '<native>|<spaced value>|<trail\>|<100%>|<bang!>|<a&b>|<(group)>') "native Core preserves representable argv boundaries"
+  $expectedNative = @($nativeArgs | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) })
+  $actualNative = @($result.Output -split "`r?`n" | Where-Object { $_.Length -gt 0 })
+  Assert-True (($actualNative -join '|') -eq ($expectedNative -join '|')) "native Core preserves all argv boundaries"
+  $result = Invoke-DispatcherWithExactArgs @("core", "--exit=23")
+  Assert-True ($result.Status -eq 23) "native Core nonzero exit is propagated exactly"
+  $result = Invoke-DispatcherWithExactArgs @("core", "--streams")
+  Assert-True ($result.Status -eq 0 -and $result.Output -match 'native-out' -and $result.Output -match 'native-err') "native Core stdout and stderr are forwarded"
   $env:LABWIRED_CORE_BIN = $Core
 
   $env:LABWIRED_AGENT_BIN = Join-Path $TempRoot "missing-agent.ps1"
@@ -137,9 +177,12 @@ exit /b 0
   Assert-True (Test-Path (Join-Path $userBin "labwired.cmd")) "public cmd shim is installed"
   $installedHelp = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installPrefix "bin\labwired.ps1") --help 2>&1 | Out-String
   Assert-True ($LASTEXITCODE -eq 0 -and $installedHelp -match 'labwired agent') "installed dispatcher runs"
-  Assert-True (Test-Path (Join-Path $installPrefix "components\core\bin\labwired.cmd")) "static-identified Core is registered"
+  $registeredTestCore = Join-Path $installPrefix "components\core\bin\labwired.cmd"
+  Assert-True (Test-Path $registeredTestCore) "static-identified test Core is registered"
+  $env:LABWIRED_CORE_BIN = $registeredTestCore
   $migratedCore = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installPrefix "bin\labwired.ps1") core test "installed board" 2>&1 | Out-String
   Assert-True ($LASTEXITCODE -eq 0 -and $migratedCore -match 'migrated-core:test "installed board"') "migrated Core executes from registered layout"
+  $env:LABWIRED_CORE_BIN = $Core
   Assert-True ((Get-Content (Join-Path $configDir "opencode.json") -Raw) -match 'user_owned') "existing config is preserved"
   Assert-True (-not (Test-Path (Join-Path $installPrefix "tools"))) "Agent-only does not create tools"
   Assert-True (-not (Test-Path (Join-Path $installPrefix "cache"))) "Agent-only does not create cache"
@@ -173,6 +216,25 @@ exit /b 0
   $result = Invoke-Installer @("-Prefix", $randomPrefix, "-UserBin", (Join-Path $TempRoot "random-bin"), "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
   Assert-True ($result.Status -ne 0 -and $result.Output -match 'not an identified LabWired Core') "random launcher is rejected without execution"
   Assert-True ((Get-Content (Join-Path $randomPrefix "bin\labwired.cmd") -Raw) -match 'not-core') "rejected launcher is not overwritten"
+
+  $spoofAgentPrefix = Join-Path $TempRoot "spoofed-agent-wrapper"
+  New-Item -ItemType Directory -Path (Join-Path $spoofAgentPrefix "bin") -Force | Out-Null
+  $spoofAgentCmd = Join-Path $spoofAgentPrefix "bin\labwired.cmd"
+  $spoofContent = (Get-Content (Join-Path $Root "bin\labwired.cmd") -Raw) + "`r`necho destructive-extra-command`r`n"
+  Set-Content $spoofAgentCmd $spoofContent -Encoding ASCII
+  $result = Invoke-Installer @("-Prefix", $spoofAgentPrefix, "-UserBin", (Join-Path $TempRoot "spoof-agent-bin"), "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
+  Assert-True ($result.Status -ne 0 -and $result.Output -match 'not an identified LabWired Core or Agent dispatcher') "spoofed canonical Agent wrapper is rejected"
+  Assert-True ((Get-Content $spoofAgentCmd -Raw) -match 'destructive-extra-command') "spoofed Agent wrapper is preserved"
+
+  $priorAgentPrefix = Join-Path $TempRoot "prior-agent-wrapper"
+  New-Item -ItemType Directory -Path (Join-Path $priorAgentPrefix "bin") -Force | Out-Null
+  $priorAgentContent = (Get-Content (Join-Path $Root "bin\labwired.cmd") -Raw).Replace(
+    "REM LabWired product dispatcher — Windows entry (cmd.exe)",
+    "REM LabWired Agent — Windows entry (cmd.exe)"
+  )
+  [IO.File]::WriteAllText((Join-Path $priorAgentPrefix "bin\labwired.cmd"), $priorAgentContent, (New-Object Text.UTF8Encoding($true)))
+  $result = Invoke-Installer @("-Prefix", $priorAgentPrefix, "-UserBin", (Join-Path $TempRoot "prior-agent-bin"), "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
+  Assert-True ($result.Status -eq 0) "exact prior canonical Agent wrapper is accepted"
 
   $spoofPrefix = Join-Path $TempRoot "spoofed-core"
   New-Item -ItemType Directory -Path (Join-Path $spoofPrefix "bin") -Force | Out-Null
