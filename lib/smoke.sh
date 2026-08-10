@@ -26,17 +26,17 @@ labwired_smoke() {
   if [[ -f "$root/lib/assert-status.sh" ]]; then
     # shellcheck disable=SC1091
     source "$root/lib/assert-status.sh"
-    if [[ -f "$root/share/smoke/model-verified.json" ]]; then
-      if labwired_assert_status model_verified <"$root/share/smoke/model-verified.json" >/dev/null; then
-        printf '\033[32mok \033[0m claim-gate model_verified\n'
+    if [[ -f "$root/share/smoke/status-parser-model-verified.json" ]]; then
+      if labwired_assert_status model_verified <"$root/share/smoke/status-parser-model-verified.json" >/dev/null; then
+        printf '\033[32mok \033[0m status parser accepts model_verified fixture (not a twin test)\n'
       else
         printf '\033[31mFAIL\033[0m claim-gate fixed\n'
         fail=1
       fi
     fi
-    if [[ -f "$root/share/smoke/failed.json" ]]; then
-      if labwired_assert_status failed <"$root/share/smoke/failed.json" >/dev/null; then
-        printf '\033[32mok \033[0m claim-gate failed\n'
+    if [[ -f "$root/share/smoke/status-parser-failed.json" ]]; then
+      if labwired_assert_status failed <"$root/share/smoke/status-parser-failed.json" >/dev/null; then
+        printf '\033[32mok \033[0m status parser accepts failed fixture (not a twin test)\n'
       else
         printf '\033[31mFAIL\033[0m claim-gate broken\n'
         fail=1

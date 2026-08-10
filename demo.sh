@@ -18,12 +18,12 @@ do
 done
 # probe help must work without hardware
 bin/labwired-agent probe help >/dev/null
-test -f share/smoke/failed.json
-test -f share/smoke/model-verified.json
+test -f share/smoke/status-parser-failed.json
+test -f share/smoke/status-parser-model-verified.json
 
-echo "==> Gate 1 claim artifacts (offline shapes)"
-bin/labwired-agent assert-status failed share/smoke/failed.json
-bin/labwired-agent assert-status model_verified share/smoke/model-verified.json
+echo "==> Status parser contract fixtures (not a twin test)"
+bin/labwired-agent assert-status failed share/smoke/status-parser-failed.json
+bin/labwired-agent assert-status model_verified share/smoke/status-parser-model-verified.json
 
 if [[ "${DEMO_LIVE_GATE1:-0}" == "1" ]]; then
   echo "==> Gate 1 live twin"

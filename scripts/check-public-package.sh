@@ -79,12 +79,16 @@ const required = [
   'scripts/agent-install.ps1', 'scripts/install.ps1',
   'scripts/public/install', 'scripts/public/install.ps1',
   'lib/dispatch.sh', 'lib/prefix.sh', 'lib/resolve-sim.sh',
-  'server/rpc-server.mjs', 'share/smoke/model-verified.json',
-  'share/smoke/failed.json'
+  'server/rpc-server.mjs', 'share/smoke/status-parser-model-verified.json',
+  'share/smoke/status-parser-failed.json', 'scripts/profiles/esp32c3-serial.sh',
+  'examples/esp32c3-serial/platformio.ini', 'examples/esp32c3-serial/src/main.cpp'
 ];
 for (const file of required) {
   if (!files.has(file)) fail(file, 0, 'required public package file is missing');
 }
+const devCycle = fs.readFileSync(path.join(root, 'scripts/dev-cycle.sh'), 'utf8');
+if (!devCycle.includes('scripts/profiles/esp32c3-serial.sh'))
+  fail('scripts/dev-cycle.sh', 0, 'public profile reference is missing');
 
 const requiredSkills = [
   'golden-path', 'bringup', 'prove', 'observe', 'desk-hw',
@@ -109,30 +113,11 @@ for (const file of files) {
 const tracked = fs.readFileSync(trackedPath).toString('utf8').split('\0').filter(Boolean);
 const publicSources = new Set([...tracked, ...files]);
 
-const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const assignments = /\b(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s;#`]+))/g;
+const { scanBuffer } = require(path.join(root, 'scripts/check-public-text.js'));
 for (const file of [...publicSources].sort()) {
   const absolute = path.join(root, file);
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) continue;
-  const data = fs.readFileSync(absolute);
-  if (data.includes(0)) continue;
-  const lines = data.toString('utf8').split(/\r?\n/);
-  lines.forEach((line, index) => {
-    const number = index + 1;
-    if (line.includes('/' + 'Users/')) fail(file, number, 'private local path');
-    if (/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(line)) fail(file, number, 'private key header');
-    for (const match of line.matchAll(email)) {
-      if (match[0].toLowerCase() !== 'example@example.com') fail(file, number, 'real email address');
-    }
-    for (const match of line.matchAll(assignments)) {
-      const value = match[2] ?? match[3] ?? match[4];
-      const propertyAssignment = /(?:env|process\.env)\.$/.test(line.slice(0, match.index));
-      const dynamic = /[$({\[]/.test(value) || (propertyAssignment && /^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(value));
-      if (!dynamic && value !== 'test-token' && !(match[1] === 'DEEPINFRA_API_KEY' && value === '…')) {
-        fail(file, number, `assigned ${match[1]} secret value`);
-      }
-    }
-  });
+  scanBuffer(fs.readFileSync(absolute), file, fail);
 }
 
 if (failed) process.exit(1);

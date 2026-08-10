@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "summary": "Status parser negative contract fixture; not twin evidence",
+  "metadata": {
+    "fixture": true,
+    "twin_evidence": false
+  }
+}

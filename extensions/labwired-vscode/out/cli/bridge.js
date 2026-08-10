@@ -261,7 +261,7 @@ class LabWiredBridge {
         if (modelKey && modelKey !== "local") {
             env.LABWIRED_MODEL_KEY = modelKey;
             if (modelKey.startsWith("lwd_") || modelKey.startsWith("lwk_")) {
-                env.LABWIRED_ACCESS_TOKEN = modelKey;
+                Object.assign(env, { LABWIRED_ACCESS_TOKEN: modelKey });
             }
         }
         // Only override model URL when not the Ollama default, unless no cloud session

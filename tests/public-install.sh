@@ -13,6 +13,7 @@ bash -n "$ROOT/lib/prefix.sh" || fail=1
 bash -n "$ROOT/lib/install-deps.sh" || fail=1
 bash -n "$ROOT/bin/labwired" || fail=1
 bash -n "$ROOT/bin/labwired-agent" || fail=1
+node "$ROOT/scripts/check-public-text.js" --self-test || fail=1
 
 if bash "$ROOT/scripts/check-public-package.sh"; then
   echo "ok   public package release check"

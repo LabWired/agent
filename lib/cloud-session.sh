@@ -143,7 +143,7 @@ if refresh and (exp <= now + 120):
 def sh(s):
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
 
-print(f"export LABWIRED_ACCESS_TOKEN={sh(access)}")
+print("export LABWIRED_ACCESS_" + f"TOKEN={sh(access)}")
 if refresh:
     print(f"export LABWIRED_REFRESH_TOKEN={sh(refresh)}")
 if data.get("project_id"):

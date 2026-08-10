@@ -1,0 +1,8 @@
+{
+  "status": "model_verified",
+  "summary": "Status parser contract fixture; not twin evidence",
+  "metadata": {
+    "fixture": true,
+    "twin_evidence": false
+  }
+}
