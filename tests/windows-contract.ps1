@@ -92,7 +92,10 @@ exit /b 0
   Assert-True ($result.Status -eq 0) "cmd Core accepts quoted boundary argv"
   $cmdArgv = (Get-Content $ArgsFile -Raw).Trim()
   Assert-True ($cmdArgv -match '"quoted value"' -and $cmdArgv -match 'trail\\' -and $cmdArgv -match '100%' -and $cmdArgv -match 'bang!' -and $cmdArgv -match '"a&b"' -and $cmdArgv -match '"\(group\)"') "cmd Core does not worsen representable cmd.exe argv"
-  $result = Invoke-Dispatcher @("agent", "capture", "spaced value", "", "say`"hi", "tail")
+  # Invoke-Dispatcher uses powershell -File, which drops empty argv on the outer
+  # hop. ExactArgs rehydrates the full vector so this contract is about the
+  # product dispatcher, not the test harness launcher.
+  $result = Invoke-DispatcherWithExactArgs @("agent", "capture", "spaced value", "", "say`"hi", "tail")
   Assert-True ($result.Status -eq 0) "Agent argv capture exits zero"
   $actual = @(Get-Content $ArgsFile)
   $joined = ($actual -join '|')
