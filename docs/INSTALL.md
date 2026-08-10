@@ -10,16 +10,20 @@ changing each other's files or data.
 ## Install on macOS or Linux
 
 ```bash
-curl -fsSL https://labwired.com/install/agent | bash
+curl -fsSL https://labwired.com/install | bash
 ```
+
+Legacy aliases also work: `https://labwired.com/agent-install.sh`
 
 ## Install on Windows
 
 Run PowerShell:
 
 ```powershell
-irm https://labwired.com/install/agent.ps1 | iex
+irm https://labwired.com/install.ps1 | iex
 ```
+
+Legacy aliases also work: `https://labwired.com/agent-install.ps1`
 
 Start the Agent after installation:
 

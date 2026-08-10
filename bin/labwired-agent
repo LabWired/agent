@@ -199,6 +199,18 @@ cmd_doctor() {
   else
     printf '\033[33mwarn\033[0m branding: missing — re-run ./install.sh\n'
   fi
+  if [[ -f "$cfg/themes/labwired.json" ]] || [[ -f "$ROOT/branding/themes/labwired.json" ]]; then
+    say "ok  theme: labwired"
+  else
+    printf '\033[33mwarn\033[0m theme: missing labwired — re-run labwired agent or ./install.sh\n'
+  fi
+  if [[ -f "$cfg/tui.json" ]] && grep -q '"labwired"' "$cfg/tui.json" 2>/dev/null; then
+    say "ok  tui: LabWired theme selected"
+  elif [[ -f "$ROOT/config/tui.json" ]]; then
+    say "ok  tui: kit default (will apply on next agent start)"
+  else
+    printf '\033[33mwarn\033[0m tui: missing — re-run ./install.sh\n'
+  fi
 
   # Five primary packs (ship surface). Aliases optional.
   local skill
@@ -496,12 +508,67 @@ cmd_whoami() {
   echo "mcp:      remote https://api.labwired.com/mcp (shared labwired_* tools)"
 }
 
+# Product chrome for the OpenCode TUI substrate (theme, banner, terminal title).
+# OpenCode remains the engine; we brand the LabWired product surface.
+labwired_apply_branding() {
+  local cfg_dir
+  cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  mkdir -p "$cfg_dir/themes" "$cfg_dir/branding"
+
+  # Product theme is always refreshed; user banner/logo stay if already present.
+  if [[ -f "$ROOT/branding/themes/labwired.json" ]]; then
+    cp "$ROOT/branding/themes/labwired.json" "$cfg_dir/themes/labwired.json"
+  fi
+  if [[ -d "$ROOT/branding" ]]; then
+    local f
+    for f in "$ROOT/branding"/*; do
+      [[ -f "$f" ]] || continue
+      local dest="$cfg_dir/branding/$(basename "$f")"
+      if [[ ! -e "$dest" ]]; then
+        cp "$f" "$dest"
+      fi
+    done
+  fi
+  # Default product theme; do not clobber user-chosen themes (tokyonight, etc.).
+  if [[ ! -e "$cfg_dir/tui.json" ]]; then
+    if [[ -f "$ROOT/config/tui.json" ]]; then
+      cp "$ROOT/config/tui.json" "$cfg_dir/tui.json"
+    else
+      printf '%s\n' '{' '  "$schema": "https://opencode.ai/tui.json",' '  "theme": "labwired"' '}' >"$cfg_dir/tui.json"
+    fi
+  elif grep -Eq '"theme"[[:space:]]*:[[:space:]]*"(system|opencode)"' "$cfg_dir/tui.json" 2>/dev/null; then
+    if [[ -f "$ROOT/config/tui.json" ]]; then
+      cp "$ROOT/config/tui.json" "$cfg_dir/tui.json"
+    fi
+  fi
+
+  # Terminal window / tab title (OSC 0). No-op when not a TTY.
+  if [[ -t 1 ]] || [[ -t 2 ]]; then
+    printf '\033]0;LabWired Agent\007' 2>/dev/null || true
+  fi
+}
+
+labwired_splash() {
+  if [[ ! -t 2 ]]; then
+    return 0
+  fi
+  if [[ -f "$ROOT/branding/banner.txt" ]]; then
+    printf '\033[34m' >&2
+    cat "$ROOT/branding/banner.txt" >&2
+    printf '\033[0m' >&2
+  else
+    brand "  LabWired Agent"
+    brand "  Write firmware · check on a twin"
+  fi
+}
+
 labwired_prepare_agent_start() {
   # Ensure skills + AGENTS.md are discoverable by OpenCode even when the user
   # only has a partial ~/.config/opencode from an older install.
   local cfg_dir
   cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
   mkdir -p "$cfg_dir/skills"
+  labwired_apply_branding
   if [[ -f "$ROOT/config/AGENTS.md" && ! -f "$cfg_dir/AGENTS.md" ]]; then
     cp "$ROOT/config/AGENTS.md" "$cfg_dir/AGENTS.md"
   fi
@@ -608,14 +675,15 @@ cmd_help() {
     echo
   fi
   cat <<'EOF'
-LabWired Agent — start here (OpenCode + packs + shared MCP)
+LabWired Agent — write firmware, check on a twin
 
   curl install → labwired agent login → labwired agent doctor → labwired agent
   In chat: "Blink the LED and prove it on the twin."
   (Playground Architect is optional / secondary — same labwired_* tools.)
 
 Usage:
-  labwired agent                 Start OpenCode agent (golden-path first + MCP)
+  labwired agent                 Start LabWired Agent (golden-path + MCP)
+  labwired agent opencode …      Same start (OpenCode engine alias)
   labwired agent login           Device-code sign-in → hosted MCP + model gateway
   labwired agent logout          Clear cloud session
   labwired agent whoami          Show signed-in identity / project
@@ -934,6 +1002,7 @@ case "${1:-}" in
     labwired_probe_cmd "$@"
     ;;
   agent|opencode)
+    # `opencode` remains a supported alias: same product start, OpenCode engine.
     shift || true
     if [[ -n "${LABWIRED_HOME:-}" && -d "${LABWIRED_HOME}/bin" ]]; then
       export PATH="${LABWIRED_HOME}/bin:${PATH}"
@@ -945,8 +1014,9 @@ case "${1:-}" in
     if [[ "${LABWIRED_PROFILE:-}" != "hosted" ]]; then
       labwired_export_sim || true
     fi
-    echo "labwired: starting OpenCode — default skill golden-path; packs bringup/prove/observe/desk-hw" >&2
-    echo "labwired: knowledge MCP labwired_part + labwired_datasheet; compose: labwired agent compose …" >&2
+    labwired_splash
+    echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw" >&2
+    echo "labwired: engine OpenCode · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
     exec opencode "$@"
     ;;
   "")
@@ -968,7 +1038,8 @@ case "${1:-}" in
         echo "         or use LabWired debugger / probe-rs — sim is not required" >&2
       fi
     fi
-    echo "labwired: starting OpenCode — default skill golden-path (firmware first)" >&2
+    labwired_splash
+    echo "labwired: starting LabWired Agent — skill golden-path (firmware first)" >&2
     echo "labwired: start-here: login → doctor → labwired agent → “blink and prove it”" >&2
     exec opencode "$@"
     ;;

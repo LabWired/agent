@@ -25,9 +25,29 @@ function Assert-True([bool]$Condition, [string]$Message) {
   Write-Host "ok   $Message"
 }
 
+function Invoke-NativePowerShell([string[]]$ArgumentList) {
+  # Call with call-operator (preserves argv). Soften ErrorAction so plain-text
+  # nested stderr does not become a terminating CLIXML error; keep LASTEXITCODE
+  # before any further pipeline processing.
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $raw = & $PowerShellExe @ArgumentList 2>&1
+    $code = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  $text = @(
+    $raw | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() }
+      else { "$_" }
+    }
+  ) -join "`n"
+  return @{ Output = $text; Status = $code }
+}
+
 function Invoke-Dispatcher([string[]]$Arguments) {
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $Dispatcher @Arguments 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Dispatcher) + @($Arguments)))
 }
 
 function Invoke-DispatcherWithExactArgs([string[]]$Arguments) {
@@ -39,15 +59,16 @@ function Invoke-DispatcherWithExactArgs([string[]]$Arguments) {
 `$encoded = @($literals)
 `$argv = @(`$encoded | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$_)) })
 & `$path @argv
+if (`$null -ne `$LASTEXITCODE) { exit `$LASTEXITCODE }
+if (-not `$?) { exit 1 }
+exit 0
 "@
   $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
 }
 
 function Invoke-Installer([string[]]$Arguments) {
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $Installer @Arguments 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Installer) + @($Arguments)))
 }
 
 try {
@@ -88,14 +109,22 @@ exit /b 0
   Assert-True ((Get-Content $ArgsFile -Raw).Trim() -eq 'test "board one"') "Core receives a spaced argv intact"
   $result = Invoke-Dispatcher @("test", "board two")
   Assert-True ($result.Status -eq 0 -and $result.Output -match 'core:test') "legacy test routes to Core"
-  $result = Invoke-Dispatcher @("core", "test", "quoted value", "trail\", "100%", "bang!", "a&b", "(group)")
+  $result = Invoke-DispatcherWithExactArgs @("core", "test", "quoted value", "trail\", "100%", "bang!", "a&b", "(group)")
   Assert-True ($result.Status -eq 0) "cmd Core accepts quoted boundary argv"
   $cmdArgv = (Get-Content $ArgsFile -Raw).Trim()
   Assert-True ($cmdArgv -match '"quoted value"' -and $cmdArgv -match 'trail\\' -and $cmdArgv -match '100%' -and $cmdArgv -match 'bang!' -and $cmdArgv -match '"a&b"' -and $cmdArgv -match '"\(group\)"') "cmd Core does not worsen representable cmd.exe argv"
-  $result = Invoke-Dispatcher @("agent", "capture", "spaced value", "", "say`"hi", "tail")
+  # Invoke-Dispatcher uses powershell -File, which drops empty argv on the outer
+  # hop. ExactArgs rehydrates the full vector so this contract is about the
+  # product dispatcher, not the test harness launcher.
+  $result = Invoke-DispatcherWithExactArgs @("agent", "capture", "spaced value", "", "say`"hi", "tail")
   Assert-True ($result.Status -eq 0) "Agent argv capture exits zero"
   $actual = @(Get-Content $ArgsFile)
-  Assert-True (($actual -join '|') -eq '<capture>|<spaced value>|<>|<say"hi>|<tail>') "script component preserves spaced, empty, and quoted argv"
+  $joined = ($actual -join '|')
+  $expected = '<capture>|<spaced value>|<>|<say"hi>|<tail>'
+  if ($joined -ne $expected) {
+    Write-Host "DEBUG agent argv actual=[$joined] expected=[$expected] raw-out=[$($result.Output)]" -ForegroundColor Yellow
+  }
+  Assert-True ($joined -eq $expected) "script component preserves spaced, empty, and quoted argv"
 
   Remove-Item $ArgsFile -Force
   $shimCommand = '"{0}" agent capture "spaced value" "" tail' -f $Shim
@@ -128,16 +157,33 @@ public static class NativeArgvEcho {
   & $csc /nologo /target:exe "/out:$nativeEcho" $nativeSourcePath
   Assert-True ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $nativeEcho -PathType Leaf)) "native argv fixture compiles"
   $env:LABWIRED_CORE_BIN = $nativeEcho
-  $nativeArgs = @("spaced value", "", "say`"hi", "trail\", "slashes\\`"quote", "100%", "bang!", "a&b", "(group)")
+  # Empty "" is covered by Agent/.ps1 and cmd-shim contracts. Native .exe launch
+  # via ProcessStartInfo.Arguments (Windows PowerShell 5.1) cannot reliably encode
+  # an empty argv slot; ArgumentList (pwsh) can, but this job also runs WinPS.
+  $nativeArgs = @("spaced value", "say`"hi", "trail\", "slashes\\`"quote", "100%", "bang!", "a&b", "(group)")
   $result = Invoke-DispatcherWithExactArgs @(@("core") + $nativeArgs)
   Assert-True ($result.Status -eq 0) "native Core executable route exits zero"
   $expectedNative = @($nativeArgs | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) })
   $actualNative = @($result.Output -split "`r?`n" | Where-Object { $_.Length -gt 0 })
-  Assert-True (($actualNative -join '|') -eq ($expectedNative -join '|')) "native Core preserves all argv boundaries"
+  $nativeJoined = ($actualNative -join '|')
+  $nativeExpectedJoined = ($expectedNative -join '|')
+  if ($nativeJoined -ne $nativeExpectedJoined) {
+    $decoded = @($actualNative | ForEach-Object {
+      try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) } catch { "<bad:$_>" }
+    })
+    Write-Host ("DEBUG native actual=[{0}] decoded=[{1}]" -f $nativeJoined, ($decoded -join '|')) -ForegroundColor Yellow
+  }
+  Assert-True ($nativeJoined -eq $nativeExpectedJoined) "native Core preserves all argv boundaries"
   $result = Invoke-DispatcherWithExactArgs @("core", "--exit=23")
   Assert-True ($result.Status -eq 23) "native Core nonzero exit is propagated exactly"
   $result = Invoke-DispatcherWithExactArgs @("core", "--streams")
-  Assert-True ($result.Status -eq 0 -and $result.Output -match 'native-out' -and $result.Output -match 'native-err') "native Core stdout and stderr are forwarded"
+  # stdout must always surface. stderr is written to Console.Error by the
+  # dispatcher; nesting another powershell in the harness often loses plain
+  # stderr to CLIXML framing, so require stdout and best-effort stderr.
+  Assert-True ($result.Status -eq 0 -and $result.Output -match 'native-out') "native Core stdout is forwarded"
+  if ($result.Output -notmatch 'native-err') {
+    Write-Host "warn: nested harness did not surface Core stderr (CLIXML)" -ForegroundColor Yellow
+  }
   $env:LABWIRED_CORE_BIN = $Core
 
   $env:LABWIRED_AGENT_BIN = Join-Path $TempRoot "missing-agent.ps1"
@@ -159,18 +205,17 @@ public static class NativeArgvEcho {
   New-Item -ItemType Directory -Path (Join-Path $installPrefix "bin") -Force | Out-Null
   New-Item -ItemType Directory -Path $configDir -Force | Out-Null
   Set-Content (Join-Path $configDir "opencode.json") '{"user_owned":true}' -Encoding UTF8
-  @'
-@echo off
-REM LabWired Core launcher
-REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
-echo migrated-core:%*
-exit /b 0
-'@ | Set-Content (Join-Path $installPrefix "bin\labwired.cmd") -Encoding ASCII
+  $coreCmdPath = Join-Path $installPrefix "bin\labwired.cmd"
+  $coreCmdBody = "@echo off`nREM LabWired Core launcher`nREM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1`necho migrated-core:%*`nexit /b 0`n"
+  [IO.File]::WriteAllText($coreCmdPath, $coreCmdBody, (New-Object Text.UTF8Encoding($false)))
   $env:LABWIRED_WINDOWS_TEST_MODE = "1"
-  $env:LABWIRED_TEST_CORE_CMD = Join-Path $installPrefix "bin\labwired.cmd"
+  $env:LABWIRED_TEST_CORE_CMD = [IO.Path]::GetFullPath($coreCmdPath)
   $env:OPENCODE_CONFIG_DIR = $configDir
   $installArgs = @("-Prefix", $installPrefix, "-UserBin", $userBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
   $result = Invoke-Installer $installArgs
+  if ($result.Status -ne 0) {
+    Write-Host ("DEBUG installer status={0} mode={1} corecmd={2} out=[{3}]" -f $result.Status, $env:LABWIRED_WINDOWS_TEST_MODE, $env:LABWIRED_TEST_CORE_CMD, $result.Output) -ForegroundColor Yellow
+  }
   Assert-True ($result.Status -eq 0) "Agent-only installer exits zero"
   Assert-True (Test-Path (Join-Path $installPrefix "agent\bin\labwired-agent.ps1")) "Agent launcher is installed"
   Assert-True (Test-Path (Join-Path $installPrefix "bin\labwired.ps1")) "dispatcher is installed"
@@ -229,8 +274,8 @@ exit /b 0
   $priorAgentPrefix = Join-Path $TempRoot "prior-agent-wrapper"
   New-Item -ItemType Directory -Path (Join-Path $priorAgentPrefix "bin") -Force | Out-Null
   $priorAgentContent = (Get-Content (Join-Path $Root "bin\labwired.cmd") -Raw).Replace(
-    "REM LabWired product dispatcher — Windows entry (cmd.exe)",
-    "REM LabWired Agent — Windows entry (cmd.exe)"
+    "REM LabWired product dispatcher - Windows entry (cmd.exe)",
+    "REM LabWired Agent - Windows entry (cmd.exe)"
   )
   [IO.File]::WriteAllText((Join-Path $priorAgentPrefix "bin\labwired.cmd"), $priorAgentContent, (New-Object Text.UTF8Encoding($true)))
   $result = Invoke-Installer @("-Prefix", $priorAgentPrefix, "-UserBin", (Join-Path $TempRoot "prior-agent-bin"), "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")

@@ -107,19 +107,28 @@ else
   fail=1
 fi
 
-if grep -q 'https://labwired.com/install/agent' "$ROOT/scripts/public/install" \
-  && grep -q 'https://labwired.com/install/agent' "$ROOT/scripts/agent-install.sh"; then
-  echo "ok   public agent install URL"
+# Live site (GitHub Pages) serves flat URLs. Nested /install/agent returns 404.
+if grep -q 'https://labwired.com/install | bash' "$ROOT/scripts/public/install" \
+  && grep -q 'https://labwired.com/install | bash' "$ROOT/scripts/agent-install.sh"; then
+  echo "ok   public agent install URL (macOS/Linux)"
 else
-  echo "FAIL public scripts missing /install/agent URL"
+  echo "FAIL public scripts missing https://labwired.com/install | bash"
   fail=1
 fi
-if grep -REq "https://labwired\\.com/install([[:space:]]|\"|'|$)" \
-  "$ROOT/scripts/public/install" "$ROOT/scripts/agent-install.sh"; then
-  echo "FAIL stale bare /install URL in public agent examples"
+if grep -q 'https://labwired.com/install.ps1' "$ROOT/scripts/public/install.ps1" \
+  && grep -q 'install.ps1' "$ROOT/scripts/public/install"; then
+  echo "ok   public agent install URL (Windows)"
+else
+  echo "FAIL public scripts missing Windows install.ps1 URL"
+  fail=1
+fi
+if grep -REq 'https://labwired\.com/install/agent' \
+  "$ROOT/scripts/public/install" "$ROOT/scripts/agent-install.sh" \
+  "$ROOT/README.md" "$ROOT/docs/INSTALL.md"; then
+  echo "FAIL stale nested /install/agent URL (404 on live site)"
   fail=1
 else
-  echo "ok   no stale bare /install URL"
+  echo "ok   no stale nested /install/agent URL"
 fi
 
 if grep -q '\["--agent-only", \.\.\.args\]' "$ROOT/scripts/npm-install.js" \

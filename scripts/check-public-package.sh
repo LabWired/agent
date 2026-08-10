@@ -30,8 +30,8 @@ reject() {
   done
 }
 
-reject 'https://labwired\.com/install([^/[:alnum:]]|$)' 'use https://labwired.com/install/agent'
-reject '/agent-install\.sh' 'use the public /install/agent endpoint'
+# Live GitHub Pages serves flat install endpoints. Nested /install/agent is 404.
+reject 'https://labwired\.com/install/agent' 'use https://labwired.com/install (macOS/Linux) or https://labwired.com/install.ps1 (Windows)'
 reject '(^|[^[:alnum:]_-])labwired doctor([^[:alnum:]_-]|$)' 'use labwired agent doctor'
 reject '(^|[^[:alnum:]_-])labwired login([^[:alnum:]_-]|$)' 'use labwired agent login'
 reject 'Gate 1' 'replace the internal gate name with plain language'

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # LabWired Agent — one-line install (Cursor-style)
 #
-#   curl -fsSL https://labwired.com/install/agent | bash
+#   curl -fsSL https://labwired.com/install | bash
 #
-# That's it. Then: labwired
+# That's it. Then: labwired agent
 #
 # Windows:  irm https://labwired.com/install.ps1 | iex
-# Optional: curl -fsSL https://labwired.com/install/agent | bash -s -- --prefix /opt/labwired
+# Optional: curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
+# Legacy:   https://labwired.com/agent-install.sh
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || true)" == MINGW* ]] \

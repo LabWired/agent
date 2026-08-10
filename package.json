@@ -1,6 +1,6 @@
 {
   "name": "@labwired/agent",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Firmware agent with LabWired twin verification",
   "license": "MIT",
   "homepage": "https://labwired.com",
@@ -60,6 +60,7 @@
     "branding/banner.txt",
     "branding/logo.svg",
     "branding/theme.css",
+    "branding/themes/labwired.json",
     "share/smoke/status-parser-model-verified.json",
     "share/smoke/status-parser-failed.json",
     "scripts/profiles/esp32c3-serial.sh",

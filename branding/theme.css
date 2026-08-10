@@ -1,6 +1,11 @@
-/* LabWired product chrome for agent docs / future surfaces */
+/* LabWired product chrome (docs, workbench, future web surfaces) */
 :root {
   --lw-accent: #0056b3;
+  --lw-accent-bright: #3d8fd1;
   --lw-fg: #14151a;
   --lw-bg: #f7f8fb;
+  --lw-panel: #eef1f7;
+  --lw-success: #2f9e6b;
+  --lw-warning: #c9922a;
+  --lw-error: #d64545;
 }

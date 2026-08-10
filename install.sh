@@ -93,11 +93,11 @@ Portable, contained install (multi-platform):
   --hosted           Remote MCP + api.labwired.com model (labwired login)
   --prefix DIR       Portable root (USB, CI, /opt/labwired)
 
-  curl -fsSL https://labwired.com/install/agent | bash
-  irm 'https://labwired.com/install?win32=true' | iex   # Windows
+  curl -fsSL https://labwired.com/install | bash
+  irm https://labwired.com/install.ps1 | iex   # Windows
   npx @labwired/agent
 
-  After install:  labwired smoke && labwired
+  After install:  labwired agent doctor && labwired agent
 
 Env:
   LABWIRED_HOME  LABWIRED_BIN_DIR  LABWIRED_INSTALL_PIO=1  LABWIRED_FAST=0
@@ -354,14 +354,31 @@ WRAP
 chmod 0755 "$_prefix_dispatcher_tmp"
 mv -f "$_prefix_dispatcher_tmp" "${PREFIX_BIN}/labwired"
 
-# Branding into OpenCode config (product identity)
-mkdir -p "$CFG_DIR/branding"
+# Branding into OpenCode config (product identity).
+# Force-refresh LabWired theme + default tui theme. Flat branding files are
+# owned only when absent so user banners/custom assets survive reinstall.
+mkdir -p "$CFG_DIR/branding" "$CFG_DIR/themes"
+if [[ -f "$AGENT_HOME/branding/themes/labwired.json" ]]; then
+  cp "$AGENT_HOME/branding/themes/labwired.json" "$CFG_DIR/themes/labwired.json"
+  grep -Fqx "themes/labwired.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "themes/labwired.json" >>"$MANIFEST"
+fi
 while IFS= read -r branding_file; do
   rel="${branding_file#"$AGENT_HOME/branding/"}"
+  # Nested themes live under CFG_DIR/themes, not branding/themes.
+  case "$rel" in
+    themes/*) continue ;;
+  esac
   _install_owned_file_if_absent "$branding_file" "$CFG_DIR/branding/$rel"
 done < <(find "$AGENT_HOME/branding" -type f -print 2>/dev/null)
 if [[ -f "$AGENT_HOME/config/tui.json" ]]; then
-  _install_owned_file_if_absent "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
+  if [[ ! -e "$CFG_DIR/tui.json" && ! -L "$CFG_DIR/tui.json" ]]; then
+    cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
+    grep -Fqx "tui.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "tui.json" >>"$MANIFEST"
+  elif grep -Eq '"theme"[[:space:]]*:[[:space:]]*"(system|opencode)"' "$CFG_DIR/tui.json" 2>/dev/null; then
+    # Upgrade stock OpenCode defaults to LabWired product theme.
+    cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
+    grep -Fqx "tui.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "tui.json" >>"$MANIFEST"
+  fi
 fi
 
 # Thin user PATH shim — self-contained (no need to source env.sh first)
@@ -376,13 +393,17 @@ source "$(labwired_prefix_home)/env.sh" 2>/dev/null || true
 # Soft PATH persistence (portable — only if missing)
 _user_bin="$(labwired_user_bin)"
 _prefix="$(labwired_prefix_home)"
+# Marker must match the comment we write so reinstall is idempotent (temp
+# prefixes do not contain ~/.labwired paths that older greps looked for).
+_LW_PATH_MARKER='LabWired Agent (portable prefix)'
 for _rc in "${HOME}/.zprofile" "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
   if [[ -f "$_rc" ]] || [[ "$_rc" == "${HOME}/.zprofile" ]]; then
     if [[ ! -f "$_rc" ]]; then touch "$_rc"; fi
-    if ! grep -q 'LABWIRED_HOME\|labwired/env.sh\|\.labwired/bin' "$_rc" 2>/dev/null; then
+    if ! grep -Fq "$_LW_PATH_MARKER" "$_rc" 2>/dev/null \
+      && ! grep -q 'LABWIRED_HOME\|labwired/env.sh\|\.labwired/bin' "$_rc" 2>/dev/null; then
       {
         echo ""
-        echo "# LabWired Agent (portable prefix)"
+        echo "# ${_LW_PATH_MARKER}"
         echo "[ -f \"${_prefix}/env.sh\" ] && . \"${_prefix}/env.sh\""
         echo "export PATH=\"${_user_bin}:\$PATH\""
       } >>"$_rc"
@@ -416,9 +437,12 @@ cat <<EOF
 
 $(printf '\033[32m✓\033[0m') LabWired Agent installed
 
-  Run:     labwired
-  Check:   labwired doctor
-  Update:  curl -fsSL https://labwired.com/install/agent | bash
+  Run:     labwired agent
+  Check:   labwired agent doctor
+  Update:  curl -fsSL https://labwired.com/install | bash
+
+  macOS/Linux:  curl -fsSL https://labwired.com/install | bash
+  Windows:      irm https://labwired.com/install.ps1 | iex
 
 EOF
 
