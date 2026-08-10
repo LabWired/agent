@@ -117,10 +117,9 @@ function onData(chunk) {
 function findLabwired() {
   const candidates = [
     process.env.LABWIRED_CLI_PATH,
-    join(AGENT_ROOT, "bin", "labwired"),
-    join(homedir(), ".labwired", "bin", "labwired"),
-    join(homedir(), ".local", "bin", "labwired"),
-    "labwired", // PATH
+    join(AGENT_ROOT, "bin", "labwired-agent"),
+    join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
+    "labwired-agent", // PATH
   ].filter(Boolean);
   for (const c of candidates) {
     if (c === "labwired") return c;

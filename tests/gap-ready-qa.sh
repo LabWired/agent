@@ -47,7 +47,7 @@ ok("chat-ux-starters", has(f"{editor}/src/vs/workbench/contrib/void/browser/reac
 ok("chat-ux-claims", has(f"{editor}/src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx", r"model_verified"))
 
 # twin
-r = subprocess.run(["labwired", "assert-status", "model_verified", f"{root}/fixtures/gate1/artifacts/fixed.verify.json"], capture_output=True, text=True)
+r = subprocess.run([f"{root}/bin/labwired-agent", "assert-status", "model_verified", f"{root}/fixtures/gate1/artifacts/fixed.verify.json"], capture_output=True, text=True)
 ok("twin-gate1", r.returncode == 0, r.stderr[:80] or r.stdout[:80])
 
 # RPC

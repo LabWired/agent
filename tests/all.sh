@@ -38,7 +38,14 @@ run "dispatcher"        "$ROOT/tests/dispatcher.sh"
 run "agent-lifecycle"   "$ROOT/tests/agent-lifecycle.sh"
 run "demo"              "$ROOT/demo.sh"
 run "fw-usecase-qa"     "$ROOT/tests/fw-usecase-qa.sh"
-run "gap-ready-qa"      "$ROOT/tests/gap-ready-qa.sh"
+editor_root="${LABWIRED_EDITOR_ROOT:-$(cd "$ROOT/../labwired-cursor" 2>/dev/null && pwd || true)}"
+probe_list="$(probe-rs list 2>&1 || true)"
+if [[ -n "$editor_root" && -d "$editor_root/src/vs/workbench/contrib/void" ]] \
+  && grep -qiE 'ESP|EspJtag|303a:' <<<"$probe_list"; then
+  run "gap-ready-qa"    "$ROOT/tests/gap-ready-qa.sh"
+else
+  echo "not run gap-ready-qa: requires LABWIRED_EDITOR_ROOT and a connected ESP debug probe"
+fi
 
 # Optional heavier / network lanes
 if [[ "${LABWIRED_TEST_INSTALL_SMOKE:-1}" == "1" ]]; then
