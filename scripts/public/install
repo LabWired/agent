@@ -181,6 +181,24 @@ transaction_armed=0
 transaction_committed=0
 transaction_rolling_back=0
 transaction_message="Agent installation did not commit"
+replacement_pid=""
+
+stop_replacement_child() {
+  local signal_name="${1:-TERM}" tick=0
+  [[ -n "$replacement_pid" ]] || return 0
+  if kill -0 "$replacement_pid" 2>/dev/null; then
+    kill -s "$signal_name" "$replacement_pid" 2>/dev/null || true
+    while kill -0 "$replacement_pid" 2>/dev/null && [[ "$tick" -lt 30 ]]; do
+      sleep 0.1
+      tick=$((tick + 1))
+    done
+    if kill -0 "$replacement_pid" 2>/dev/null; then
+      kill -KILL "$replacement_pid" 2>/dev/null || true
+    fi
+  fi
+  wait "$replacement_pid" 2>/dev/null || true
+  replacement_pid=""
+}
 
 rollback_transaction() {
   local original_status="${1:-1}"
@@ -204,14 +222,16 @@ rollback_transaction() {
 transaction_exit_trap() {
   local status=$?
   trap - EXIT INT TERM HUP
+  stop_replacement_child TERM
   rollback_transaction "$status" || true
   exit "$status"
 }
 
 transaction_signal_trap() {
-  local status="$1"
+  local signal_name="$1" status="$2"
   trap - EXIT INT TERM HUP
   transaction_message="Agent installation interrupted"
+  stop_replacement_child "$signal_name"
   rollback_transaction "$status" || true
   exit "$status"
 }
@@ -219,9 +239,9 @@ transaction_signal_trap() {
 # From this point until commit, every exit path is transactional.
 transaction_armed=1
 trap transaction_exit_trap EXIT
-trap 'transaction_signal_trap 130' INT
-trap 'transaction_signal_trap 143' TERM
-trap 'transaction_signal_trap 129' HUP
+trap 'transaction_signal_trap INT 130' INT
+trap 'transaction_signal_trap TERM 143' TERM
+trap 'transaction_signal_trap HUP 129' HUP
 
 if [[ -e "$AGENT_HOME" ]]; then
   [[ -d "$AGENT_HOME" && ! -L "$AGENT_HOME" ]] || { rm -rf "$STAGE"; die "unsafe live Agent target"; }
@@ -231,8 +251,11 @@ fi
 mv "$STAGE/replacement" "$AGENT_HOME"
 
 set +e
-bash "$AGENT_HOME/install.sh" --agent-only "$@"
+bash "$AGENT_HOME/install.sh" --agent-only "$@" &
+replacement_pid=$!
+wait "$replacement_pid"
 install_status=$?
+replacement_pid=""
 set -e
 if [[ "$install_status" -ne 0 ]]; then
   transaction_message="Agent installation failed"

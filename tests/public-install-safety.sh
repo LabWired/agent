@@ -3,7 +3,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+TERM_CHILD_PID=""
+cleanup() {
+  if [[ -n "$TERM_CHILD_PID" ]]; then
+    kill -KILL "$TERM_CHILD_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 mkdir -p "$TMP/bin" "$TMP/home"
 
 # Unsafe overrides must be rejected before download or filesystem mutation.
@@ -95,20 +102,38 @@ cat >"$TMP/archive-term/new-agent/install.sh" <<'TERM_INSTALL'
 #!/usr/bin/env bash
 printf 'term mutation\n' >"$OPENCODE_CONFIG_DIR/opencode.json"
 printf 'term env\n' >"$LABWIRED_HOME/env.sh"
+printf '%s\n' "$$" >"$LABWIRED_TEST_CHILD_PID_FILE"
 kill -TERM "$PPID"
-sleep 2
+while :; do sleep 1; done
 TERM_INSTALL
 chmod +x "$TMP/archive-term/new-agent/install.sh"
 tar -czf "$TMP/agent-term.tar.gz" -C "$TMP/archive-term" new-agent
-if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" LABWIRED_HOME="$TMP/prefix" LABWIRED_AGENT_HOME="$TMP/prefix/agent" \
-  LABWIRED_TEST_TARBALL="$TMP/agent-term.tar.gz" bash "$ROOT/scripts/public/install" \
-  >"$TMP/term.out" 2>&1; then
-  echo "FAIL interrupted replacement unexpectedly succeeded"
+HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" LABWIRED_HOME="$TMP/prefix" LABWIRED_AGENT_HOME="$TMP/prefix/agent" \
+  LABWIRED_TEST_TARBALL="$TMP/agent-term.tar.gz" LABWIRED_TEST_CHILD_PID_FILE="$TMP/term-child.pid" \
+  bash "$ROOT/scripts/public/install" >"$TMP/term.out" 2>&1 &
+public_pid=$!
+timed_out=1
+for _ in $(seq 1 80); do
+  if ! kill -0 "$public_pid" 2>/dev/null; then timed_out=0; break; fi
+  sleep 0.1
+done
+if [[ -f "$TMP/term-child.pid" ]]; then TERM_CHILD_PID="$(cat "$TMP/term-child.pid")"; fi
+if [[ "$timed_out" == "1" ]]; then
+  kill -KILL "$public_pid" 2>/dev/null || true
+  wait "$public_pid" 2>/dev/null || true
+  echo "FAIL interrupted replacement did not exit within bound" >&2
   exit 1
-else
-  term_status=$?
 fi
+set +e
+wait "$public_pid"
+term_status=$?
+set -e
 [[ "$term_status" -eq 143 ]]
+if [[ -n "$TERM_CHILD_PID" ]] && kill -0 "$TERM_CHILD_PID" 2>/dev/null; then
+  echo "FAIL interrupted replacement child remains alive" >&2
+  exit 1
+fi
+TERM_CHILD_PID=""
 grep -qx 'old agent' "$TMP/prefix/agent/marker"
 grep -qx 'old config' "$OPENCODE_CONFIG_DIR/opencode.json"
 test ! -e "$TMP/prefix/env.sh"
