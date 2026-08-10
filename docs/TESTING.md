@@ -1,47 +1,36 @@
-# Testing LabWired Agent
+# Test LabWired Agent
 
-## Quick
-
-```bash
-npm test                 # full matrix (tests/all.sh)
-npm run test:unit        # harness + skills + public + prefix
-npm run test:install     # portable install into temp prefix
-npm run test:llm         # DeepInfra Kimi (needs key)
-```
-
-## Lanes
-
-| Lane | Script | Network | Notes |
-|------|--------|---------|-------|
-| harness | `tests/harness.sh` | no | resolve-sim, MCP, claim gate, score, serial |
-| skills | `tests/skills-inventory.sh` | no | 9 skills + AGENTS vocabulary |
-| public-install | `tests/public-install.sh` | no | syntax + Cursor-style entries |
-| prefix-unit | `tests/prefix-unit.sh` | no | LABWIRED_HOME isolation |
-| install-smoke | `tests/install-smoke.sh` | yes | full portable install + smoke |
-| llm-deepinfra | `tests/llm-deepinfra.sh` | yes | optional DeepInfra chat |
-
-## DeepInfra + Kimi (coding)
-
-Never commit API keys.
+## Main commands
 
 ```bash
-export DEEPINFRA_API_KEY="…"          # from deepinfra.com dashboard
-# optional:
-export LABWIRED_LLM_MODEL="moonshotai/Kimi-K2.5"
-# or put key in:
-#   ~/.local/secrets/labwired.env
-#   DEEPINFRA_API_KEY=…
-
-bash tests/llm-deepinfra.sh
+npm test
+npm run test:unit
+npm run test:dispatcher
+npm run test:agent-lifecycle
+npm run test:public-install-safety
+npm run test:install
+npm run test:llm
 ```
 
-With key set at **install** time, OpenCode uses `config/opencode.deepinfra.json`
-(model `deepinfra/moonshotai/Kimi-K2.5`).
+`npm test` runs the current matrix in `tests/all.sh`. Read that file for the
+authoritative lane list. Do not copy a test count into documentation because
+the matrix changes.
 
-Repo secret for CI: `DEEPINFRA_API_KEY` (optional job in `.github/workflows/harness.yml`).
+## Test lanes
 
-## Workflow
+- Harness tests check command behavior and evidence rules.
+- Skill tests check the installed skill set and instructions.
+- Public install tests check Unix and Windows entry points.
+- Prefix and lifecycle tests check safe install, update, and removal.
+- Dispatcher tests check `labwired agent` and Core coexistence.
+- Smoke tests exercise a temporary installation.
+- Live twin tests check behavior when a twin is available.
+- Model tests check an optional model provider.
+- Windows CI runs the PowerShell contract test.
 
-Grok workflow (local): copy `docs/workflows/agent-test-matrix.rhai` into
-`.grok/workflows/` if needed. Pass **`args.root`** (absolute path to this repo).
-The workflow returns a summary only — it does not write reports into the tree.
+Deterministic lanes must pass in CI. A physical board, paid model, or live
+service may be unavailable. Its optional lane must print `not run`. Missing
+input must never be reported as a pass.
+
+Never commit API keys. Set optional keys in the environment or in a local
+secret file outside the repository.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.7 — 2026-08-10 — Public Agent release
+
+- Start the Agent with `labwired agent` on Unix or Windows.
+- Install only the Agent from `/install/agent`.
+- Keep existing LabWired Core commands working.
+- Update and remove the Agent without changing Core data.
+- Use shorter public documentation.
+
 ## 0.3.7 — 2026-08-06 — Close top gaps (knowledge, ship-gate, compose, start-here)
 
 1. **Knowledge heroes** — `kit-heroes.json` + `scripts/knowledge-top-parts.py` (local catalog + MCP probe)
@@ -240,4 +248,3 @@ labwired         # OpenCode agent
 ### Packaging
 - `scripts/agent-install.sh` bootstrap into `~/.labwired/agent`
 - npm package `@labwired/agent` (install wrapper)
-
