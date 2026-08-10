@@ -107,6 +107,72 @@ fi
 
 [[ -f "$STAGE/replacement/install.sh" ]] || { rm -rf "$STAGE"; die "staged install.sh missing"; }
 
+# Shared paths mutated by install.sh. Keep this inventory centralized so a
+# failed replacement can restore exact prior contents, types, modes, links,
+# and absence state alongside AGENT_HOME.
+CFG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+USER_BIN="${LABWIRED_BIN_DIR:-$HOME/.local/bin}"
+for owned_root in "$CFG_DIR" "$USER_BIN" "$HOME" "$PREFIX"; do
+  case "$owned_root" in ""|/) die "unsafe owned-path root: $owned_root" ;; /*) ;; *) die "owned-path root must be absolute: $owned_root" ;; esac
+done
+OWNED_PATHS=(
+  "$CFG_DIR/opencode.json"
+  "$CFG_DIR/opencode.json.labwired-backup"
+  "$CFG_DIR/opencode.hosted.json"
+  "$CFG_DIR/AGENTS.md"
+  "$CFG_DIR/labwired-agent.manifest"
+  "$CFG_DIR/branding"
+  "$CFG_DIR/skills"
+  "$CFG_DIR/tui.json"
+  "$PREFIX/bin/labwired"
+  "$PREFIX/bin/labwired-shim"
+  "$PREFIX/env.sh"
+  "$PREFIX/MANIFEST.json"
+  "$PREFIX/PREFIX_VERSION"
+  "$PREFIX/components/core"
+  "$USER_BIN/labwired"
+  "$HOME/.zprofile"
+  "$HOME/.zshrc"
+  "$HOME/.bashrc"
+  "$HOME/.profile"
+)
+
+ROLLBACK_ROOT="$(mktemp -d "$PREFIX/.agent-rollback.XXXXXX")"
+[[ -d "$ROLLBACK_ROOT" && ! -L "$ROLLBACK_ROOT" && "$ROLLBACK_ROOT" == "$PREFIX"/.agent-rollback.* ]] \
+  || die "unsafe rollback snapshot root"
+snapshot_owned_paths() {
+  local index=0 path slot
+  for path in "${OWNED_PATHS[@]}"; do
+    case "$path" in ""|/) die "unsafe rollback inventory path" ;; /*) ;; *) die "rollback path must be absolute: $path" ;; esac
+    slot="$ROLLBACK_ROOT/$index"
+    mkdir "$slot"
+    printf '%s\n' "$path" >"$slot/path"
+    if [[ -e "$path" || -L "$path" ]]; then
+      printf 'present\n' >"$slot/state"
+      cp -a "$path" "$slot/value"
+    else
+      printf 'absent\n' >"$slot/state"
+    fi
+    index=$((index + 1))
+  done
+}
+
+restore_owned_paths() {
+  local slot path state
+  for slot in "$ROLLBACK_ROOT"/[0-9]*; do
+    [[ -d "$slot" ]] || continue
+    path="$(cat "$slot/path")"
+    state="$(cat "$slot/state")"
+    case "$path" in ""|/) die "unsafe rollback restore path" ;; /*) ;; *) die "rollback restore path must be absolute: $path" ;; esac
+    if [[ -e "$path" || -L "$path" ]]; then rm -rf "$path"; fi
+    if [[ "$state" == "present" ]]; then
+      mkdir -p "$(dirname "$path")"
+      cp -a "$slot/value" "$path"
+    fi
+  done
+}
+snapshot_owned_paths
+
 BACKUP_ROOT="$(mktemp -d "$PREFIX/.agent-backup.XXXXXX")"
 BACKUP="$BACKUP_ROOT/agent"
 had_agent=0
@@ -124,9 +190,10 @@ set -e
 if [[ "$install_status" -ne 0 ]]; then
   rm -rf "$AGENT_HOME"
   if [[ "$had_agent" -eq 1 ]]; then mv "$BACKUP" "$AGENT_HOME"; fi
-  rm -rf "$STAGE" "$BACKUP_ROOT"
-  die "Agent installation failed; previous Agent restored"
+  restore_owned_paths
+  rm -rf "$STAGE" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
+  die "Agent installation failed; previous Agent and shared state restored"
 fi
-rm -rf "$BACKUP_ROOT" "$STAGE" "$AGENT_HOME/.git"
+rm -rf "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$STAGE" "$AGENT_HOME/.git"
 
 exit 0

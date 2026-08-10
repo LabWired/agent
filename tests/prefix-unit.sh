@@ -66,6 +66,27 @@ else
 fi
 unset LABWIRED_TEST_ALLOW_FAKE_CORE
 
+# Candidate probes are bounded even when an executable hangs forever.
+hanging="$TMP/hanging-core"
+cat >"$hanging" <<'HANG'
+#!/bin/sh
+while :; do sleep 1; done
+HANG
+chmod +x "$hanging"
+started="$(date +%s)"
+if labwired_prefix_register_existing_core "$hanging" 2>/dev/null; then
+  echo "FAIL hanging Core candidate registered"
+  fail=1
+else
+  elapsed=$(( $(date +%s) - started ))
+  if [[ "$elapsed" -le 4 ]]; then
+    echo "ok   hanging Core candidate rejected within bound"
+  else
+    echo "FAIL hanging Core rejection took ${elapsed}s"
+    fail=1
+  fi
+fi
+
 # Component registration must not follow a symlinked destination directory.
 rm -rf "$LABWIRED_HOME/components"
 mkdir -p "$TMP/outside-components" "$LABWIRED_HOME"

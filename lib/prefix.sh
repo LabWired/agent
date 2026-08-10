@@ -117,6 +117,33 @@ labwired_prefix_ensure_dirs() {
     "$h/share"
 }
 
+# Run a probe with a portable wall-clock bound (BSD/macOS and Linux). Output is
+# emitted only after the child exits; status 124 means the probe was terminated.
+_labwired_prefix_bounded_output() {
+  local limit_ticks="${1:-20}" output pid tick status
+  shift
+  output="$(mktemp "${TMPDIR:-/tmp}/labwired-probe.XXXXXX")" || return 1
+  "$@" >"$output" 2>&1 &
+  pid=$!
+  tick=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ "$tick" -ge "$limit_ticks" ]]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 0.1
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f "$output"
+      return 124
+    fi
+    sleep 0.1
+    tick=$((tick + 1))
+  done
+  if wait "$pid"; then status=0; else status=$?; fi
+  cat "$output"
+  rm -f "$output"
+  return "$status"
+}
+
 # Preserve a pre-existing standalone Core binary before installing the product
 # dispatcher at the user-facing `labwired` path.
 labwired_prefix_register_existing_core() {
@@ -158,8 +185,16 @@ labwired_prefix_register_existing_core() {
     printf 'labwired: existing Core launcher depends on adjacent files and cannot be registered safely; set LABWIRED_CORE_BIN to a self-contained executable\n' >&2
     return 1
   fi
-  version="$("$tmp" --version 2>&1 || true)"
-  help="$("$tmp" --help 2>&1 || true)"
+  if ! version="$(_labwired_prefix_bounded_output 20 "$tmp" --version)"; then
+    rm -f "$tmp"
+    printf 'labwired: existing Core candidate did not answer --version within the safety bound\n' >&2
+    return 1
+  fi
+  if ! help="$(_labwired_prefix_bounded_output 20 "$tmp" --help)"; then
+    rm -f "$tmp"
+    printf 'labwired: existing Core candidate did not answer --help within the safety bound\n' >&2
+    return 1
+  fi
   local identified=0
   if [[ "$help" == *"LabWired Simulator"* \
     && "$help" == *"test"* && "$help" == *"chips"* && "$help" == *"machine"* \
