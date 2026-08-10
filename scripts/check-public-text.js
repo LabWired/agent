@@ -63,7 +63,8 @@ function scanText(text, file, report) {
     for (const match of line.matchAll(assignments)) {
       const value = match[3] ?? match[4] ?? match[5] ?? match[6];
       const placeholder = value === 'test-token' || (match[1] === 'DEEPINFRA_API_KEY' && value === '…');
-      const structuredUnset = match[2].startsWith(':') && (value === '' || /^(?:null|~)$/i.test(value));
+      const structuredValue = match[2].startsWith(':') ? value.replace(/[}\]]$/, '') : value;
+      const structuredUnset = match[2].startsWith(':') && (structuredValue === '' || /^(?:null|~)$/i.test(structuredValue));
       if (!placeholder && !structuredUnset && !dynamic.test(value)) report(file, number, `assigned ${match[1]} secret value`);
     }
   });
@@ -85,6 +86,7 @@ function selfTest() {
     Buffer.from(begin),
     Buffer.from(`"${token}"` + ': "json-secret",'),
     Buffer.from(`${key}` + ': yaml-secret'),
+    Buffer.from('{' + `"${key}"` + ':"final-secret"}'),
   ];
   const allowed = [
     `${key}=…`, `${token}=test-token`, `${key}=$KEY`,
@@ -93,6 +95,7 @@ function selfTest() {
     `"${key}"` + ': "$KEY"', `${token}` + ': {env:TOKEN}',
     `"${key}"` + ': ""', `"${token}"` + ': null,',
     `${key}` + ': NULL', `${token}` + ': ~',
+    '{' + `"${key}"` + ':null}', '{ ' + `"${token}"` + ': null }',
   ].map(value => Buffer.from(value));
   for (const [index, fixture] of rejected.entries()) {
     let failures = 0;
