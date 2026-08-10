@@ -51,7 +51,7 @@ function decodeText(data) {
 
 function scanText(text, file, report) {
   const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-  const assignments = /"?(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)"?\s*(?:=(?!=)|:(?![-+?=0-9]))\s*(?:"([^"]*)"|'([^']*)'|(\$\{\{.*?\}\})|([^\s,;#`]+))/g;
+  const assignments = /"?(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)"?\s*(=(?!=)|:(?![-+?=0-9]))\s*(?:"([^"]*)"|'([^']*)'|(\$\{\{.*?\}\})|([^\s,;#`]+))/g;
   const dynamic = /^(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$\{\{[^}]+\}\}|\$\(.+\)|\{env:[A-Za-z_][A-Za-z0-9_]*\})$/;
   text.split(/\r?\n/).forEach((line, index) => {
     const number = index + 1;
@@ -61,9 +61,10 @@ function scanText(text, file, report) {
       if (match[0].toLowerCase() !== 'example@example.com') report(file, number, 'real email address');
     }
     for (const match of line.matchAll(assignments)) {
-      const value = match[2] ?? match[3] ?? match[4] ?? match[5];
+      const value = match[3] ?? match[4] ?? match[5] ?? match[6];
       const placeholder = value === 'test-token' || (match[1] === 'DEEPINFRA_API_KEY' && value === '…');
-      if (!placeholder && !dynamic.test(value)) report(file, number, `assigned ${match[1]} secret value`);
+      const structuredUnset = match[2].startsWith(':') && (value === '' || /^(?:null|~)$/i.test(value));
+      if (!placeholder && !structuredUnset && !dynamic.test(value)) report(file, number, `assigned ${match[1]} secret value`);
     }
   });
 }
@@ -90,6 +91,8 @@ function selfTest() {
     `${token}=\${TOKEN}`, `${key}=$(load_key)`, `${token}={env:TOKEN}`,
     `"${token}"` + ': "test-token",', `${key}` + ': …',
     `"${key}"` + ': "$KEY"', `${token}` + ': {env:TOKEN}',
+    `"${key}"` + ': ""', `"${token}"` + ': null,',
+    `${key}` + ': NULL', `${token}` + ': ~',
   ].map(value => Buffer.from(value));
   for (const [index, fixture] of rejected.entries()) {
     let failures = 0;
