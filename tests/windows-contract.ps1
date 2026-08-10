@@ -26,17 +26,24 @@ function Assert-True([bool]$Condition, [string]$Message) {
 }
 
 function Invoke-NativePowerShell([string[]]$ArgumentList) {
-  # Capture stdout/stderr via files so nested powershell stderr (plain text)
-  # does not throw CLIXML parse errors under $ErrorActionPreference Stop, and
-  # so we can read the real process exit code after Wait.
-  $outFile = Join-Path $TempRoot ("ps-out-" + [guid]::NewGuid().ToString("n") + ".txt")
-  $errFile = Join-Path $TempRoot ("ps-err-" + [guid]::NewGuid().ToString("n") + ".txt")
-  $p = Start-Process -FilePath $PowerShellExe -ArgumentList $ArgumentList -Wait -PassThru -NoNewWindow `
-    -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-  $stdout = if (Test-Path -LiteralPath $outFile) { [string](Get-Content -LiteralPath $outFile -Raw) } else { "" }
-  $stderr = if (Test-Path -LiteralPath $errFile) { [string](Get-Content -LiteralPath $errFile -Raw) } else { "" }
-  Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
-  return @{ Output = ($stdout + $stderr); Status = [int]$p.ExitCode }
+  # Call with call-operator (preserves argv). Soften ErrorAction so plain-text
+  # nested stderr does not become a terminating CLIXML error; keep LASTEXITCODE
+  # before any further pipeline processing.
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $raw = & $PowerShellExe @ArgumentList 2>&1
+    $code = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  $text = @(
+    $raw | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() }
+      else { "$_" }
+    }
+  ) -join "`n"
+  return @{ Output = $text; Status = $code }
 }
 
 function Invoke-Dispatcher([string[]]$Arguments) {
