@@ -215,55 +215,94 @@ say "MCP command: $MCP_JSON (profile=$PROFILE)"
 # 4. drop config, AGENTS.md, and skills into OpenCode discovery paths ---------
 say "installing LabWired config into $CFG_DIR"
 mkdir -p "$CFG_DIR/skills"
+CONFIG_TEMPLATE="$SRC/config/opencode.json"
 if [[ "$PROFILE" == "airgap" && -f "$SRC/config/opencode.airgap.json" ]]; then
-  cp "$SRC/config/opencode.airgap.json" "$CFG_DIR/opencode.json"
+  CONFIG_TEMPLATE="$SRC/config/opencode.airgap.json"
 elif [[ "$PROFILE" == "hosted" && -f "$SRC/config/opencode.hosted.json" ]]; then
-  cp "$SRC/config/opencode.hosted.json" "$CFG_DIR/opencode.json"
+  CONFIG_TEMPLATE="$SRC/config/opencode.hosted.json"
   say "OpenCode provider: LabWired hosted (api.labwired.com) — run labwired login"
 elif [[ -n "${DEEPINFRA_API_KEY:-}" && -f "$SRC/config/opencode.deepinfra.json" ]]; then
-  cp "$SRC/config/opencode.deepinfra.json" "$CFG_DIR/opencode.json"
+  CONFIG_TEMPLATE="$SRC/config/opencode.deepinfra.json"
   say "OpenCode provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
-else
-  cp "$SRC/config/opencode.json" "$CFG_DIR/opencode.json"
 fi
-if [[ -f "$SRC/config/opencode.hosted.json" ]]; then
-  cp "$SRC/config/opencode.hosted.json" "$CFG_DIR/opencode.hosted.json"
-fi
-cp "$SRC/config/AGENTS.md"     "$CFG_DIR/AGENTS.md"
-cp -R "$SRC/skills/." "$CFG_DIR/skills/"
-# Ensure new skills allowed in permission block if using stock config
-if [[ -f "$CFG_DIR/opencode.json" ]] && command -v python3 >/dev/null 2>&1; then
-  python3 - <<'PY'
-import json, os
-from pathlib import Path
-p = Path(os.environ["CFG_DIR"]) / "opencode.json"
-cfg = json.loads(p.read_text())
-perm = cfg.setdefault("permission", {}).setdefault("skill", {})
-for s in (
-    "golden-path",
-    "bringup",
-    "prove",
-    "observe",
-    "desk-hw",
-    "using-superpowers",
-):
-    perm.setdefault(s, "allow")
-p.write_text(json.dumps(cfg, indent=2) + "\n")
-PY
-fi
-say "skills installed: $(ls -1 "$CFG_DIR/skills" | tr '\n' ' ')"
-
-# Rewrite mcp.labwired.command with resolved argv (never leave naked npx on airgap)
+export CONFIG_TEMPLATE
+CONFIG_CREATED=0
+[[ -e "$CFG_DIR/opencode.json" ]] || CONFIG_CREATED=1
 python3 - <<'PY'
-import json, os, pathlib
-cfg_path = pathlib.Path(os.environ["CFG_DIR"]) / "opencode.json"
-cfg = json.loads(cfg_path.read_text())
+import json, os, shutil, tempfile
+from pathlib import Path
+
+cfg_dir = Path(os.environ["CFG_DIR"])
+dst = cfg_dir / "opencode.json"
+backup = cfg_dir / "opencode.json.labwired-backup"
+template = json.loads(Path(os.environ["CONFIG_TEMPLATE"]).read_text())
+if dst.exists():
+    if not backup.exists():
+        shutil.copy2(dst, backup)
+    cfg = json.loads(dst.read_text())
+else:
+    cfg = {}
+
+# Only namespaced component keys are owned. Global preferences are defaults,
+# never replacements for a user's existing choices.
+for section, key in (("mcp", "labwired"), ("provider", "labwired"), ("agent", "labwired")):
+    if key in template.get(section, {}):
+        cfg.setdefault(section, {})[key] = template[section][key]
+for key in ("model", "default_agent", "autoupdate", "share", "$schema"):
+    if key in template:
+        cfg.setdefault(key, template[key])
+skills = template.get("permission", {}).get("skill", {})
+owned_skills = cfg.setdefault("permission", {}).setdefault("skill", {})
+for name, value in skills.items():
+    owned_skills.setdefault(name, value)
 lw = cfg.setdefault("mcp", {}).setdefault("labwired", {})
-# Hosted profile uses remote Streamable HTTP — do not inject a local command.
 if lw.get("type") != "remote":
     lw["command"] = json.loads(os.environ["MCP_JSON"])
-cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+
+fd, name = tempfile.mkstemp(prefix=".opencode.", dir=cfg_dir)
+with os.fdopen(fd, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+os.replace(name, dst)
 PY
+
+# User-authored discovery files win. Record only files this component created,
+# so later update/uninstall work has an explicit ownership boundary.
+MANIFEST="$CFG_DIR/labwired-agent.manifest"
+[[ ! -L "$MANIFEST" ]] || die "refusing symlinked agent ownership manifest: $MANIFEST"
+[[ -e "$MANIFEST" ]] || : >"$MANIFEST"
+if [[ "$CONFIG_CREATED" == "1" ]]; then
+  grep -Fqx 'opencode.json' "$MANIFEST" || printf 'opencode.json\n' >>"$MANIFEST"
+fi
+_install_owned_file_if_absent() {
+  local source="$1" dest="$2" rel="${2#"$CFG_DIR/"}"
+  if [[ ! -e "$dest" && ! -L "$dest" ]]; then
+    mkdir -p "$(dirname "$dest")"
+    cp "$source" "$dest"
+    grep -Fqx "$rel" "$MANIFEST" || printf '%s\n' "$rel" >>"$MANIFEST"
+  fi
+}
+_install_owned_file_if_absent "$SRC/config/AGENTS.md" "$CFG_DIR/AGENTS.md"
+if [[ -f "$SRC/config/opencode.hosted.json" ]]; then
+  _install_owned_file_if_absent "$SRC/config/opencode.hosted.json" "$CFG_DIR/opencode.hosted.json"
+fi
+for skill_source in "$SRC/skills"/*; do
+  [[ -e "$skill_source" ]] || continue
+  skill_name="${skill_source##*/}"
+  skill_dest="$CFG_DIR/skills/$skill_name"
+  if [[ -d "$skill_source" ]]; then
+    if [[ ! -e "$skill_dest" && ! -L "$skill_dest" ]]; then
+      cp -R "$skill_source" "$skill_dest"
+      while IFS= read -r owned_file; do
+        rel="${owned_file#"$CFG_DIR/"}"
+        grep -Fqx "$rel" "$MANIFEST" || printf '%s\n' "$rel" >>"$MANIFEST"
+      done < <(find "$skill_dest" -type f -print)
+    fi
+  else
+    _install_owned_file_if_absent "$skill_source" "$skill_dest"
+  fi
+done
+say "skills available: $(ls -1 "$CFG_DIR/skills" | tr '\n' ' ')"
 say "wrote MCP command into $CFG_DIR/opencode.json"
 
 # 5. product kit into portable prefix ----------------------------------------
@@ -291,7 +330,8 @@ rsync -a --delete \
 # Prefix bin/labwired → product dispatcher in the agent kit (contained, portable)
 mkdir -p "$PREFIX_BIN"
 _PH="$(labwired_prefix_home)"
-cat >"${PREFIX_BIN}/labwired" <<WRAP
+_prefix_dispatcher_tmp="$(mktemp "$PREFIX_BIN/.labwired-dispatcher.XXXXXX")"
+cat >"$_prefix_dispatcher_tmp" <<WRAP
 #!/usr/bin/env bash
 export LABWIRED_HOME="${_PH}"
 export LABWIRED_AGENT_HOME="\${LABWIRED_HOME}/agent"
@@ -307,16 +347,17 @@ if [[ -x "\${LABWIRED_HOME}/tools/probe-rs/probe-rs" ]]; then
 fi
 exec "\${LABWIRED_HOME}/agent/bin/labwired" "\$@"
 WRAP
-chmod 0755 "${PREFIX_BIN}/labwired"
+chmod 0755 "$_prefix_dispatcher_tmp"
+mv -f "$_prefix_dispatcher_tmp" "${PREFIX_BIN}/labwired"
 
 # Branding into OpenCode config (product identity)
 mkdir -p "$CFG_DIR/branding"
-cp -R "$AGENT_HOME/branding/." "$CFG_DIR/branding/" 2>/dev/null || true
+while IFS= read -r branding_file; do
+  rel="${branding_file#"$AGENT_HOME/branding/"}"
+  _install_owned_file_if_absent "$branding_file" "$CFG_DIR/branding/$rel"
+done < <(find "$AGENT_HOME/branding" -type f -print 2>/dev/null)
 if [[ -f "$AGENT_HOME/config/tui.json" ]]; then
-  cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
-fi
-if [[ -f "$AGENT_HOME/config/AGENTS.md" ]]; then
-  cp "$AGENT_HOME/config/AGENTS.md" "$CFG_DIR/AGENTS.md"
+  _install_owned_file_if_absent "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
 fi
 
 # Thin user PATH shim — self-contained (no need to source env.sh first)

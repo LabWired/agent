@@ -120,7 +120,7 @@ labwired_prefix_ensure_dirs() {
 # Preserve a pre-existing standalone Core binary before installing the product
 # dispatcher at the user-facing `labwired` path.
 labwired_prefix_register_existing_core() {
-  local source="${1:-}" target target_dir tmp
+  local source="${1:-}" target target_dir tmp help version
   [[ -n "$source" && -x "$source" ]] || return 0
   target="$(labwired_prefix_core_bin)"
   [[ "$source" != "$target" ]] || return 0
@@ -132,17 +132,39 @@ labwired_prefix_register_existing_core() {
     return 0
   fi
 
+  local components core_dir
+  components="$(labwired_prefix_components)"
+  core_dir="$components/core"
   target_dir="$(dirname "$target")"
+  for path in "$components" "$core_dir" "$target_dir"; do
+    [[ ! -L "$path" ]] || {
+      printf 'labwired: refusing symlinked Core component path: %s\n' "$path" >&2
+      return 1
+    }
+  done
   mkdir -p "$target_dir"
-  tmp="${target}.tmp.$$"
-  rm -f "$tmp"
+  for path in "$components" "$core_dir" "$target_dir"; do
+    [[ -d "$path" && ! -L "$path" ]] || return 1
+  done
+  tmp="$(mktemp "$target_dir/.labwired-core.XXXXXX")" || return 1
   if ! cp "$source" "$tmp"; then
     rm -f "$tmp"
     return 1
   fi
   chmod 0755 "$tmp"
-  if ! "$tmp" --version >/dev/null 2>&1 && ! "$tmp" --help >/dev/null 2>&1; then
+  if head -n 1 "$tmp" 2>/dev/null | grep -q '^#!' \
+    && grep -Eq '(^|[[:space:]])(source|\.)[[:space:]]|dirname|require\(|^import[[:space:]]' "$tmp"; then
     rm -f "$tmp"
+    printf 'labwired: existing Core launcher depends on adjacent files and cannot be registered safely; set LABWIRED_CORE_BIN to a self-contained executable\n' >&2
+    return 1
+  fi
+  version="$("$tmp" --version 2>&1 || true)"
+  help="$("$tmp" --help 2>&1 || true)"
+  if [[ "$help" != *"LabWired Simulator"* ]] \
+    || [[ "$help" != *"test"* || "$help" != *"chips"* || "$help" != *"machine"* ]] \
+    || [[ -z "$version" ]]; then
+    rm -f "$tmp"
+    printf 'labwired: existing command is not a self-contained LabWired Core; set LABWIRED_CORE_BIN explicitly if needed\n' >&2
     return 1
   fi
   mv -f "$tmp" "$target"
@@ -214,11 +236,13 @@ EOF
 # Install a thin shim into user PATH that only execs prefix bin.
 # Fully portable: activates prefix env so `labwired` works without prior `source env.sh`.
 labwired_prefix_link_user_shim() {
-  local user_bin h
+  local user_bin h shim tmp
   user_bin="$(labwired_user_bin)"
   h="$(labwired_prefix_home)"
   mkdir -p "$user_bin" "$h/bin"
-  cat >"${user_bin}/labwired" <<EOF
+  shim="${user_bin}/labwired"
+  tmp="$(mktemp "$user_bin/.labwired-shim.XXXXXX")"
+  cat >"$tmp" <<EOF
 #!/usr/bin/env bash
 # LabWired portable launcher — do not edit; re-run install to refresh
 export LABWIRED_HOME="${h}"
@@ -237,9 +261,10 @@ if [[ -x "\${LABWIRED_HOME}/tools/probe-rs/probe-rs" ]]; then
 fi
 exec "\${LABWIRED_HOME}/bin/labwired" "\$@"
 EOF
-  chmod 0755 "${user_bin}/labwired"
+  chmod 0755 "$tmp"
+  mv -f "$tmp" "$shim"
   # Mirror into prefix bin as well
-  cp "${user_bin}/labwired" "${h}/bin/labwired-shim" 2>/dev/null || true
+  cp "$shim" "${h}/bin/labwired-shim" 2>/dev/null || true
 }
 
 labwired_prefix_info() {

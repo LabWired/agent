@@ -35,6 +35,33 @@ test -f "$LABWIRED_HOME/env.sh"
 grep -q LABWIRED_HOME "$LABWIRED_HOME/env.sh"
 echo "ok   env.sh"
 
+# Registration accepts only a positively identified Core snapshot.
+random="$TMP/random-tool"
+printf '#!/bin/sh\necho random-tool\n' >"$random"
+chmod +x "$random"
+if labwired_prefix_register_existing_core "$random"; then
+  test ! -e "$(labwired_prefix_core_bin)" || { echo "FAIL random executable registered as Core"; fail=1; }
+else
+  echo "ok   random executable rejected"
+fi
+
+# Component registration must not follow a symlinked destination directory.
+rm -rf "$LABWIRED_HOME/components"
+mkdir -p "$TMP/outside-components" "$LABWIRED_HOME"
+ln -s "$TMP/outside-components" "$LABWIRED_HOME/components"
+core_source="$TMP/core-source"
+printf '#!/bin/sh\ncase "$1" in --version) echo "fake-core 1.0.0";; --help) echo "LabWired Simulator Commands: test chips machine";; esac\n' >"$core_source"
+chmod +x "$core_source"
+if labwired_prefix_register_existing_core "$core_source" 2>/dev/null; then
+  echo "FAIL symlinked component directory accepted"
+  fail=1
+else
+  test ! -e "$TMP/outside-components/core/bin/labwired"
+  echo "ok   symlinked component directory rejected"
+fi
+rm -f "$LABWIRED_HOME/components"
+mkdir -p "$LABWIRED_HOME/components"
+
 # fake sim in prefix → resolve-sim finds it
 mkdir -p "$LABWIRED_HOME/tools/sim"
 printf '#!/bin/sh\necho fake-sim\n' >"$LABWIRED_HOME/tools/sim/labwired-sim"

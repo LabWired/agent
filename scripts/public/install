@@ -32,63 +32,101 @@ need curl
 need bash
 need tar
 
+case "$PREFIX" in
+  ""|/|.|..) die "unsafe install prefix: $PREFIX" ;;
+  /*) ;;
+  *) die "install prefix must be an absolute path" ;;
+esac
+case "$(basename "$PREFIX")" in .|..) die "unsafe install prefix: $PREFIX" ;; esac
+[[ "$AGENT_HOME" == "${PREFIX%/}/agent" ]] \
+  || die "Agent home must be exactly the agent child under the install prefix"
+[[ ! -L "$PREFIX" ]] || die "unsafe symlinked install prefix: $PREFIX"
+[[ ! -L "$AGENT_HOME" ]] || die "unsafe symlinked Agent target: $AGENT_HOME"
+
+prefix_parent="$(dirname "$PREFIX")"
+[[ -d "$prefix_parent" && ! -L "$prefix_parent" ]] \
+  || die "install prefix parent must be an existing non-symlink directory"
+prefix_parent="$(cd "$prefix_parent" && pwd -P)"
+PREFIX="$prefix_parent/$(basename "$PREFIX")"
+AGENT_HOME="$PREFIX/agent"
+
 say "Installing LabWired Agent…"
 say "  → $PREFIX"
 
 mkdir -p "$PREFIX"
+[[ -d "$PREFIX" && ! -L "$PREFIX" ]] || die "unsafe install prefix"
 export LABWIRED_HOME="$PREFIX"
 export LABWIRED_AGENT_HOME="$AGENT_HOME"
 
 _install_kit_from_tarball() {
-  local url tmp top
+  local url stage archive top listing
   url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/${REPO_REF}"
   if [[ "$REPO_REF" == v* ]]; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/tags/${REPO_REF}"
   fi
-  tmp="$(mktemp -d)"
-  if ! curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" 2>/dev/null; then
+  stage="$1"
+  archive="$stage/agent.tar.gz"
+  if ! curl -fsSL --retry 3 --connect-timeout 20 "$url" >"$archive"; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/main"
-    curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" || {
-      rm -rf "$tmp"
-      return 1
-    }
+    curl -fsSL --retry 3 --connect-timeout 20 "$url" >"$archive" || return 1
   fi
-  top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
-  [[ -n "$top" && -f "$top/install.sh" ]] || {
-    rm -rf "$tmp"
+  listing="$(tar -tzf "$archive")" || return 1
+  if printf '%s\n' "$listing" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
     return 1
-  }
-  rm -rf "$AGENT_HOME"
-  mkdir -p "$(dirname "$AGENT_HOME")"
-  mv "$top" "$AGENT_HOME"
-  rm -rf "$tmp" "$AGENT_HOME/.git"
+  fi
+  mkdir "$stage/extract"
+  tar -xzf "$archive" -C "$stage/extract" || return 1
+  [[ "$(find "$stage/extract" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" == "1" ]] || return 1
+  top="$(find "$stage/extract" -mindepth 1 -maxdepth 1 -type d ! -type l | head -1)"
+  [[ -n "$top" && -f "$top/install.sh" && ! -L "$top/install.sh" ]] || return 1
+  mv "$top" "$stage/replacement"
+  rm -f "$archive"
   return 0
 }
 
 _install_kit_from_git() {
+  local stage="$1"
   need git
-  if [[ -d "$AGENT_HOME/.git" ]]; then
-    git -C "$AGENT_HOME" fetch --depth 1 origin "$REPO_REF" 2>/dev/null || true
-    git -C "$AGENT_HOME" checkout -q FETCH_HEAD 2>/dev/null \
-      || git -C "$AGENT_HOME" pull --ff-only 2>/dev/null || true
-  else
-    rm -rf "$AGENT_HOME"
-    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$AGENT_HOME" \
-      || git clone --depth 1 "$REPO_URL" "$AGENT_HOME"
-  fi
+  git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$stage/replacement" \
+    || git clone --depth 1 "$REPO_URL" "$stage/replacement"
+  [[ -f "$stage/replacement/install.sh" && ! -L "$stage/replacement/install.sh" ]]
 }
 
 # Always refresh kit on one-liner (re-run = update). Skip only if asked.
 if [[ "${LABWIRED_SKIP_KIT_UPDATE:-0}" == "1" && -f "$AGENT_HOME/install.sh" ]]; then
   say "keeping existing kit (LABWIRED_SKIP_KIT_UPDATE=1)"
+  exec bash "$AGENT_HOME/install.sh" --agent-only "$@"
 else
-  if ! _install_kit_from_tarball; then
+  STAGE="$(mktemp -d "$PREFIX/.agent-stage.XXXXXX")"
+  if ! _install_kit_from_tarball "$STAGE"; then
     say "tarball failed — trying git"
-    _install_kit_from_git
+    rm -rf "$STAGE/extract" "$STAGE/replacement" "$STAGE/agent.tar.gz"
+    _install_kit_from_git "$STAGE" || { rm -rf "$STAGE"; die "could not stage Agent replacement"; }
   fi
 fi
 
-[[ -f "$AGENT_HOME/install.sh" ]] || die "install.sh missing in $AGENT_HOME"
+[[ -f "$STAGE/replacement/install.sh" ]] || { rm -rf "$STAGE"; die "staged install.sh missing"; }
 
-# Public quick start is Agent-only. Core tools remain an explicit development mode.
-exec bash "$AGENT_HOME/install.sh" --agent-only "$@"
+BACKUP_ROOT="$(mktemp -d "$PREFIX/.agent-backup.XXXXXX")"
+BACKUP="$BACKUP_ROOT/agent"
+had_agent=0
+if [[ -e "$AGENT_HOME" ]]; then
+  [[ -d "$AGENT_HOME" && ! -L "$AGENT_HOME" ]] || { rm -rf "$STAGE"; die "unsafe live Agent target"; }
+  mv "$AGENT_HOME" "$BACKUP"
+  had_agent=1
+fi
+mv "$STAGE/replacement" "$AGENT_HOME"
+
+set +e
+bash "$AGENT_HOME/install.sh" --agent-only "$@"
+install_status=$?
+set -e
+if [[ "$install_status" -ne 0 ]]; then
+  rm -rf "$AGENT_HOME"
+  if [[ "$had_agent" -eq 1 ]]; then mv "$BACKUP" "$AGENT_HOME"; fi
+  rm -rf "$STAGE" "$BACKUP_ROOT"
+  die "Agent installation failed; previous Agent restored"
+fi
+rm -rf "$BACKUP_ROOT" "$STAGE" "$AGENT_HOME/.git"
+
+exit 0

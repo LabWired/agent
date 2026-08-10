@@ -57,6 +57,7 @@
     "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh",
     "test:dispatcher": "bash tests/dispatcher.sh",
     "test:agent-lifecycle": "bash tests/agent-lifecycle.sh",
+    "test:public-install-safety": "bash tests/public-install-safety.sh",
     "test:install": "bash tests/install-smoke.sh",
     "test:llm": "bash tests/llm-deepinfra.sh"
   },
