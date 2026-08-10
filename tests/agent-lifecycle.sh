@@ -201,3 +201,58 @@ fi
 grep -q 'symlinked' "$TMP/symlink-uninstall.out"
 grep -qx 'outside state' "$TMP/external-state/sentinel"
 echo "ok   symlink cleanup refusal PASS"
+
+# Reject a prefix reached through any symlinked ancestor before recursive
+# deletion, preserving external Agent/state contents.
+mkdir -p "$TMP/external-parent/prefix/agent" "$TMP/external-parent/prefix/state/agent" "$TMP/prefix-parent"
+printf 'external agent\n' >"$TMP/external-parent/prefix/agent/sentinel"
+printf 'external state\n' >"$TMP/external-parent/prefix/state/agent/sentinel"
+ln -s "$TMP/external-parent" "$TMP/prefix-parent/link"
+export LABWIRED_HOME="$TMP/prefix-parent/link/prefix"
+export OPENCODE_CONFIG_DIR="$TMP/ancestor-opencode"
+mkdir -p "$OPENCODE_CONFIG_DIR"
+if "$ROOT/bin/labwired-agent" package uninstall --yes >"$TMP/ancestor-uninstall.out" 2>&1; then
+  echo "FAIL symlinked prefix ancestor unexpectedly accepted" >&2
+  exit 1
+fi
+grep -q 'symlinked' "$TMP/ancestor-uninstall.out"
+grep -qx 'external agent' "$TMP/external-parent/prefix/agent/sentinel"
+grep -qx 'external state' "$TMP/external-parent/prefix/state/agent/sentinel"
+echo "ok   prefix ancestor symlink refusal PASS"
+
+# Rewriting a retained dispatcher must replace a symlink atomically without
+# writing through it to an external target.
+export LABWIRED_HOME="$TMP/dispatcher-prefix"
+export LABWIRED_BIN_DIR="$TMP/dispatcher-bin"
+export OPENCODE_CONFIG_DIR="$TMP/dispatcher-opencode"
+mkdir -p "$LABWIRED_BIN_DIR" "$OPENCODE_CONFIG_DIR"
+run_install --agent-only
+mkdir -p "$LABWIRED_HOME/components/core/bin"
+cp "$CORE_TARGET" "$LABWIRED_HOME/components/core/bin/labwired"
+printf 'external dispatcher sentinel\n' >"$TMP/external-dispatcher"
+rm "$LABWIRED_HOME/bin/labwired"
+ln -s "$TMP/external-dispatcher" "$LABWIRED_HOME/bin/labwired"
+"$ROOT/bin/labwired-agent" package uninstall --yes >/dev/null
+grep -qx 'external dispatcher sentinel' "$TMP/external-dispatcher"
+test -f "$LABWIRED_HOME/bin/labwired"
+test ! -L "$LABWIRED_HOME/bin/labwired"
+echo "ok   dispatcher symlink replacement PASS"
+
+# A failed fetch is a failed update: do not reinstall the current checkout and
+# report success as though a new version was obtained.
+export LABWIRED_HOME="$TMP/update-prefix"
+export LABWIRED_BIN_DIR="$TMP/update-bin"
+export OPENCODE_CONFIG_DIR="$TMP/update-opencode"
+mkdir -p "$LABWIRED_BIN_DIR" "$OPENCODE_CONFIG_DIR"
+run_install --agent-only
+mkdir -p "$LABWIRED_HOME/agent/.git" "$TMP/failing-git-bin"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$TMP/failing-git-bin/git"
+chmod +x "$TMP/failing-git-bin/git"
+if PATH="$TMP/failing-git-bin:$PATH" "$LABWIRED_BIN_DIR/labwired" agent update >"$TMP/update-failed.out" 2>&1; then
+  echo "FAIL failed fetch unexpectedly reported update success" >&2
+  exit 1
+fi
+grep -q 'update failed' "$TMP/update-failed.out"
+! grep -q 'update complete' "$TMP/update-failed.out"
+"$LABWIRED_BIN_DIR/labwired" agent version >/dev/null
+echo "ok   failed update remains failed PASS"

@@ -22,8 +22,12 @@ labwired_update_kit_git() {
   if [[ -d "$agent_home/.git" ]]; then
     labwired_update_say "updating agent kit (git $ref)"
     git -C "$agent_home" remote set-url origin "$repo" 2>/dev/null || true
-    git -C "$agent_home" fetch --depth 1 origin "$ref"
-    git -C "$agent_home" checkout -q FETCH_HEAD
+    if ! git -C "$agent_home" fetch --depth 1 origin "$ref"; then
+      return 1
+    fi
+    if ! git -C "$agent_home" checkout -q FETCH_HEAD; then
+      return 1
+    fi
     labwired_update_ok "kit → $(tr -d '[:space:]' <"$agent_home/VERSION" 2>/dev/null || echo unknown)"
     return 0
   fi
@@ -107,8 +111,12 @@ EOF
     return 0
   fi
 
-  labwired_update_kit_git || labwired_update_warn "kit git update failed — continuing with reinstall if present"
+  if ! labwired_update_kit_git; then
+    labwired_update_warn "update failed — Agent kit was not fetched"
+    return 1
+  fi
   labwired_update_reinstall || {
+    labwired_update_warn "update failed — Agent reinstall failed"
     return 1
   }
   labwired_update_ok "update complete"

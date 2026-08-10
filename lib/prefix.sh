@@ -41,6 +41,26 @@ labwired_prefix_tools() { echo "$(labwired_prefix_home)/tools"; }
 labwired_prefix_cache() { echo "$(labwired_prefix_home)/cache"; }
 labwired_prefix_manifest() { echo "$(labwired_prefix_home)/MANIFEST.json"; }
 
+# Refuse paths containing symlinked application-level ancestors. The first
+# filesystem component is treated as the platform root (for example macOS
+# /var -> /private/var); everything below it must be a real directory.
+labwired_prefix_validate_path_ancestors() {
+  local target="${1:-}" current="" part index=0
+  local -a _labwired_path_parts
+  [[ "$target" == /* ]] || return 1
+  IFS='/' read -r -a _labwired_path_parts <<<"${target#/}"
+  for part in "${_labwired_path_parts[@]}"; do
+    [[ -n "$part" ]] || continue
+    [[ "$part" != "." && "$part" != ".." ]] || return 1
+    current="$current/$part"
+    index=$((index + 1))
+    if (( index > 1 )) && [[ -L "$current" ]]; then
+      printf 'labwired: refusing symlinked path ancestor: %s\n' "$current" >&2
+      return 1
+    fi
+  done
+}
+
 # User-facing PATH dir for a single shim (not the whole tree scatter).
 labwired_user_bin() {
   echo "${LABWIRED_BIN_DIR:-$HOME/.local/bin}"

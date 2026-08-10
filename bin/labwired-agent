@@ -752,13 +752,17 @@ PY
 }
 
 labwired_agent_preserve_shared_dispatcher() {
-  local h dispatcher core
+  local h dispatcher core tmp
   h="$(labwired_prefix_home)"
   dispatcher="$h/bin/labwired"
   core="$h/components/core/bin/labwired"
+  labwired_prefix_validate_path_ancestors "$h/bin" || fail "unsafe dispatcher path"
   if [[ -x "$core" || -d "$h/components/editor" ]]; then
     mkdir -p "$h/bin"
-    cat >"$dispatcher" <<'SH'
+    labwired_prefix_validate_path_ancestors "$h/bin" || fail "unsafe dispatcher path"
+    tmp="$(mktemp "$h/bin/.labwired-dispatcher.XXXXXX")"
+    [[ -f "$tmp" && ! -L "$tmp" ]] || fail "could not create safe dispatcher"
+    cat >"$tmp" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 h="${LABWIRED_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -776,7 +780,9 @@ case "${1:-}" in
   *) [[ -x "$core" ]] || { echo "labwired: unknown command: $1" >&2; exit 2; }; exec "$core" "$@" ;;
 esac
 SH
-    chmod 0755 "$dispatcher"
+    chmod 0755 "$tmp"
+    labwired_prefix_validate_path_ancestors "$h/bin" || { rm -f "$tmp"; fail "unsafe dispatcher path"; }
+    mv -f "$tmp" "$dispatcher"
   else
     rm -f "$dispatcher" "$h/bin/labwired-shim"
     if grep -q 'LabWired portable launcher' "$(labwired_user_bin)/labwired" 2>/dev/null; then
@@ -802,6 +808,7 @@ cmd_package() {
       local h
       h="$(labwired_prefix_home)"
       case "$h" in /*) ;; *) fail "refusing unsafe relative prefix" ;; esac
+      labwired_prefix_validate_path_ancestors "$h" || fail "refusing symlinked prefix ancestor"
       if [[ "$h" == "/" || -z "$h" || "$h" == "$HOME" || -L "$h" ]]; then
         fail "refusing to uninstall empty/root prefix"
       fi
@@ -815,6 +822,8 @@ cmd_package() {
       fi
       labwired_agent_remove_owned_config
       labwired_agent_preserve_shared_dispatcher
+      labwired_prefix_validate_path_ancestors "$h" || fail "refusing symlinked prefix ancestor"
+      [[ ! -L "$h/state" ]] || fail "refusing symlinked Agent state ancestor: $h/state"
       rm -rf "$h/agent" "$h/state/agent"
       say "uninstalled Agent from $h"
       ;;
