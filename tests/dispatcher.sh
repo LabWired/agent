@@ -8,6 +8,7 @@ trap 'rm -rf "$TMP"' EXIT
 export LABWIRED_HOME="$TMP/labwired"
 export LABWIRED_BIN_DIR="$TMP/bin"
 mkdir -p "$LABWIRED_HOME/components/core/bin" "$LABWIRED_HOME/agent/bin" "$LABWIRED_BIN_DIR"
+export PATH="$LABWIRED_BIN_DIR:/usr/bin:/bin"
 
 cat >"$LABWIRED_HOME/components/core/bin/labwired" <<'EOF'
 #!/usr/bin/env bash
@@ -40,7 +41,7 @@ assert_equals() {
   fi
 }
 
-help="$(bash "$ROOT/bin/labwired" help)"
+help="$(bash "$ROOT/bin/labwired")"
 assert_contains "$help" 'labwired agent'
 assert_contains "$help" 'labwired core'
 assert_contains "$help" 'labwired editor'
