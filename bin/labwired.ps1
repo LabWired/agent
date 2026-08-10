@@ -75,9 +75,13 @@ function Invoke-NativeComponent {
   $startInfo.CreateNoWindow = $true
   $startInfo.RedirectStandardOutput = $true
   $startInfo.RedirectStandardError = $true
-  # Prefer ArgumentList when present (pwsh / .NET Core) - it preserves empty argv.
+  # Prefer ArgumentList for .exe (preserves empty argv on pwsh/.NET Core).
+  # Always use a quoted Arguments string for .cmd/.bat - ArgumentList + cmd is flaky.
+  $ext = [IO.Path]::GetExtension($Path)
   $argList = $null
-  try { $argList = $startInfo.ArgumentList } catch { $argList = $null }
+  if ($ext -ieq ".exe") {
+    try { $argList = $startInfo.ArgumentList } catch { $argList = $null }
+  }
   if ($null -ne $argList) {
     foreach ($a in $argv) { [void]$argList.Add([string]$a) }
   } else {
