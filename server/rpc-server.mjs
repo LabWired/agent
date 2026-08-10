@@ -116,7 +116,7 @@ function onData(chunk) {
 
 function findLabwiredAgent() {
   const candidates = [
-    process.env.LABWIRED_CLI_PATH,
+    process.env.LABWIRED_AGENT_CLI_PATH,
     join(AGENT_ROOT, "bin", "labwired-agent"),
     join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
     "labwired-agent", // PATH
