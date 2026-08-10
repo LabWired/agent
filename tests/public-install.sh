@@ -15,9 +15,25 @@ bash -n "$ROOT/bin/labwired" || fail=1
 bash -n "$ROOT/bin/labwired-agent" || fail=1
 
 if bash "$ROOT/scripts/check-public-package.sh"; then
-  echo "ok   public documentation check"
+  echo "ok   public package release check"
 else
-  echo "FAIL public documentation check"
+  echo "FAIL public package release check"
+  fail=1
+fi
+
+pack_dir="$(mktemp -d "${TMPDIR:-/tmp}/labwired-public-install.XXXXXX")"
+trap 'rm -rf "$pack_dir" "${llm_home:-}"' EXIT
+if (cd "$ROOT" && npm pack --json --pack-destination "$pack_dir" >"$pack_dir/report.json"); then
+  tarball="$(node -e 'const r=require(process.argv[1]); process.stdout.write(r[0].filename)' "$pack_dir/report.json")"
+  tar -xzf "$pack_dir/$tarball" -C "$pack_dir"
+  if HOME="$pack_dir/home" bash "$pack_dir/package/bin/labwired-agent" --help >/dev/null; then
+    echo "ok   packed agent launcher starts"
+  else
+    echo "FAIL packed agent launcher"
+    fail=1
+  fi
+else
+  echo "FAIL npm package tarball"
   fail=1
 fi
 

@@ -15,6 +15,9 @@ jobs:
           bash tests/prefix-unit.sh
           bash tests/hosted-config.sh
           bash tests/desktop-session.sh
+          bash tests/dispatcher.sh
+          bash tests/agent-lifecycle.sh
+          bash scripts/check-public-package.sh
       - name: demo
         run: ./demo.sh
 
