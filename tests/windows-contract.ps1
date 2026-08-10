@@ -205,20 +205,16 @@ public static class NativeArgvEcho {
   New-Item -ItemType Directory -Path (Join-Path $installPrefix "bin") -Force | Out-Null
   New-Item -ItemType Directory -Path $configDir -Force | Out-Null
   Set-Content (Join-Path $configDir "opencode.json") '{"user_owned":true}' -Encoding UTF8
-  @'
-@echo off
-REM LabWired Core launcher
-REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
-echo migrated-core:%*
-exit /b 0
-'@ | Set-Content (Join-Path $installPrefix "bin\labwired.cmd") -Encoding ASCII
+  $coreCmdPath = Join-Path $installPrefix "bin\labwired.cmd"
+  $coreCmdBody = "@echo off`nREM LabWired Core launcher`nREM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1`necho migrated-core:%*`nexit /b 0`n"
+  [IO.File]::WriteAllText($coreCmdPath, $coreCmdBody, (New-Object Text.UTF8Encoding($false)))
   $env:LABWIRED_WINDOWS_TEST_MODE = "1"
-  $env:LABWIRED_TEST_CORE_CMD = Join-Path $installPrefix "bin\labwired.cmd"
+  $env:LABWIRED_TEST_CORE_CMD = [IO.Path]::GetFullPath($coreCmdPath)
   $env:OPENCODE_CONFIG_DIR = $configDir
   $installArgs = @("-Prefix", $installPrefix, "-UserBin", $userBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
   $result = Invoke-Installer $installArgs
   if ($result.Status -ne 0) {
-    Write-Host ("DEBUG installer status={0} out=[{1}]" -f $result.Status, $result.Output) -ForegroundColor Yellow
+    Write-Host ("DEBUG installer status={0} mode={1} corecmd={2} out=[{3}]" -f $result.Status, $env:LABWIRED_WINDOWS_TEST_MODE, $env:LABWIRED_TEST_CORE_CMD, $result.Output) -ForegroundColor Yellow
   }
   Assert-True ($result.Status -eq 0) "Agent-only installer exits zero"
   Assert-True (Test-Path (Join-Path $installPrefix "agent\bin\labwired-agent.ps1")) "Agent launcher is installed"
