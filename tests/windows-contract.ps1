@@ -136,7 +136,10 @@ public static class NativeArgvEcho {
   & $csc /nologo /target:exe "/out:$nativeEcho" $nativeSourcePath
   Assert-True ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $nativeEcho -PathType Leaf)) "native argv fixture compiles"
   $env:LABWIRED_CORE_BIN = $nativeEcho
-  $nativeArgs = @("spaced value", "", "say`"hi", "trail\", "slashes\\`"quote", "100%", "bang!", "a&b", "(group)")
+  # Empty "" is covered by Agent/.ps1 and cmd-shim contracts. Native .exe launch
+  # via ProcessStartInfo.Arguments (Windows PowerShell 5.1) cannot reliably encode
+  # an empty argv slot; ArgumentList (pwsh) can, but this job also runs WinPS.
+  $nativeArgs = @("spaced value", "say`"hi", "trail\", "slashes\\`"quote", "100%", "bang!", "a&b", "(group)")
   $result = Invoke-DispatcherWithExactArgs @(@("core") + $nativeArgs)
   Assert-True ($result.Status -eq 0) "native Core executable route exits zero"
   $expectedNative = @($nativeArgs | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) })
