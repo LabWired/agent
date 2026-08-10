@@ -63,14 +63,28 @@ function ConvertTo-WindowsNativeArgument([AllowEmptyString()][string]$Value) {
   return $encoded.ToString()
 }
 
-function Invoke-NativeComponent([string]$Path, [string[]]$Arguments) {
+function Invoke-NativeComponent {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $false)][AllowEmptyString()][AllowEmptyCollection()][string[]]$Arguments = @()
+  )
+  $argv = if ($null -eq $Arguments) { @() } else { [string[]]@($Arguments) }
   $startInfo = New-Object Diagnostics.ProcessStartInfo
   $startInfo.FileName = $Path
   $startInfo.UseShellExecute = $false
   $startInfo.CreateNoWindow = $true
   $startInfo.RedirectStandardOutput = $true
   $startInfo.RedirectStandardError = $true
-  $startInfo.Arguments = (($Arguments | ForEach-Object { ConvertTo-WindowsNativeArgument $_ }) -join ' ')
+  # Prefer ArgumentList when present (pwsh / .NET Core) — it preserves empty argv.
+  $argList = $null
+  try { $argList = $startInfo.ArgumentList } catch { $argList = $null }
+  if ($null -ne $argList) {
+    foreach ($a in $argv) { [void]$argList.Add([string]$a) }
+  } else {
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($a in $argv) { [void]$parts.Add((ConvertTo-WindowsNativeArgument ([string]$a))) }
+    $startInfo.Arguments = ($parts -join ' ')
+  }
   $process = New-Object Diagnostics.Process
   $process.StartInfo = $startInfo
   if (-not $process.Start()) { return 1 }
@@ -82,7 +96,13 @@ function Invoke-NativeComponent([string]$Path, [string[]]$Arguments) {
   return $process.ExitCode
 }
 
-function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
+function Invoke-Component {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $false)][AllowEmptyString()][AllowEmptyCollection()][string[]]$Arguments = @()
+  )
+  $argv = if ($null -eq $Arguments) { @() } else { [string[]]@($Arguments) }
   if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     [Console]::Error.WriteLine("labwired: LabWired $Name is not installed.")
     $overrideName = "LABWIRED_{0}_BIN" -f $Name.ToUpperInvariant()
@@ -93,7 +113,7 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
   # Native launch preserves empty args and cmd metacharacters. PowerShell splat
   # drops "" and mishandles some quote edges when calling another .ps1.
   if ($ext -ieq ".exe" -or $ext -ieq ".cmd" -or $ext -ieq ".bat") {
-    exit (Invoke-NativeComponent $Path $Arguments)
+    exit (Invoke-NativeComponent -Path $Path -Arguments $argv)
   }
   if ($ext -ieq ".ps1") {
     $psExe = if ($PSVersionTable.PSEdition -eq "Core") {
@@ -104,8 +124,8 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
     # line. Re-hydrate argv from base64 inside -EncodedCommand instead.
     $path64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Path))
     $argLiterals = @(
-      @($Arguments) | ForEach-Object {
-        "'" + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) + "'"
+      $argv | ForEach-Object {
+        "'" + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$_)) + "'"
       }
     ) -join ","
     $command = @"
@@ -118,28 +138,29 @@ if (-not `$?) { exit 1 }
 exit 0
 "@
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    exit (Invoke-NativeComponent $psExe @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
+    exit (Invoke-NativeComponent -Path $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
   }
-  & $Path @Arguments
+  & $Path @argv
   if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
   if (-not $?) { exit 1 }
   exit 0
 }
 
 $command = if ($Rest -and $Rest.Count -gt 0) { $Rest[0] } else { "" }
-$arguments = if ($Rest -and $Rest.Count -gt 1) { @($Rest[1..($Rest.Count - 1)]) } else { @() }
+# Force a real string[] so empty argv elements are not stripped by binding.
+$arguments = if ($Rest -and $Rest.Count -gt 1) { [string[]]@($Rest[1..($Rest.Count - 1)]) } else { [string[]]@() }
 $legacyCore = @("test", "chips", "machine", "asset", "run", "snapshot", "coverage", "tier1-matrix", "cosim-step", "fuzz")
 
 switch ($command) {
   { $_ -in @("", "help", "--help", "-h") } { Show-Help; exit 0 }
-  "agent" { Invoke-Component (Get-AgentBin) "Agent" $arguments }
-  "core" { Invoke-Component (Get-CoreBin) "Core" $arguments }
+  "agent" { Invoke-Component -Path (Get-AgentBin) -Name "Agent" -Arguments $arguments }
+  "core" { Invoke-Component -Path (Get-CoreBin) -Name "Core" -Arguments $arguments }
   "editor" {
     [Console]::Error.WriteLine("LabWired Editor is not installed.")
     [Console]::Error.WriteLine("Install LabWired Editor, then run: labwired editor")
     exit 1
   }
-  { $_ -in $legacyCore } { Invoke-Component (Get-CoreBin) "Core" @($Rest) }
+  { $_ -in $legacyCore } { Invoke-Component -Path (Get-CoreBin) -Name "Core" -Arguments ([string[]]@($Rest)) }
   default {
     [Console]::Error.WriteLine("labwired: unknown command: $command")
     [Console]::Error.WriteLine("Run: labwired --help")
