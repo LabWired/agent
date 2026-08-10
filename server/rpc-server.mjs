@@ -114,7 +114,7 @@ function onData(chunk) {
 
 // ——— labwired resolution ———
 
-function findLabwired() {
+function findLabwiredAgent() {
   const candidates = [
     process.env.LABWIRED_CLI_PATH,
     join(AGENT_ROOT, "bin", "labwired-agent"),
@@ -122,7 +122,7 @@ function findLabwired() {
     "labwired-agent", // PATH
   ].filter(Boolean);
   for (const c of candidates) {
-    if (c === "labwired") return c;
+    if (c === "labwired-agent") return c;
     if (existsSync(c)) return c;
   }
   return null;
@@ -267,7 +267,7 @@ function expandArgv(template, params = {}) {
 
 function runLabwired(argv, { timeoutMs = 120_000 } = {}) {
   return new Promise((resolveRun) => {
-    const bin = findLabwired();
+    const bin = findLabwiredAgent();
     if (!bin) {
       resolveRun({
         code: 127,
@@ -378,7 +378,7 @@ async function dispatch(method, params) {
 function initialize(params) {
   if (params.workspacePath) state.workspacePath = String(params.workspacePath);
   if (params.clientName) state.clientName = String(params.clientName);
-  const labwired = findLabwired();
+  const labwired = findLabwiredAgent();
   return {
     protocolVersion: PROTOCOL,
     serverName: "labwired-agent",

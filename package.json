@@ -129,7 +129,7 @@
   "scripts": {
     "postinstall": "node scripts/npm-install.js --postinstall || true",
     "test": "bash tests/all.sh",
-    "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh",
+    "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh && bash tests/rpc-agent-resolution.sh",
     "test:dispatcher": "bash tests/dispatcher.sh",
     "test:agent-lifecycle": "bash tests/agent-lifecycle.sh",
     "test:public-install-safety": "bash tests/public-install-safety.sh",
