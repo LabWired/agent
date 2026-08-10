@@ -228,6 +228,8 @@ fi
 export CONFIG_TEMPLATE
 CONFIG_CREATED=0
 [[ -e "$CFG_DIR/opencode.json" ]] || CONFIG_CREATED=1
+JSON_OWNED_TMP="$(mktemp "$CFG_DIR/.labwired-json-owned.XXXXXX")"
+export JSON_OWNED_TMP
 python3 - <<'PY'
 import json, os, shutil, tempfile
 from pathlib import Path
@@ -245,16 +247,20 @@ else:
 
 # Only namespaced component keys are owned. Global preferences are defaults,
 # never replacements for a user's existing choices.
-for section, key in (("mcp", "labwired"), ("provider", "labwired"), ("agent", "labwired")):
+owned = []
+for section, key in (("mcp", "labwired"), ("provider", "labwired")):
     if key in template.get(section, {}):
         cfg.setdefault(section, {})[key] = template[section][key]
+        owned.append(f"json:{section}.{key}")
 for key in ("model", "default_agent", "autoupdate", "share", "$schema"):
     if key in template:
         cfg.setdefault(key, template[key])
 skills = template.get("permission", {}).get("skill", {})
 owned_skills = cfg.setdefault("permission", {}).setdefault("skill", {})
 for name, value in skills.items():
-    owned_skills.setdefault(name, value)
+    if name not in owned_skills:
+        owned_skills[name] = value
+        owned.append(f"json:permission.skill.{name}")
 lw = cfg.setdefault("mcp", {}).setdefault("labwired", {})
 if lw.get("type") != "remote":
     lw["command"] = json.loads(os.environ["MCP_JSON"])
@@ -264,6 +270,7 @@ with os.fdopen(fd, "w") as f:
     json.dump(cfg, f, indent=2)
     f.write("\n")
 os.replace(name, dst)
+Path(os.environ["JSON_OWNED_TMP"]).write_text("\n".join(owned) + "\n")
 PY
 
 # User-authored discovery files win. Record only files this component created,
@@ -271,6 +278,11 @@ PY
 MANIFEST="$CFG_DIR/labwired-agent.manifest"
 [[ ! -L "$MANIFEST" ]] || die "refusing symlinked agent ownership manifest: $MANIFEST"
 [[ -e "$MANIFEST" ]] || : >"$MANIFEST"
+while IFS= read -r owned_key; do
+  [[ -n "$owned_key" ]] || continue
+  grep -Fqx "$owned_key" "$MANIFEST" || printf '%s\n' "$owned_key" >>"$MANIFEST"
+done <"$JSON_OWNED_TMP"
+rm -f "$JSON_OWNED_TMP"
 if [[ "$CONFIG_CREATED" == "1" ]]; then
   grep -Fqx 'opencode.json' "$MANIFEST" || printf 'opencode.json\n' >>"$MANIFEST"
 fi

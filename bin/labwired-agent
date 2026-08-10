@@ -168,7 +168,7 @@ cmd_doctor() {
     else
       # Sim is optional — debugger / hosted twin / probe are valid paths.
       printf '\033[33mwarn\033[0m labwired-sim: not found (optional — not required)\n'
-      printf '     twin: labwired agent login  or  labwired agent update --tools-only\n'
+      printf '     twin: labwired agent login; Core tools are managed by `labwired core`\n'
       printf '     or use LabWired VS Code debugger / probe-rs (sim not forced)\n'
     fi
   fi
@@ -620,7 +620,7 @@ Usage:
   labwired agent logout          Clear cloud session
   labwired agent whoami          Show signed-in identity / project
   labwired agent doctor [--strict]  Check install (strict = require sim + probe-rs)
-  labwired agent update             Self-update kit + tools
+  labwired agent update             Self-update Agent kit + config
   labwired agent smoke              Prove install works (claim gate + sim)
   labwired agent compose …          Assemble plot elements (uart | capture)
   labwired agent install-deps       Install sim + probe-rs into prefix
@@ -681,6 +681,91 @@ cmd_smoke() {
   labwired_smoke "$ROOT"
 }
 
+labwired_agent_remove_owned_config() {
+  local cfg manifest entry path
+  cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  manifest="$cfg/labwired-agent.manifest"
+  [[ ! -L "$cfg" && ! -L "$manifest" ]] || fail "refusing symlinked OpenCode ownership path"
+  [[ -f "$manifest" ]] || return 0
+
+  # Remove only JSON paths recorded by the installer, pruning empty parents.
+  python3 - "$cfg/opencode.json" "$manifest" <<'PY'
+import json, os, sys, tempfile
+config, manifest = sys.argv[1:]
+if not os.path.isfile(config) or os.path.islink(config):
+    sys.exit(0)
+with open(manifest) as f:
+    paths = [line.strip()[5:].split(".") for line in f if line.startswith("json:")]
+with open(config) as f:
+    data = json.load(f)
+for parts in paths:
+    parents = []
+    node = data
+    for part in parts[:-1]:
+        if not isinstance(node, dict) or part not in node:
+            break
+        parents.append((node, part))
+        node = node[part]
+    else:
+        if isinstance(node, dict):
+            node.pop(parts[-1], None)
+        for parent, key in reversed(parents):
+            if isinstance(parent.get(key), dict) and not parent[key]:
+                parent.pop(key)
+            else:
+                break
+fd, tmp = tempfile.mkstemp(prefix=".opencode.", dir=os.path.dirname(config))
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+os.replace(tmp, config)
+PY
+
+  while IFS= read -r entry; do
+    [[ -n "$entry" && "$entry" != json:* ]] || continue
+    case "$entry" in /*|*..*|.|"" ) fail "unsafe agent ownership entry: $entry" ;; esac
+    path="$cfg/$entry"
+    [[ "$path" == "$cfg/"* ]] || fail "unsafe agent ownership entry: $entry"
+    if [[ -f "$path" || -L "$path" ]]; then rm -f "$path"; fi
+  done <"$manifest"
+  rm -f "$manifest"
+  find "$cfg/skills" "$cfg/branding" -depth -type d -empty -delete 2>/dev/null || true
+}
+
+labwired_agent_preserve_shared_dispatcher() {
+  local h dispatcher core
+  h="$(labwired_prefix_home)"
+  dispatcher="$h/bin/labwired"
+  core="$h/components/core/bin/labwired"
+  if [[ -x "$core" || -d "$h/components/editor" ]]; then
+    mkdir -p "$h/bin"
+    cat >"$dispatcher" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+h="${LABWIRED_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
+core="$h/components/core/bin/labwired"
+editor="$h/components/editor/bin/labwired-editor"
+[[ -x "$editor" ]] || editor="$h/components/editor/bin/labwired"
+case "${1:-}" in
+  agent)
+    if [[ "${2:-}" == package && "${3:-}" == uninstall && "${4:-}" == --yes ]]; then exit 0; fi
+    echo 'labwired: Agent is not installed.' >&2; exit 1
+    ;;
+  core) shift; [[ -x "$core" ]] || { echo 'labwired: Core is not installed.' >&2; exit 1; }; exec "$core" "$@" ;;
+  editor) shift; [[ -x "$editor" ]] || { echo 'labwired: Editor is not installed.' >&2; exit 1; }; exec "$editor" "$@" ;;
+  ""|help|--help|-h) printf 'LabWired components: core%s\n' "$([[ -x "$editor" ]] && printf ' editor')" ;;
+  *) [[ -x "$core" ]] || { echo "labwired: unknown command: $1" >&2; exit 2; }; exec "$core" "$@" ;;
+esac
+SH
+    chmod 0755 "$dispatcher"
+  else
+    rm -f "$dispatcher" "$h/bin/labwired-shim"
+    if grep -q 'LabWired portable launcher' "$(labwired_user_bin)/labwired" 2>/dev/null; then
+      rm -f "$(labwired_user_bin)/labwired"
+    fi
+  fi
+}
+
 cmd_package() {
   local sub="${1:-info}"
   shift || true
@@ -697,7 +782,8 @@ cmd_package() {
     uninstall)
       local h
       h="$(labwired_prefix_home)"
-      if [[ "$h" == "/" || -z "$h" ]]; then
+      case "$h" in /*) ;; *) fail "refusing unsafe relative prefix" ;; esac
+      if [[ "$h" == "/" || -z "$h" || "$h" == "$HOME" || -L "$h" ]]; then
         fail "refusing to uninstall empty/root prefix"
       fi
       echo "This removes the portable prefix: $h"
@@ -705,11 +791,10 @@ cmd_package() {
       if [[ "${1:-}" != "--yes" ]]; then
         fail "re-run: labwired agent package uninstall --yes"
       fi
-      rm -f "$(labwired_user_bin)/labwired"
-      rm -rf "$h/agent" "$h/tools" "$h/bin" "$h/cache" "$h/share" \
-        "$h/env.sh" "$h/MANIFEST.json" "$h/PREFIX_VERSION"
-      # leave $h if other product data (artifacts/evidence) exists
-      say "uninstalled portable package from $h"
+      labwired_agent_remove_owned_config
+      labwired_agent_preserve_shared_dispatcher
+      rm -rf "$h/agent" "$h/state/agent"
+      say "uninstalled Agent from $h"
       ;;
     *)
       cat <<'EOF'
@@ -719,7 +804,7 @@ labwired agent package — manage portable install
   labwired agent package path       Print LABWIRED_HOME
   labwired agent package env        Print env.sh
   labwired agent package uninstall --yes
-                              Remove prefix kit + tools + user shim
+                              Remove Agent-owned files and configuration
 EOF
       return 2
       ;;
