@@ -100,8 +100,25 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
       (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1)
     } else { $null }
     if (-not $psExe) { $psExe = Join-Path $PSHOME "powershell.exe" }
-    $psArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Path) + @($Arguments)
-    exit (Invoke-NativeComponent $psExe $psArgs)
+    # -File mangles empty args and embedded quotes on the CreateProcess command
+    # line. Re-hydrate argv from base64 inside -EncodedCommand instead.
+    $path64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Path))
+    $argLiterals = @(
+      @($Arguments) | ForEach-Object {
+        "'" + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) + "'"
+      }
+    ) -join ","
+    $command = @"
+`$script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$path64'))
+`$encoded = @($argLiterals)
+`$argv = @(foreach (`$item in `$encoded) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$item)) })
+& `$script @argv
+if (`$null -ne `$LASTEXITCODE) { exit `$LASTEXITCODE }
+if (-not `$?) { exit 1 }
+exit 0
+"@
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    exit (Invoke-NativeComponent $psExe @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
   }
   & $Path @Arguments
   if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
