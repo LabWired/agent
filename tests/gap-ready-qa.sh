@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="/opt/homebrew/opt/node@20/bin:${ROOT}/bin:${HOME}/.labwired/bin:${PATH}"
 RPC="$ROOT/server/rpc-server.mjs"
-EDITOR="/Users/andrii/Projects/labwired-cursor"
+EDITOR="${LABWIRED_EDITOR_ROOT:-$(cd "$ROOT/../labwired-cursor" 2>/dev/null && pwd || true)}"
 OUT="$ROOT/docs/qa/gap-ready-qa-latest.json"
 mkdir -p "$ROOT/docs/qa"
 cp -f "$RPC" "${HOME}/.labwired/agent/server/rpc-server.mjs" 2>/dev/null || true

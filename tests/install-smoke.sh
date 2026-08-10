@@ -28,8 +28,8 @@ grep -q 'labwired agent' <<<"$product_help"
 grep -q 'LabWired Agent' <<<"$agent_version"
 # claim gate offline
 "$USERBIN/labwired" agent assert-status model_verified \
-  <"$PREFIX/agent/fixtures/gate1/artifacts/fixed.verify.json"
+  <"$PREFIX/agent/share/smoke/model-verified.json"
 "$USERBIN/labwired" agent assert-status failed \
-  <"$PREFIX/agent/fixtures/gate1/artifacts/broken.verify.json"
+  <"$PREFIX/agent/share/smoke/failed.json"
 test ! -e "$PREFIX/tools/sim/labwired-sim"
 echo "ok   install-smoke PASS"

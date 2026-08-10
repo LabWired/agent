@@ -17,16 +17,13 @@ do
   test -f "skills/$skill/SKILL.md"
 done
 # probe help must work without hardware
-bin/labwired probe help >/dev/null
-test -f fixtures/gate1/oracle.json
-test -f fixtures/gate1/artifacts/broken.verify.json
-test -f fixtures/gate1/artifacts/fixed.verify.json
-grep -q LABWIRED_OK fixtures/gate1/fixed/main.c
-! grep -q LABWIRED_OK fixtures/gate1/broken/main.c
+bin/labwired-agent probe help >/dev/null
+test -f share/smoke/failed.json
+test -f share/smoke/model-verified.json
 
 echo "==> Gate 1 claim artifacts (offline shapes)"
-bin/labwired assert-status failed fixtures/gate1/artifacts/broken.verify.json
-bin/labwired assert-status model_verified fixtures/gate1/artifacts/fixed.verify.json
+bin/labwired-agent assert-status failed share/smoke/failed.json
+bin/labwired-agent assert-status model_verified share/smoke/model-verified.json
 
 if [[ "${DEMO_LIVE_GATE1:-0}" == "1" ]]; then
   echo "==> Gate 1 live twin"
@@ -34,7 +31,7 @@ if [[ "${DEMO_LIVE_GATE1:-0}" == "1" ]]; then
 fi
 
 echo "==> doctor (may warn if OpenCode/sim not installed)"
-if bin/labwired doctor; then
+if bin/labwired-agent doctor; then
   echo "doctor: clean"
 else
   echo "doctor: incomplete environment (unit tests still passed)"

@@ -49,7 +49,7 @@ PY
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export LABWIRED_HOME="$TMP"
-labwired_cloud_session_save "lwd_test_access" "lwr_test_refresh" 7200 "proj_abc" "dev@labwired.test" >/dev/null
+labwired_cloud_session_save "lwd_test_access" "lwr_test_refresh" 7200 "proj_abc" "example@example.com" >/dev/null
 labwired_cloud_session_load
 [[ "$LABWIRED_ACCESS_TOKEN" == "lwd_test_access" ]] && ok "session load access" || bad "session load access"
 [[ "$LABWIRED_PROJECT" == "proj_abc" ]] && ok "session load project" || bad "session load project"

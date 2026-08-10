@@ -761,7 +761,7 @@ docs/DEVELOPMENT.md
 Scan tracked and packed text for:
 
 ```text
-/Users/
+$HOME/
 @gmail.com
 BEGIN PRIVATE KEY
 DEEPINFRA_API_KEY followed by an assigned secret value

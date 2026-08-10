@@ -25,11 +25,26 @@ pack_dir="$(mktemp -d "${TMPDIR:-/tmp}/labwired-public-install.XXXXXX")"
 trap 'rm -rf "$pack_dir" "${llm_home:-}"' EXIT
 if (cd "$ROOT" && npm pack --json --pack-destination "$pack_dir" >"$pack_dir/report.json"); then
   tarball="$(node -e 'const r=require(process.argv[1]); process.stdout.write(r[0].filename)' "$pack_dir/report.json")"
-  tar -xzf "$pack_dir/$tarball" -C "$pack_dir"
-  if HOME="$pack_dir/home" bash "$pack_dir/package/bin/labwired-agent" --help >/dev/null; then
-    echo "ok   packed agent launcher starts"
+  npm_prefix="$pack_dir/npm-project"
+  product_home="$pack_dir/product"
+  product_bin="$pack_dir/product-bin"
+  mkdir -p "$pack_dir/home"
+  installed_version=""
+  if npm install --ignore-scripts --no-audit --no-fund --prefix "$npm_prefix" "$pack_dir/$tarball" >/dev/null \
+    && HOME="$pack_dir/home" OPENCODE_CONFIG_DIR="$pack_dir/opencode" \
+      LABWIRED_HOME="$product_home" LABWIRED_BIN_DIR="$product_bin" \
+      LABWIRED_FAST=1 LABWIRED_INSTALL_PIO=0 LABWIRED_TEST_SKIP_OPENCODE=1 \
+      LABWIRED_TEST_SKIP_NETWORK=1 \
+      "$npm_prefix/node_modules/.bin/labwired-agent-install" --agent-only >/dev/null \
+    && HOME="$pack_dir/home" LABWIRED_HOME="$product_home" \
+      "$product_bin/labwired" --help >/dev/null; then
+    installed_version="$(HOME="$pack_dir/home" LABWIRED_HOME="$product_home" \
+      "$product_bin/labwired" agent version)"
+  fi
+  if grep -q 'LabWired Agent' <<<"$installed_version"; then
+    echo "ok   npm-installed dispatcher and agent start"
   else
-    echo "FAIL packed agent launcher"
+    echo "FAIL npm-installed dispatcher or agent"
     fail=1
   fi
 else
@@ -76,7 +91,7 @@ fi
 
 llm_fixture="$llm_home/response.json"
 printf '%s\n' '{"choices":[{"message":{"content":"Twin verification requires matching the fixed expected behavior."}}]}' >"$llm_fixture"
-if HOME="$llm_home" DEEPINFRA_API_KEY=fixture \
+if HOME="$llm_home" DEEPINFRA_API_KEY=test-token \
   LABWIRED_LLM_RESPONSE_FILE="$llm_fixture" bash "$ROOT/tests/llm-deepinfra.sh" \
   | grep -q 'ok   llm-deepinfra PASS'; then
   echo "ok   model response fixture parses without network"

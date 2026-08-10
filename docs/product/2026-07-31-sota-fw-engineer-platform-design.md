@@ -941,21 +941,21 @@ flowchart TB
 
 ### Internal
 
-- `/Users/andrii/Projects/labwired-cursor/docs/superpowers/specs/2026-07-30-thin-agent-runtime-design.md`
-- `/Users/andrii/Projects/labwired-cursor/docs/superpowers/specs/2026-07-30-hw-lab-surfaces-design.md`
-- `/Users/andrii/Projects/labwired-cursor/docs/superpowers/plans/2026-07-31-agent-product-ready.md`
-- `/Users/andrii/Projects/labwired-cursor/docs/superpowers/plans/2026-07-31-gap-worklist.md`
-- `/Users/andrii/Projects/labwired-cursor/docs/superpowers/plans/2026-07-31-ux-checklist.md`
-- `/Users/andrii/Projects/labwired-agent/docs/PRODUCT.md`
-- `/Users/andrii/Projects/labwired-agent/config/AGENTS.md`
-- `/Users/andrii/Projects/labwired-agent/server/rpc-server.mjs`
-- `/Users/andrii/Projects/labwired-agent/skills/*/SKILL.md`
-- `/Users/andrii/Projects/labwired-agent/fixtures/gate1/GATE1.md`
-- `/Users/andrii/Projects/labwired-cursor/src/vs/workbench/contrib/void/common/labwiredEvidenceService.ts`
-- `/Users/andrii/Projects/labwired-cursor/src/vs/workbench/contrib/void/browser/evidencePane.ts`
-- `/Users/andrii/Projects/labwired-cursor/src/vs/workbench/contrib/void/browser/react/src/evidence-tsx/EvidencePanel.tsx`
-- `/Users/andrii/Projects/labwired-cursor/src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/slashCommands.ts`
-- `/Users/andrii/Projects/labwired-cursor/src/vs/workbench/contrib/void/electron-main/labwiredAgentChannel.ts`
+- `/path/to/labwired-cursor/docs/superpowers/specs/2026-07-30-thin-agent-runtime-design.md`
+- `/path/to/labwired-cursor/docs/superpowers/specs/2026-07-30-hw-lab-surfaces-design.md`
+- `/path/to/labwired-cursor/docs/superpowers/plans/2026-07-31-agent-product-ready.md`
+- `/path/to/labwired-cursor/docs/superpowers/plans/2026-07-31-gap-worklist.md`
+- `/path/to/labwired-cursor/docs/superpowers/plans/2026-07-31-ux-checklist.md`
+- `/path/to/labwired-agent/docs/PRODUCT.md`
+- `/path/to/labwired-agent/config/AGENTS.md`
+- `/path/to/labwired-agent/server/rpc-server.mjs`
+- `/path/to/labwired-agent/skills/*/SKILL.md`
+- `/path/to/labwired-agent/fixtures/gate1/GATE1.md`
+- `/path/to/labwired-cursor/src/vs/workbench/contrib/void/common/labwiredEvidenceService.ts`
+- `/path/to/labwired-cursor/src/vs/workbench/contrib/void/browser/evidencePane.ts`
+- `/path/to/labwired-cursor/src/vs/workbench/contrib/void/browser/react/src/evidence-tsx/EvidencePanel.tsx`
+- `/path/to/labwired-cursor/src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/slashCommands.ts`
+- `/path/to/labwired-cursor/src/vs/workbench/contrib/void/electron-main/labwiredAgentChannel.ts`
 
 ### External (constraints, not in-repo)
 

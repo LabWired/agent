@@ -15,6 +15,8 @@ jobs:
           bash tests/prefix-unit.sh
           bash tests/hosted-config.sh
           bash tests/desktop-session.sh
+      - name: dispatcher and public package
+        run: |
           bash tests/dispatcher.sh
           bash tests/agent-lifecycle.sh
           bash scripts/check-public-package.sh

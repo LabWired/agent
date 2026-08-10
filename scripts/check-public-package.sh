@@ -5,7 +5,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PUBLIC_DOCS=(README.md docs/INSTALL.md docs/USAGE.md docs/VERIFY.md docs/DEVELOPMENT.md docs/TESTING.md scripts/public/DEPLOY.md)
 fail=0
 PACK_JSON="$(mktemp "${TMPDIR:-/tmp}/labwired-pack.XXXXXX")"
-trap 'rm -f "$PACK_JSON"' EXIT
+TRACKED_LIST="$(mktemp "${TMPDIR:-/tmp}/labwired-tracked.XXXXXX")"
+trap 'rm -f "$PACK_JSON" "$TRACKED_LIST"' EXIT
+(cd "$ROOT" && git ls-files -z >"$TRACKED_LIST")
 
 for file in "${PUBLIC_DOCS[@]}"; do
   if [[ ! -f "$ROOT/$file" ]]; then
@@ -53,10 +55,10 @@ if ! (cd "$ROOT" && npm pack --dry-run --json >"$PACK_JSON"); then
   printf 'FAIL package.json: npm pack --dry-run failed\n' >&2
   fail=1
 else
-  if ! node - "$ROOT" "$PACK_JSON" <<'NODE'
+  if ! node - "$ROOT" "$PACK_JSON" "$TRACKED_LIST" <<'NODE'
 const fs = require('fs');
 const path = require('path');
-const [root, reportPath] = process.argv.slice(2);
+const [root, reportPath, trackedPath] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
 const files = new Set((report[0]?.files || []).map(entry => entry.path));
 let failed = false;
@@ -77,7 +79,8 @@ const required = [
   'scripts/agent-install.ps1', 'scripts/install.ps1',
   'scripts/public/install', 'scripts/public/install.ps1',
   'lib/dispatch.sh', 'lib/prefix.sh', 'lib/resolve-sim.sh',
-  'server/rpc-server.mjs'
+  'server/rpc-server.mjs', 'share/smoke/model-verified.json',
+  'share/smoke/failed.json'
 ];
 for (const file of required) {
   if (!files.has(file)) fail(file, 0, 'required public package file is missing');
@@ -97,22 +100,17 @@ for (const skill of requiredSkills) {
   if (!files.has(file)) fail(file, 0, 'required runtime skill is missing');
 }
 
-const forbiddenPath = /(^|\/)(tests?|\.grok|screenshots?|images?|local[-_]?evidence|competitors?)(\/|$)|^docs\/(qa|product|superpowers)\/|^fixtures\/(coverage|smoke)\/|(^|\/)(cursor|claude|copilot|windsurf)([._/-]|$)|\.(png|jpe?g|gif|webp|yml)$/i;
+const forbiddenPath = /(^|\/)(tests?|fixtures|\.grok|screenshots?|images?|local[-_]?evidence|competitors?)(\/|$)|^docs\/(qa|product|superpowers)\/|(^|\/)(cursor|claude|copilot|windsurf)([._/-]|$)|\.(png|jpe?g|gif|webp|yml)$/i;
+const forbiddenSkillArtifact = /skills\/systematic-debugging\/(CREATION-LOG\.md|test-academic\.md|test-pressure-[123]\.md)$/;
 for (const file of files) {
-  if (forbiddenPath.test(file)) fail(file, 0, 'forbidden public package path');
+  if (forbiddenPath.test(file) || forbiddenSkillArtifact.test(file)) fail(file, 0, 'forbidden public package path');
 }
 
-const publicSources = new Set(files);
-for (const file of [
-  'install.sh', 'scripts/npm-install.js', 'scripts/agent-install.sh',
-  'scripts/agent-install.ps1', 'scripts/install.ps1',
-  'scripts/public/install', 'scripts/public/install.ps1',
-  'config/AGENTS.md', 'config/opencode.json', 'config/opencode.hosted.json',
-  'config/opencode.deepinfra.json', 'config/opencode.airgap.json', 'config/tui.json'
-]) publicSources.add(file);
+const tracked = fs.readFileSync(trackedPath).toString('utf8').split('\0').filter(Boolean);
+const publicSources = new Set([...tracked, ...files]);
 
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const assignments = /\b(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s;#]+))/g;
+const assignments = /\b(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s;#`]+))/g;
 for (const file of [...publicSources].sort()) {
   const absolute = path.join(root, file);
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) continue;
@@ -121,14 +119,15 @@ for (const file of [...publicSources].sort()) {
   const lines = data.toString('utf8').split(/\r?\n/);
   lines.forEach((line, index) => {
     const number = index + 1;
-    if (line.includes('/Users/')) fail(file, number, 'private local path');
+    if (line.includes('/' + 'Users/')) fail(file, number, 'private local path');
     if (/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(line)) fail(file, number, 'private key header');
     for (const match of line.matchAll(email)) {
       if (match[0].toLowerCase() !== 'example@example.com') fail(file, number, 'real email address');
     }
     for (const match of line.matchAll(assignments)) {
       const value = match[2] ?? match[3] ?? match[4];
-      const dynamic = /[$({\[]/.test(value);
+      const propertyAssignment = /(?:env|process\.env)\.$/.test(line.slice(0, match.index));
+      const dynamic = /[$({\[]/.test(value) || (propertyAssignment && /^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(value));
       if (!dynamic && value !== 'test-token' && !(match[1] === 'DEEPINFRA_API_KEY' && value === '…')) {
         fail(file, number, `assigned ${match[1]} secret value`);
       }
