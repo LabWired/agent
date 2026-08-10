@@ -76,6 +76,20 @@ if HOME="$TMP/home" LABWIRED_HOME="$TMP/missing-home" LABWIRED_CORE_BIN= \
 fi
 assert_equals "$(cat "$missing_core_output")" ''
 
+missing_core_stderr="$TMP/missing-core.stderr"
+if env -i \
+  HOME="$TMP/home" \
+  PATH="$LABWIRED_BIN_DIR:/usr/bin:/bin" \
+  LABWIRED_HOME="$TMP/missing-home" \
+  bash "$ROOT/bin/labwired" core test 2>"$missing_core_stderr"; then
+  echo "FAIL missing Core dispatch unexpectedly succeeded" >&2
+  exit 1
+else
+  missing_core_rc=$?
+fi
+assert_equals "$missing_core_rc" '1'
+assert_contains "$(cat "$missing_core_stderr")" 'not installed'
+
 editor_stderr="$TMP/editor.stderr"
 if run_dispatcher editor 2>"$editor_stderr"; then
   echo "FAIL editor unexpectedly succeeded" >&2

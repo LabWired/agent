@@ -51,7 +51,11 @@ labwired_dispatch_exec_agent() {
 
 labwired_dispatch_exec_core() {
   local core_bin
-  core_bin="$(labwired_dispatch_core_bin)"
+  if ! core_bin="$(labwired_dispatch_core_bin)"; then
+    printf 'labwired: LabWired Core is not installed.\n' >&2
+    printf 'Install it, or set LABWIRED_CORE_BIN to its executable.\n' >&2
+    return 1
+  fi
   if [[ ! -x "$core_bin" ]]; then
     printf 'labwired: LabWired Core is not installed.\n' >&2
     printf 'Install it, or set LABWIRED_CORE_BIN to its executable.\n' >&2
