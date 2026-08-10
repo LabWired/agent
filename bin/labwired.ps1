@@ -90,9 +90,18 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
     exit 1
   }
   $ext = [IO.Path]::GetExtension($Path)
-  # .exe and .cmd/.bat need CreateProcess-style quoting; .ps1 can use PowerShell splat.
+  # Native launch preserves empty args and cmd metacharacters. PowerShell splat
+  # drops "" and mishandles some quote edges when calling another .ps1.
   if ($ext -ieq ".exe" -or $ext -ieq ".cmd" -or $ext -ieq ".bat") {
     exit (Invoke-NativeComponent $Path $Arguments)
+  }
+  if ($ext -ieq ".ps1") {
+    $psExe = if ($PSVersionTable.PSEdition -eq "Core") {
+      (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1)
+    } else { $null }
+    if (-not $psExe) { $psExe = Join-Path $PSHOME "powershell.exe" }
+    $psArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Path) + @($Arguments)
+    exit (Invoke-NativeComponent $psExe $psArgs)
   }
   & $Path @Arguments
   if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
