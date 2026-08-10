@@ -93,7 +93,7 @@ EOF
         return 0
         ;;
       *)
-        echo "labwired update: unknown option $1" >&2
+        echo "labwired agent update: unknown option $1" >&2
         return 2
         ;;
     esac

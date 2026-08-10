@@ -682,11 +682,29 @@ cmd_smoke() {
 }
 
 labwired_agent_remove_owned_config() {
-  local cfg manifest entry path
+  local cfg manifest entry path current part
   cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
   manifest="$cfg/labwired-agent.manifest"
   [[ ! -L "$cfg" && ! -L "$manifest" ]] || fail "refusing symlinked OpenCode ownership path"
   [[ -f "$manifest" ]] || return 0
+
+  # Validate all manifest parent directories before changing anything. A file
+  # entry may itself be a symlink (removing the link is safe), but cleanup must
+  # never descend through one.
+  for path in "$cfg/skills" "$cfg/branding"; do
+    [[ ! -L "$path" ]] || fail "refusing symlinked OpenCode ownership ancestor: $path"
+  done
+  while IFS= read -r entry; do
+    [[ -n "$entry" && "$entry" != json:* ]] || continue
+    [[ "$entry" != "opencode.json" ]] || continue
+    case "$entry" in /*|*..*|.|"" ) fail "unsafe agent ownership entry: $entry" ;; esac
+    current="$cfg"
+    IFS='/' read -r -a _labwired_owned_parts <<<"$entry"
+    for part in "${_labwired_owned_parts[@]:0:${#_labwired_owned_parts[@]}-1}"; do
+      current="$current/$part"
+      [[ ! -L "$current" ]] || fail "refusing symlinked OpenCode ownership ancestor: $current"
+    done
+  done <"$manifest"
 
   # Remove only JSON paths recorded by the installer, pruning empty parents.
   python3 - "$cfg/opencode.json" "$manifest" <<'PY'
@@ -723,6 +741,7 @@ PY
 
   while IFS= read -r entry; do
     [[ -n "$entry" && "$entry" != json:* ]] || continue
+    [[ "$entry" != "opencode.json" ]] || continue
     case "$entry" in /*|*..*|.|"" ) fail "unsafe agent ownership entry: $entry" ;; esac
     path="$cfg/$entry"
     [[ "$path" == "$cfg/"* ]] || fail "unsafe agent ownership entry: $entry"
@@ -790,6 +809,9 @@ cmd_package() {
       echo "User shim: $(labwired_user_bin)/labwired"
       if [[ "${1:-}" != "--yes" ]]; then
         fail "re-run: labwired agent package uninstall --yes"
+      fi
+      if [[ -L "$h/state" || ( -e "$h/state" && ! -d "$h/state" ) ]]; then
+        fail "refusing symlinked or invalid Agent state ancestor: $h/state"
       fi
       labwired_agent_remove_owned_config
       labwired_agent_preserve_shared_dispatcher

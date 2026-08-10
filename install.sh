@@ -226,8 +226,6 @@ elif [[ -n "${DEEPINFRA_API_KEY:-}" && -f "$SRC/config/opencode.deepinfra.json" 
   say "OpenCode provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
 fi
 export CONFIG_TEMPLATE
-CONFIG_CREATED=0
-[[ -e "$CFG_DIR/opencode.json" ]] || CONFIG_CREATED=1
 JSON_OWNED_TMP="$(mktemp "$CFG_DIR/.labwired-json-owned.XXXXXX")"
 export JSON_OWNED_TMP
 python3 - <<'PY'
@@ -252,9 +250,6 @@ for section, key in (("mcp", "labwired"), ("provider", "labwired")):
     if key in template.get(section, {}):
         cfg.setdefault(section, {})[key] = template[section][key]
         owned.append(f"json:{section}.{key}")
-for key in ("model", "default_agent", "autoupdate", "share", "$schema"):
-    if key in template:
-        cfg.setdefault(key, template[key])
 skills = template.get("permission", {}).get("skill", {})
 owned_skills = cfg.setdefault("permission", {}).setdefault("skill", {})
 for name, value in skills.items():
@@ -283,9 +278,6 @@ while IFS= read -r owned_key; do
   grep -Fqx "$owned_key" "$MANIFEST" || printf '%s\n' "$owned_key" >>"$MANIFEST"
 done <"$JSON_OWNED_TMP"
 rm -f "$JSON_OWNED_TMP"
-if [[ "$CONFIG_CREATED" == "1" ]]; then
-  grep -Fqx 'opencode.json' "$MANIFEST" || printf 'opencode.json\n' >>"$MANIFEST"
-fi
 _install_owned_file_if_absent() {
   local source="$1" dest="$2" rel="${2#"$CFG_DIR/"}"
   if [[ ! -e "$dest" && ! -L "$dest" ]]; then
