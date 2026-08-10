@@ -18,6 +18,10 @@ const isWin = process.platform === "win32";
 const args = process.argv.slice(2).filter((a) => a !== "--postinstall");
 const isPost = process.argv.includes("--postinstall");
 
+// Installing this npm package as a dependency must not mutate the user's
+// product installation. `npx @labwired/agent` remains the explicit installer.
+if (isPost) process.exit(0);
+
 function run(cmd, cmdArgs, opts = {}) {
   const r = spawnSync(cmd, cmdArgs, {
     stdio: "inherit",
@@ -56,6 +60,8 @@ if (isWin) {
       psArgs.push("-Prefix", args[++i]);
     } else if (args[i] === "--minimal") {
       psArgs.push("-Minimal");
+    } else if (args[i] === "--agent-only") {
+      psArgs.push("-AgentOnly");
     } else if (args[i] === "--full") {
       psArgs.push("-Full");
     } else if (args[i] === "--airgap") {
@@ -66,8 +72,8 @@ if (isWin) {
       psArgs.push(args[i]);
     }
   }
-  if (!psArgs.includes("-Full") && !psArgs.includes("-Minimal")) {
-    psArgs.push("-Full");
+  if (!psArgs.includes("-Full") && !psArgs.includes("-Minimal") && !psArgs.includes("-AgentOnly")) {
+    psArgs.push("-AgentOnly");
   }
   run("powershell.exe", psArgs);
 } else {
@@ -78,5 +84,8 @@ if (isWin) {
     console.error("labwired-agent: Unix installer missing");
     process.exit(1);
   }
-  run("bash", [sh, ...args]);
+  const shArgs = args.some((a) => a === "--agent-only" || a === "--minimal" || a === "--full" || a === "--with-core-tools")
+    ? args
+    : ["--agent-only", ...args];
+  run("bash", [sh, ...shArgs]);
 }

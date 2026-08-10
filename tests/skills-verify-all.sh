@@ -51,7 +51,7 @@ grep -qi 'labwired_part\|labwired_datasheet' "$ROOT/skills/using-superpowers/SKI
 
 for s in "${PRIMARY[@]}"; do
   grep -q "$s" "$ROOT/config/AGENTS.md" && pass "AGENTS $s" || bad "AGENTS $s"
-  grep -q "$s" "$ROOT/bin/labwired" && pass "doctor $s" || bad "doctor $s"
+  grep -q "$s" "$ROOT/bin/labwired-agent" && pass "doctor $s" || bad "doctor $s"
 done
 
 for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \

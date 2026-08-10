@@ -112,6 +112,7 @@ if env -i PATH="$SB/bin:/usr/bin:/bin" HOME="$SB/home" \
 	LABWIRED_PROJECT="proj_desktop" \
 	LABWIRED_MODEL="labwired-default" \
 	LABWIRED_MODEL_URL="https://api.labwired.com/v1" \
+	LABWIRED_AGENT_BIN="$ROOT/bin/labwired-agent" \
 	LABWIRED_EDITOR=1 LABWIRED_MODE=agent \
 	bash "$ROOT/bin/labwired" agent >/dev/null 2>&1; then
 	CONFIG="$SB/home/.config/opencode/opencode.json" python3 - <<'PY' && ok "desktop app lands on the full hosted config" || bad "desktop app landed on a degraded config"

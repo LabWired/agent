@@ -34,9 +34,32 @@ labwired_prefix_home() {
 
 labwired_prefix_agent() { echo "$(labwired_prefix_home)/agent"; }
 labwired_prefix_bin() { echo "$(labwired_prefix_home)/bin"; }
+labwired_prefix_components() { echo "$(labwired_prefix_home)/components"; }
+labwired_prefix_core_bin() { echo "$(labwired_prefix_components)/core/bin/labwired"; }
+labwired_prefix_agent_bin() { echo "$(labwired_prefix_agent)/bin/labwired-agent"; }
 labwired_prefix_tools() { echo "$(labwired_prefix_home)/tools"; }
 labwired_prefix_cache() { echo "$(labwired_prefix_home)/cache"; }
 labwired_prefix_manifest() { echo "$(labwired_prefix_home)/MANIFEST.json"; }
+
+# Refuse paths containing symlinked application-level ancestors. The first
+# filesystem component is treated as the platform root (for example macOS
+# /var -> /private/var); everything below it must be a real directory.
+labwired_prefix_validate_path_ancestors() {
+  local target="${1:-}" current="" part index=0
+  local -a _labwired_path_parts
+  [[ "$target" == /* ]] || return 1
+  IFS='/' read -r -a _labwired_path_parts <<<"${target#/}"
+  for part in "${_labwired_path_parts[@]}"; do
+    [[ -n "$part" ]] || continue
+    [[ "$part" != "." && "$part" != ".." ]] || return 1
+    current="$current/$part"
+    index=$((index + 1))
+    if (( index > 1 )) && [[ -L "$current" ]]; then
+      printf 'labwired: refusing symlinked path ancestor: %s\n' "$current" >&2
+      return 1
+    fi
+  done
+}
 
 # User-facing PATH dir for a single shim (not the whole tree scatter).
 labwired_user_bin() {
@@ -106,11 +129,110 @@ labwired_prefix_ensure_dirs() {
   mkdir -p \
     "$h/bin" \
     "$h/agent" \
+    "$h/components" \
     "$h/tools/sim" \
     "$h/tools/probe-rs" \
     "$h/tools/pio" \
     "$h/cache" \
     "$h/share"
+}
+
+# Run a probe with a portable wall-clock bound (BSD/macOS and Linux). Output is
+# emitted only after the child exits; status 124 means the probe was terminated.
+_labwired_prefix_bounded_output() {
+  local limit_ticks="${1:-20}" output pid tick status
+  shift
+  output="$(mktemp "${TMPDIR:-/tmp}/labwired-probe.XXXXXX")" || return 1
+  "$@" >"$output" 2>&1 &
+  pid=$!
+  tick=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ "$tick" -ge "$limit_ticks" ]]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 0.1
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f "$output"
+      return 124
+    fi
+    sleep 0.1
+    tick=$((tick + 1))
+  done
+  if wait "$pid"; then status=0; else status=$?; fi
+  cat "$output"
+  rm -f "$output"
+  return "$status"
+}
+
+# Preserve a pre-existing standalone Core binary before installing the product
+# dispatcher at the user-facing `labwired` path.
+labwired_prefix_register_existing_core() {
+  local source="${1:-}" target target_dir tmp help version
+  [[ -n "$source" && -x "$source" ]] || return 0
+  target="$(labwired_prefix_core_bin)"
+  [[ "$source" != "$target" ]] || return 0
+
+  # Never register one of our shell dispatchers/agent launchers as Core: doing
+  # so would make `labwired core` recursively dispatch to itself.
+  if head -n 80 "$source" 2>/dev/null \
+    | grep -Eq 'labwired_product_help|labwired_dispatch_exec_|LABWIRED_AGENT_HOME|LabWired Agent'; then
+    return 0
+  fi
+
+  local components core_dir
+  components="$(labwired_prefix_components)"
+  core_dir="$components/core"
+  target_dir="$(dirname "$target")"
+  for path in "$components" "$core_dir" "$target_dir"; do
+    [[ ! -L "$path" ]] || {
+      printf 'labwired: refusing symlinked Core component path: %s\n' "$path" >&2
+      return 1
+    }
+  done
+  mkdir -p "$target_dir"
+  for path in "$components" "$core_dir" "$target_dir"; do
+    [[ -d "$path" && ! -L "$path" ]] || return 1
+  done
+  tmp="$(mktemp "$target_dir/.labwired-core.XXXXXX")" || return 1
+  if ! cp "$source" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 0755 "$tmp"
+  if head -n 1 "$tmp" 2>/dev/null | grep -q '^#!' \
+    && grep -Eq '(^|[[:space:]])(source|\.)[[:space:]]|dirname|require\(|^import[[:space:]]' "$tmp"; then
+    rm -f "$tmp"
+    printf 'labwired: existing Core launcher depends on adjacent files and cannot be registered safely; set LABWIRED_CORE_BIN to a self-contained executable\n' >&2
+    return 1
+  fi
+  if ! version="$(_labwired_prefix_bounded_output 20 "$tmp" --version)"; then
+    rm -f "$tmp"
+    printf 'labwired: existing Core candidate did not answer --version within the safety bound\n' >&2
+    return 1
+  fi
+  if ! help="$(_labwired_prefix_bounded_output 20 "$tmp" --help)"; then
+    rm -f "$tmp"
+    printf 'labwired: existing Core candidate did not answer --help within the safety bound\n' >&2
+    return 1
+  fi
+  local identified=0
+  if [[ "$help" == *"LabWired Simulator"* \
+    && "$help" == *"test"* && "$help" == *"chips"* && "$help" == *"machine"* \
+    && -n "$version" ]]; then
+    identified=1
+  elif [[ "${LABWIRED_TEST_ALLOW_FAKE_CORE:-0}" == "1" \
+    && "${LABWIRED_TEST_SKIP_NETWORK:-0}" == "1" \
+    && "${LABWIRED_TEST_SKIP_OPENCODE:-0}" == "1" \
+    && "$version" == "fake-core 1.0.0" \
+    && "$help" == "fake-core help" ]]; then
+    identified=1
+  fi
+  if [[ "$identified" != "1" ]]; then
+    rm -f "$tmp"
+    printf 'labwired: existing command is not a self-contained LabWired Core; set LABWIRED_CORE_BIN explicitly if needed\n' >&2
+    return 1
+  fi
+  mv -f "$tmp" "$target"
 }
 
 # Write env.sh so users can: source ~/.labwired/env.sh
@@ -179,11 +301,13 @@ EOF
 # Install a thin shim into user PATH that only execs prefix bin.
 # Fully portable: activates prefix env so `labwired` works without prior `source env.sh`.
 labwired_prefix_link_user_shim() {
-  local user_bin h
+  local user_bin h shim tmp
   user_bin="$(labwired_user_bin)"
   h="$(labwired_prefix_home)"
   mkdir -p "$user_bin" "$h/bin"
-  cat >"${user_bin}/labwired" <<EOF
+  shim="${user_bin}/labwired"
+  tmp="$(mktemp "$user_bin/.labwired-shim.XXXXXX")"
+  cat >"$tmp" <<EOF
 #!/usr/bin/env bash
 # LabWired portable launcher — do not edit; re-run install to refresh
 export LABWIRED_HOME="${h}"
@@ -202,9 +326,10 @@ if [[ -x "\${LABWIRED_HOME}/tools/probe-rs/probe-rs" ]]; then
 fi
 exec "\${LABWIRED_HOME}/bin/labwired" "\$@"
 EOF
-  chmod 0755 "${user_bin}/labwired"
+  chmod 0755 "$tmp"
+  mv -f "$tmp" "$shim"
   # Mirror into prefix bin as well
-  cp "${user_bin}/labwired" "${h}/bin/labwired-shim" 2>/dev/null || true
+  cp "$shim" "${h}/bin/labwired-shim" 2>/dev/null || true
 }
 
 labwired_prefix_info() {

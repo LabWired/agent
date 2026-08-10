@@ -131,7 +131,7 @@ class BillingService {
             if (this.rpc?.isRunning()) {
                 await this.rpc.request("auth/loginWithToken", {
                     token,
-                    email: "dev@labwired.local",
+                    email: "example@example.com",
                     plan: "pro",
                 });
                 await this.ensureProject();
@@ -161,7 +161,7 @@ class BillingService {
                 await this.setToken(token.trim());
                 await this.rpc.request("auth/completeDeviceCode", {
                     token: token.trim(),
-                    email: "pro@labwired.local",
+                    email: "example@example.com",
                     plan: "pro",
                 });
                 await this.ensureProject();

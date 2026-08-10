@@ -1,18 +1,18 @@
-# Deploy install endpoints (Cursor-style)
+# Deploy Agent install endpoints
 
-Public URLs on labwired.com:
+Publish these files as plain text with UTF-8 encoding:
 
-| URL | Serves |
-|-----|--------|
-| `https://labwired.com/install` | `scripts/public/install` |
-| `https://labwired.com/install.ps1` | `scripts/public/install.ps1` |
-| `https://labwired.com/install?win32=true` | same as install.ps1 |
-| `https://labwired.com/agent-install.sh` | alias → install |
+| Public URL | Repository file |
+|---|---|
+| `https://labwired.com/install/agent` | `scripts/public/install` |
+| `https://labwired.com/install/agent.ps1` | `scripts/public/install.ps1` |
+
+Public guides use these commands:
 
 ```bash
-# Docs — only these two lines
-curl -fsSL https://labwired.com/install | bash
-irm https://labwired.com/install.ps1 | iex
+curl -fsSL https://labwired.com/install/agent | bash
 ```
 
-Serve as `text/plain; charset=utf-8`.
+```powershell
+irm https://labwired.com/install/agent.ps1 | iex
+```

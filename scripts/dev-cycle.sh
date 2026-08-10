@@ -91,11 +91,11 @@ fi
 
 TWIN_OK=0
 if [[ "$SKIP_TWIN" == "1" ]]; then
-  echo "==> 2/3 twin skipped (LABWIRED_HW_SKIP_TWIN=1)"
+  echo "==> 2/3 twin not run (LABWIRED_HW_SKIP_TWIN=1)"
 elif [[ -z "$SYS" || ! -f "$SYS" ]]; then
-  echo "==> 2/3 twin skipped (set LABWIRED_HW_SYSTEM to a twin system YAML)"
+  echo "==> 2/3 twin not run (set LABWIRED_HW_SYSTEM to a twin system YAML)"
 elif [[ ! -x "$SIM" ]]; then
-  echo "==> 2/3 twin skipped (no labwired CLI; set LABWIRED_CORE_SRC or install sim)"
+  echo "==> 2/3 twin not run (no labwired CLI; set LABWIRED_CORE_SRC or install sim)"
 else
   echo "==> 2/3 twin (same ELF, labwired test)"
   SCRIPT="$EV/twin-test.yaml"
@@ -128,7 +128,7 @@ fi
 
 HW_OK=0
 if [[ "$SKIP_FLASH" == "1" ]]; then
-  echo "==> 3/3 desk skipped (LABWIRED_HW_SKIP_FLASH=1)"
+  echo "==> 3/3 desk not run (LABWIRED_HW_SKIP_FLASH=1)"
 else
   if [[ -z "$PORT" ]]; then
     echo "dev-cycle: set LABWIRED_HW_PORT (no serial device found)" >&2
@@ -179,11 +179,11 @@ if [[ "$TWIN_OK" -eq 1 && "$HW_OK" -eq 1 ]]; then
   exit 0
 fi
 if [[ "$SKIP_FLASH" == "1" && "$TWIN_OK" -eq 1 ]]; then
-  echo "ok   twin only (desk skipped)"
+  echo "ok   twin only (desk not run)"
   exit 0
 fi
 if [[ "$SKIP_TWIN" == "1" && "$HW_OK" -eq 1 ]]; then
-  echo "ok   desk only (twin skipped)"
+  echo "ok   desk only (twin not run)"
   exit 0
 fi
 echo "incomplete twin=$TWIN_OK hw=$HW_OK" >&2

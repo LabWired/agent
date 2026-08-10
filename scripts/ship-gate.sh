@@ -5,7 +5,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$ROOT/bin:${PATH}"
-LABWIRED="${LABWIRED:-$ROOT/bin/labwired}"
+LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
 OUT="${LABWIRED_SMOKE_OUT:-$ROOT/fixtures/coverage/smoke/ship-gate}"
 mkdir -p "$OUT"
 fail=0

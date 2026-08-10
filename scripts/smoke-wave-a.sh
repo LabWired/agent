@@ -4,7 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$ROOT/bin:${PATH}"
-LABWIRED="${LABWIRED:-$ROOT/bin/labwired}"
+LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
 # Optional capture dir for QA (default: kit-local tmp under fixtures/coverage/smoke)
 SMOKE_OUT="${LABWIRED_SMOKE_OUT:-$ROOT/fixtures/coverage/smoke}"
 mkdir -p "$SMOKE_OUT"

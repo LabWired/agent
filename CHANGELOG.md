@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.3.7 — 2026-08-06 — Close top gaps (knowledge, ship-gate, compose, start-here)
+## 0.3.7 — 2026-08-10 — Public Agent release
+
+- Start the agent with `labwired agent`.
+- Install only the agent from `/install/agent`.
+- Keep existing LabWired Core commands working.
+- Update and remove the agent without changing Core data.
+- Use shorter public documentation.
+
+### Earlier 0.3.7 work from 2026-08-06
 
 1. **Knowledge heroes** — `kit-heroes.json` + `scripts/knowledge-top-parts.py` (local catalog + MCP probe)
 2. **Ship gate** — `./scripts/ship-gate.sh` (doctor, assert, live twin, compose, knowledge, golden-path-first)
@@ -240,4 +248,3 @@ labwired         # OpenCode agent
 ### Packaging
 - `scripts/agent-install.sh` bootstrap into `~/.labwired/agent`
 - npm package `@labwired/agent` (install wrapper)
-

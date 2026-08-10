@@ -34,7 +34,7 @@ record() {
 }
 
 # ——— helpers ———
-LABWIRED="${ROOT}/bin/labwired"
+LABWIRED="${ROOT}/bin/labwired-agent"
 if [[ ! -x "$LABWIRED" ]]; then
   LABWIRED="$(command -v labwired || true)"
 fi

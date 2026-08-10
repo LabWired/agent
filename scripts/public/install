@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # LabWired Agent — one-line install (Cursor-style)
 #
-#   curl -fsSL https://labwired.com/install | bash
+#   curl -fsSL https://labwired.com/install/agent | bash
 #
 # That's it. Then: labwired
 #
 # Windows:  irm https://labwired.com/install.ps1 | iex
-# Optional: curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
+# Optional: curl -fsSL https://labwired.com/install/agent | bash -s -- --prefix /opt/labwired
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || true)" == MINGW* ]] \
@@ -32,71 +32,237 @@ need curl
 need bash
 need tar
 
+case "$PREFIX" in
+  ""|/|.|..) die "unsafe install prefix: $PREFIX" ;;
+  /*) ;;
+  *) die "install prefix must be an absolute path" ;;
+esac
+case "$(basename "$PREFIX")" in .|..) die "unsafe install prefix: $PREFIX" ;; esac
+[[ "$AGENT_HOME" == "${PREFIX%/}/agent" ]] \
+  || die "Agent home must be exactly the agent child under the install prefix"
+[[ ! -L "$PREFIX" ]] || die "unsafe symlinked install prefix: $PREFIX"
+[[ ! -L "$AGENT_HOME" ]] || die "unsafe symlinked Agent target: $AGENT_HOME"
+[[ ! -e "$AGENT_HOME" || -d "$AGENT_HOME" ]] || die "unsafe non-directory Agent target: $AGENT_HOME"
+
+prefix_parent="$(dirname "$PREFIX")"
+[[ -d "$prefix_parent" && ! -L "$prefix_parent" ]] \
+  || die "install prefix parent must be an existing non-symlink directory"
+prefix_parent="$(cd "$prefix_parent" && pwd -P)"
+PREFIX="$prefix_parent/$(basename "$PREFIX")"
+AGENT_HOME="$PREFIX/agent"
+
 say "Installing LabWired Agent…"
 say "  → $PREFIX"
 
 mkdir -p "$PREFIX"
+[[ -d "$PREFIX" && ! -L "$PREFIX" ]] || die "unsafe install prefix"
 export LABWIRED_HOME="$PREFIX"
 export LABWIRED_AGENT_HOME="$AGENT_HOME"
 
 _install_kit_from_tarball() {
-  local url tmp top
+  local url stage archive top listing
   url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/${REPO_REF}"
   if [[ "$REPO_REF" == v* ]]; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/tags/${REPO_REF}"
   fi
-  tmp="$(mktemp -d)"
-  if ! curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" 2>/dev/null; then
+  stage="$1"
+  archive="$stage/agent.tar.gz"
+  if ! curl -fsSL --retry 3 --connect-timeout 20 "$url" >"$archive"; then
     url="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/main"
-    curl -fsSL --retry 3 --connect-timeout 20 "$url" | tar -xz -C "$tmp" || {
-      rm -rf "$tmp"
-      return 1
-    }
+    curl -fsSL --retry 3 --connect-timeout 20 "$url" >"$archive" || return 1
   fi
-  top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
-  [[ -n "$top" && -f "$top/install.sh" ]] || {
-    rm -rf "$tmp"
+  listing="$(tar -tzf "$archive")" || return 1
+  if printf '%s\n' "$listing" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
     return 1
-  }
-  rm -rf "$AGENT_HOME"
-  mkdir -p "$(dirname "$AGENT_HOME")"
-  mv "$top" "$AGENT_HOME"
-  rm -rf "$tmp" "$AGENT_HOME/.git"
+  fi
+  mkdir "$stage/extract"
+  tar -xzf "$archive" -C "$stage/extract" || return 1
+  [[ "$(find "$stage/extract" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" == "1" ]] || return 1
+  top="$(find "$stage/extract" -mindepth 1 -maxdepth 1 -type d ! -type l | head -1)"
+  [[ -n "$top" && -f "$top/install.sh" && ! -L "$top/install.sh" ]] || return 1
+  mv "$top" "$stage/replacement"
+  rm -f "$archive"
   return 0
 }
 
 _install_kit_from_git() {
+  local stage="$1"
   need git
-  if [[ -d "$AGENT_HOME/.git" ]]; then
-    git -C "$AGENT_HOME" fetch --depth 1 origin "$REPO_REF" 2>/dev/null || true
-    git -C "$AGENT_HOME" checkout -q FETCH_HEAD 2>/dev/null \
-      || git -C "$AGENT_HOME" pull --ff-only 2>/dev/null || true
-  else
-    rm -rf "$AGENT_HOME"
-    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$AGENT_HOME" \
-      || git clone --depth 1 "$REPO_URL" "$AGENT_HOME"
-  fi
+  git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$stage/replacement" \
+    || git clone --depth 1 "$REPO_URL" "$stage/replacement"
+  [[ -f "$stage/replacement/install.sh" && ! -L "$stage/replacement/install.sh" ]]
 }
 
 # Always refresh kit on one-liner (re-run = update). Skip only if asked.
 if [[ "${LABWIRED_SKIP_KIT_UPDATE:-0}" == "1" && -f "$AGENT_HOME/install.sh" ]]; then
   say "keeping existing kit (LABWIRED_SKIP_KIT_UPDATE=1)"
+  exec bash "$AGENT_HOME/install.sh" --agent-only "$@"
 else
-  if ! _install_kit_from_tarball; then
+  STAGE="$(mktemp -d "$PREFIX/.agent-stage.XXXXXX")"
+  if ! _install_kit_from_tarball "$STAGE"; then
     say "tarball failed — trying git"
-    _install_kit_from_git
+    rm -rf "$STAGE/extract" "$STAGE/replacement" "$STAGE/agent.tar.gz"
+    _install_kit_from_git "$STAGE" || { rm -rf "$STAGE"; die "could not stage Agent replacement"; }
   fi
 fi
 
-[[ -f "$AGENT_HOME/install.sh" ]] || die "install.sh missing in $AGENT_HOME"
+[[ -f "$STAGE/replacement/install.sh" ]] || { rm -rf "$STAGE"; die "staged install.sh missing"; }
 
-# Default: full stack (agent + sim + probe). Pass-through flags.
-has_mode=0
-for a in "$@"; do
-  case "$a" in --full|--minimal) has_mode=1 ;; esac
+# Shared paths mutated by install.sh. Keep this inventory centralized so a
+# failed replacement can restore exact prior contents, types, modes, links,
+# and absence state alongside AGENT_HOME.
+CFG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+USER_BIN="${LABWIRED_BIN_DIR:-$HOME/.local/bin}"
+for owned_root in "$CFG_DIR" "$USER_BIN" "$HOME" "$PREFIX"; do
+  case "$owned_root" in ""|/) die "unsafe owned-path root: $owned_root" ;; /*) ;; *) die "owned-path root must be absolute: $owned_root" ;; esac
 done
-if [[ "$has_mode" -eq 0 ]]; then
-  exec bash "$AGENT_HOME/install.sh" --full "$@"
-else
-  exec bash "$AGENT_HOME/install.sh" "$@"
+OWNED_PATHS=(
+  "$CFG_DIR/opencode.json"
+  "$CFG_DIR/opencode.json.labwired-backup"
+  "$CFG_DIR/opencode.hosted.json"
+  "$CFG_DIR/AGENTS.md"
+  "$CFG_DIR/labwired-agent.manifest"
+  "$CFG_DIR/branding"
+  "$CFG_DIR/skills"
+  "$CFG_DIR/tui.json"
+  "$PREFIX/bin/labwired"
+  "$PREFIX/bin/labwired-shim"
+  "$PREFIX/env.sh"
+  "$PREFIX/MANIFEST.json"
+  "$PREFIX/PREFIX_VERSION"
+  "$PREFIX/components/core"
+  "$USER_BIN/labwired"
+  "$HOME/.zprofile"
+  "$HOME/.zshrc"
+  "$HOME/.bashrc"
+  "$HOME/.profile"
+)
+
+ROLLBACK_ROOT="$(mktemp -d "$PREFIX/.agent-rollback.XXXXXX")"
+[[ -d "$ROLLBACK_ROOT" && ! -L "$ROLLBACK_ROOT" && "$ROLLBACK_ROOT" == "$PREFIX"/.agent-rollback.* ]] \
+  || die "unsafe rollback snapshot root"
+snapshot_owned_paths() {
+  local index=0 path slot
+  for path in "${OWNED_PATHS[@]}"; do
+    case "$path" in ""|/) die "unsafe rollback inventory path" ;; /*) ;; *) die "rollback path must be absolute: $path" ;; esac
+    slot="$ROLLBACK_ROOT/$index"
+    mkdir "$slot"
+    printf '%s\n' "$path" >"$slot/path"
+    if [[ -e "$path" || -L "$path" ]]; then
+      printf 'present\n' >"$slot/state"
+      cp -a "$path" "$slot/value"
+    else
+      printf 'absent\n' >"$slot/state"
+    fi
+    index=$((index + 1))
+  done
+}
+
+restore_owned_paths() {
+  local slot path state
+  for slot in "$ROLLBACK_ROOT"/[0-9]*; do
+    [[ -d "$slot" ]] || continue
+    path="$(cat "$slot/path")"
+    state="$(cat "$slot/state")"
+    case "$path" in ""|/) die "unsafe rollback restore path" ;; /*) ;; *) die "rollback restore path must be absolute: $path" ;; esac
+    if [[ -e "$path" || -L "$path" ]]; then rm -rf "$path"; fi
+    if [[ "$state" == "present" ]]; then
+      mkdir -p "$(dirname "$path")"
+      cp -a "$slot/value" "$path"
+    fi
+  done
+}
+snapshot_owned_paths
+
+BACKUP_ROOT="$(mktemp -d "$PREFIX/.agent-backup.XXXXXX")"
+BACKUP="$BACKUP_ROOT/agent"
+had_agent=0
+transaction_armed=0
+transaction_committed=0
+transaction_rolling_back=0
+transaction_message="Agent installation did not commit"
+replacement_pid=""
+
+stop_replacement_child() {
+  local signal_name="${1:-TERM}" tick=0
+  [[ -n "$replacement_pid" ]] || return 0
+  if kill -0 "$replacement_pid" 2>/dev/null; then
+    kill -s "$signal_name" "$replacement_pid" 2>/dev/null || true
+    while kill -0 "$replacement_pid" 2>/dev/null && [[ "$tick" -lt 30 ]]; do
+      sleep 0.1
+      tick=$((tick + 1))
+    done
+    if kill -0 "$replacement_pid" 2>/dev/null; then
+      kill -KILL "$replacement_pid" 2>/dev/null || true
+    fi
+  fi
+  wait "$replacement_pid" 2>/dev/null || true
+  replacement_pid=""
+}
+
+rollback_transaction() {
+  local original_status="${1:-1}"
+  [[ "$transaction_armed" == "1" && "$transaction_committed" != "1" ]] || return "$original_status"
+  [[ "$transaction_rolling_back" != "1" ]] || return "$original_status"
+  transaction_rolling_back=1
+  trap - EXIT INT TERM HUP
+  set +e
+  if [[ -e "$BACKUP" || -L "$BACKUP" ]]; then
+    if [[ -e "$AGENT_HOME" || -L "$AGENT_HOME" ]]; then rm -rf "$AGENT_HOME"; fi
+    /bin/mv "$BACKUP" "$AGENT_HOME"
+  elif [[ "$had_agent" == "0" && ( -e "$AGENT_HOME" || -L "$AGENT_HOME" ) ]]; then
+    rm -rf "$AGENT_HOME"
+  fi
+  restore_owned_paths
+  rm -rf "$STAGE" "$BACKUP_ROOT" "$ROLLBACK_ROOT"
+  printf 'labwired install: %s; previous Agent and shared state restored\n' "$transaction_message" >&2
+  return "$original_status"
+}
+
+transaction_exit_trap() {
+  local status=$?
+  trap - EXIT INT TERM HUP
+  stop_replacement_child TERM
+  rollback_transaction "$status" || true
+  exit "$status"
+}
+
+transaction_signal_trap() {
+  local signal_name="$1" status="$2"
+  trap - EXIT INT TERM HUP
+  transaction_message="Agent installation interrupted"
+  stop_replacement_child "$signal_name"
+  rollback_transaction "$status" || true
+  exit "$status"
+}
+
+# From this point until commit, every exit path is transactional.
+transaction_armed=1
+trap transaction_exit_trap EXIT
+trap 'transaction_signal_trap INT 130' INT
+trap 'transaction_signal_trap TERM 143' TERM
+trap 'transaction_signal_trap HUP 129' HUP
+
+if [[ -e "$AGENT_HOME" ]]; then
+  [[ -d "$AGENT_HOME" && ! -L "$AGENT_HOME" ]] || { rm -rf "$STAGE"; die "unsafe live Agent target"; }
+  had_agent=1
+  mv "$AGENT_HOME" "$BACKUP"
 fi
+mv "$STAGE/replacement" "$AGENT_HOME"
+
+set +e
+bash "$AGENT_HOME/install.sh" --agent-only "$@" &
+replacement_pid=$!
+wait "$replacement_pid"
+install_status=$?
+replacement_pid=""
+set -e
+if [[ "$install_status" -ne 0 ]]; then
+  transaction_message="Agent installation failed"
+  exit "$install_status"
+fi
+transaction_committed=1
+trap - EXIT INT TERM HUP
+rm -rf "$BACKUP_ROOT" "$ROLLBACK_ROOT" "$STAGE" "$AGENT_HOME/.git"
+
+exit 0

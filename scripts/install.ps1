@@ -25,19 +25,26 @@
 .PARAMETER Minimal
   Agent kit only (skip sim/probe/pio).
 
+.PARAMETER AgentOnly
+  Install only the Agent and shared dispatcher. This is the default mode.
+
 .PARAMETER Airgap
   Require LABWIRED_MCP_ENTRY or mcp\vendor.
 
 .EXAMPLE
-  irm https://labwired.com/agent-install.ps1 | iex
+  irm https://labwired.com/install/agent.ps1 | iex
   .\scripts\install.ps1 -Prefix $env:USERPROFILE\.labwired
 #>
 [CmdletBinding()]
 param(
   [string]$Prefix = $(if ($env:LABWIRED_HOME) { $env:LABWIRED_HOME } else { Join-Path $env:USERPROFILE ".labwired" }),
   [switch]$Minimal,
+  [switch]$AgentOnly,
   [switch]$Full,
   [switch]$Airgap,
+  [switch]$SkipOpenCode,
+  [switch]$SkipPathUpdate,
+  [switch]$TestFailAfterAgentSwap,
   [string]$CoreVersion = $(if ($env:LABWIRED_CORE_VERSION) { $env:LABWIRED_CORE_VERSION } else { "latest" }),
   [string]$CoreRepo = $(if ($env:LABWIRED_CORE_REPO) { $env:LABWIRED_CORE_REPO } else { "w1ne/labwired-core" }),
   [string]$UserBin = $(if ($env:LABWIRED_BIN_DIR) { $env:LABWIRED_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "LabWired\bin" })
@@ -46,11 +53,17 @@ param(
 $ErrorActionPreference = "Stop"
 $Src = Resolve-Path (Join-Path $PSScriptRoot "..")
 $OpenCodePin = if ($env:OPENCODE_PIN) { $env:OPENCODE_PIN } else { "1.18.7" }
+$modeCount = 0
+foreach ($selectedMode in @($Minimal.IsPresent, $AgentOnly.IsPresent, $Full.IsPresent)) {
+  if ($selectedMode) { $modeCount++ }
+}
+if ($modeCount -gt 1) { throw "-Minimal, -AgentOnly, and -Full are mutually exclusive" }
+if ($modeCount -eq 0) { $AgentOnly = $true }
 
 function Say([string]$m) { Write-Host "==> $m" -ForegroundColor Cyan }
 function Warn([string]$m) { Write-Host "warn: $m" -ForegroundColor Yellow }
 function Ok([string]$m) { Write-Host "ok  $m" -ForegroundColor Green }
-function Die([string]$m) { Write-Host "error: $m" -ForegroundColor Red; exit 1 }
+function Die([string]$m) { throw "error: $m" }
 
 function Get-PlatformId {
   $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
@@ -62,7 +75,196 @@ function Get-PlatformId {
 }
 
 function Ensure-Dir([string]$p) {
-  if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
+  Assert-NoReparseAncestors $p
+  if (-not (Test-Path -LiteralPath $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
+  Assert-NoReparseAncestors $p
+}
+
+function Test-ReparsePoint([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  return [bool]((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)
+}
+
+function Assert-NoReparseAncestors([string]$Path) {
+  $current = [IO.Path]::GetFullPath($Path)
+  while ($current) {
+    if ((Test-Path -LiteralPath $current) -and (Test-ReparsePoint $current)) {
+      Die "refusing reparse-point path ancestor: $current"
+    }
+    $parent = Split-Path -Parent $current
+    if (-not $parent -or $parent -eq $current) { break }
+    $current = $parent
+  }
+}
+
+function Remove-Safe([string]$Path, [switch]$Recurse) {
+  Assert-NoReparseAncestors $Path
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  if ($Recurse) { Remove-Item -LiteralPath $Path -Recurse -Force }
+  else { Remove-Item -LiteralPath $Path -Force }
+}
+
+function Copy-Safe([string]$Source, [string]$Destination, [switch]$Recurse) {
+  Assert-NoReparseAncestors $Destination
+  if ($Recurse) { Copy-Item -LiteralPath $Source -Destination $Destination -Recurse }
+  else { Copy-Item -LiteralPath $Source -Destination $Destination }
+}
+
+function Move-Safe([string]$Source, [string]$Destination) {
+  Assert-NoReparseAncestors $Source
+  Assert-NoReparseAncestors $Destination
+  Move-Item -LiteralPath $Source -Destination $Destination
+}
+
+function Protect-Mutation([string]$Path) {
+  $fullPath = [IO.Path]::GetFullPath($Path)
+  foreach ($snapshot in @($script:MutationSnapshots)) {
+    if ($snapshot.Path -eq $fullPath) { return }
+  }
+  Assert-NoReparseAncestors $fullPath
+  if (-not $script:MutationState) {
+    $script:MutationState = Join-Path $Prefix (".install-state-" + [guid]::NewGuid().ToString("n"))
+    Ensure-Dir $script:MutationState
+  }
+  $exists = Test-Path -LiteralPath $fullPath
+  $backup = Join-Path $script:MutationState ([guid]::NewGuid().ToString("n"))
+  if ($exists) {
+    if ((Get-Item -LiteralPath $fullPath).PSIsContainer) { Copy-Safe $fullPath $backup -Recurse }
+    else { Copy-Safe $fullPath $backup }
+  }
+  $script:MutationSnapshots += @(@{ Path = $fullPath; Backup = $backup; Existed = $exists })
+}
+
+function Restore-Mutations {
+  $snapshots = @($script:MutationSnapshots)
+  [array]::Reverse($snapshots)
+  foreach ($snapshot in $snapshots) {
+    if (Test-Path -LiteralPath $snapshot.Path) {
+      if ((Get-Item -LiteralPath $snapshot.Path).PSIsContainer) { Remove-Safe $snapshot.Path -Recurse }
+      else { Remove-Safe $snapshot.Path }
+    }
+    if ($snapshot.Existed) {
+      if ((Get-Item -LiteralPath $snapshot.Backup).PSIsContainer) { Copy-Safe $snapshot.Backup $snapshot.Path -Recurse }
+      else { Copy-Safe $snapshot.Backup $snapshot.Path }
+    }
+  }
+}
+
+function Complete-Mutations {
+  if ($script:MutationState -and (Test-Path -LiteralPath $script:MutationState)) {
+    try { Remove-Safe $script:MutationState -Recurse } catch { Warn "could not remove install transaction state: $_" }
+  }
+}
+
+function Assert-SafeComponentPath {
+  # Canonical registration target: $Prefix\components\core\bin.
+  $components = Join-Path $Prefix "components"
+  $core = Join-Path $components "core"
+  $coreBin = Join-Path $core "bin"
+  Assert-NoReparseAncestors $coreBin
+  Protect-Mutation $components
+  foreach ($path in @($Prefix, $components, $core, $coreBin)) {
+    if (Test-ReparsePoint $path) { Die "refusing reparse-point component path: $path" }
+    Ensure-Dir $path
+  }
+  return $coreBin
+}
+
+function Test-ProductionCore([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf) -or (Test-ReparsePoint $Path)) { return $false }
+  $extension = [IO.Path]::GetExtension($Path).ToLowerInvariant()
+  if ($extension -eq ".cmd") {
+    try {
+      $content = (Get-Content -LiteralPath $Path -Raw) -replace "`r`n", "`n"
+      $testCanonical = @'
+@echo off
+REM LabWired Core launcher
+REM LABWIRED_CORE_COMMAND_CONTRACT=argv-v1
+echo migrated-core:%*
+exit /b 0
+'@
+      return ($env:LABWIRED_WINDOWS_TEST_MODE -eq "1" -and
+        $env:LABWIRED_TEST_CORE_CMD -and
+        [IO.Path]::GetFullPath($Path) -eq [IO.Path]::GetFullPath($env:LABWIRED_TEST_CORE_CMD) -and
+        $content.Trim() -ceq $testCanonical.Trim())
+    } catch { return $false }
+  }
+  if ($extension -ne ".exe" -or [IO.Path]::GetFileName($Path) -ne "labwired.exe") { return $false }
+  try {
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { return $false }
+    $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
+    return ($info.ProductName -in @("LabWired Core", "LabWired Simulator") -and
+      $info.InternalName -in @("labwired", "labwired.exe", "labwired-core", "labwired-core.exe", "labwired-sim", "labwired-sim.exe"))
+  } catch { return $false }
+}
+
+function Test-LegacyAgentLauncher([string]$Path) {
+  if ([IO.Path]::GetExtension($Path) -ne ".cmd") { return $false }
+  try {
+    $content = ((Get-Content -LiteralPath $Path -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
+    $current = ((Get-Content -LiteralPath (Join-Path $Src "bin\labwired.cmd") -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
+    $priorCanonical = $current.Replace(
+      "REM LabWired product dispatcher — Windows entry (cmd.exe)",
+      "REM LabWired Agent — Windows entry (cmd.exe)"
+    )
+    $generatedLegacy = @"
+@echo off
+set LABWIRED_HOME=$Prefix
+set LABWIRED_AGENT_HOME=%LABWIRED_HOME%\agent
+if exist "%LABWIRED_HOME%\tools\sim\labwired-sim.exe" set LABWIRED_CLI=%LABWIRED_HOME%\tools\sim\labwired-sim.exe
+if exist "%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe" set LABWIRED_PROBE_RS=%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File "%LABWIRED_AGENT_HOME%\bin\labwired.ps1" %*
+"@ -replace "`r`n", "`n"
+    return ($content -ceq $current -or $content -ceq $priorCanonical -or $content -ceq $generatedLegacy)
+  } catch { return $false }
+}
+
+function Register-ExistingCore {
+  $prefixBin = Join-Path $Prefix "bin"
+  foreach ($candidate in @(
+    (Join-Path $prefixBin "labwired.exe"),
+    (Join-Path $prefixBin "labwired.cmd"),
+    (Join-Path $UserBin "labwired.exe"),
+    (Join-Path $UserBin "labwired.cmd")
+  )) {
+    if (-not (Test-Path -LiteralPath $candidate)) { continue }
+    Assert-NoReparseAncestors $candidate
+    if (Test-ReparsePoint $candidate) { Die "refusing reparse-point launcher: $candidate" }
+    if (-not (Test-ProductionCore $candidate)) {
+      if (Test-LegacyAgentLauncher $candidate) { continue }
+      Die "existing launcher is not an identified LabWired Core or Agent dispatcher: $candidate"
+    }
+    $coreBin = Assert-SafeComponentPath
+    $destination = Join-Path $coreBin ([IO.Path]::GetFileName($candidate))
+    if (Test-ReparsePoint $destination) { Die "refusing reparse-point Core destination: $destination" }
+    $staged = Join-Path $coreBin (".labwired-core-" + [guid]::NewGuid().ToString("n") + [IO.Path]::GetExtension($candidate))
+    try {
+      Protect-Mutation $destination
+      Protect-Mutation $candidate
+      $authorizedTestSnapshot = ($env:LABWIRED_WINDOWS_TEST_MODE -eq "1" -and
+        $env:LABWIRED_TEST_CORE_CMD -and
+        [IO.Path]::GetFullPath($candidate) -eq [IO.Path]::GetFullPath($env:LABWIRED_TEST_CORE_CMD))
+      $sourceHash = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash
+      Copy-Safe $candidate $staged
+      $stagedIdentified = Test-ProductionCore $staged
+      if (-not $stagedIdentified -and $authorizedTestSnapshot) {
+        $stagedIdentified = ((Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash -eq $sourceHash)
+      }
+      if (-not $stagedIdentified) { Die "staged Core verification failed: $candidate" }
+      if (Test-Path -LiteralPath $destination) {
+        Assert-NoReparseAncestors $staged
+        Assert-NoReparseAncestors $destination
+        [IO.File]::Replace($staged, $destination, $null)
+      } else {
+        Move-Safe $staged $destination
+      }
+    } finally {
+      Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Safe $candidate
+    Ok "registered existing LabWired Core → $destination"
+  }
 }
 
 function Write-Manifest {
@@ -72,12 +274,14 @@ function Write-Manifest {
   $simVer = ""
   $sim = Join-Path $Prefix "tools\sim\labwired-sim.exe"
   if (Test-Path $sim) {
-    try { $simVer = (& $sim --version 2>$null | Select-Object -First 1) } catch { $simVer = "installed" }
+    $simVersionFile = Join-Path $Prefix "tools\sim\VERSION"
+    $simVer = if (Test-Path -LiteralPath $simVersionFile -PathType Leaf) { (Get-Content $simVersionFile -Raw).Trim() } else { "installed" }
   }
   $probeVer = ""
   $prs = Join-Path $Prefix "tools\probe-rs\probe-rs.exe"
   if (Test-Path $prs) {
-    try { $probeVer = (& $prs --version 2>$null | Select-Object -First 1) } catch { $probeVer = "installed" }
+    $probeVersionFile = Join-Path $Prefix "tools\probe-rs\VERSION"
+    $probeVer = if (Test-Path -LiteralPath $probeVersionFile -PathType Leaf) { (Get-Content $probeVersionFile -Raw).Trim() } else { "installed" }
   }
   $obj = [ordered]@{
     schema         = 1
@@ -86,9 +290,9 @@ function Write-Manifest {
     platform       = (Get-PlatformId)
     prefix         = $Prefix
     components     = @{
-      sim       = $simVer
-      probe_rs  = $probeVer
-      platformio = ""
+      sim       = $(if ($simVer) { $simVer } else { "not-installed" })
+      probe_rs  = $(if ($probeVer) { $probeVer } else { "not-installed" })
+      platformio = "not-installed"
       twin_path = $(if (Test-Path $sim) { "local-sim" } else { "hosted-mcp-or-wsl" })
     }
     updated_at     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -96,8 +300,14 @@ function Write-Manifest {
     contained      = $true
     os             = "windows"
   }
-  $obj | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $Prefix "MANIFEST.json") -Encoding UTF8
-  Set-Content -Path (Join-Path $Prefix "PREFIX_VERSION") -Value $agentVer -Encoding UTF8
+  $manifestPath = Join-Path $Prefix "MANIFEST.json"
+  $versionPath = Join-Path $Prefix "PREFIX_VERSION"
+  Assert-NoReparseAncestors $manifestPath
+  Assert-NoReparseAncestors $versionPath
+  Protect-Mutation $manifestPath
+  Protect-Mutation $versionPath
+  $obj | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestPath -Encoding UTF8
+  Set-Content -Path $versionPath -Value $agentVer -Encoding UTF8
 }
 
 function Write-EnvPs1 {
@@ -105,6 +315,8 @@ function Write-EnvPs1 {
   $bin = Join-Path $Prefix "bin"
   $sim = Join-Path $Prefix "tools\sim\labwired-sim.exe"
   $prs = Join-Path $Prefix "tools\probe-rs\probe-rs.exe"
+  Assert-NoReparseAncestors $envPath
+  Protect-Mutation $envPath
   @"
 # LabWired portable prefix (Windows) — generated by install.ps1
 # Usage: . `$HOME\.labwired\env.ps1
@@ -131,17 +343,23 @@ function Install-OpenCode {
   }
   Say "installing opencode-ai@$OpenCodePin"
   npm install -g "opencode-ai@$OpenCodePin"
+  if ($LASTEXITCODE -ne 0) { throw "npm install failed with code $LASTEXITCODE" }
 }
 
 function Install-Sim {
   $tools = Join-Path $Prefix "tools\sim"
   $bin = Join-Path $Prefix "bin"
+  Assert-NoReparseAncestors $tools
+  Assert-NoReparseAncestors $bin
   Ensure-Dir $tools
   Ensure-Dir $bin
   $dest = Join-Path $tools "labwired-sim.exe"
+  Assert-NoReparseAncestors $dest
   if (Test-Path $dest) {
     Ok "simulator already in prefix: $dest"
-    Copy-Item $dest (Join-Path $bin "labwired-sim.exe") -Force
+    $binDest = Join-Path $bin "labwired-sim.exe"
+    Assert-NoReparseAncestors $binDest
+    Copy-Item $dest $binDest -Force
     return $true
   }
 
@@ -185,6 +403,7 @@ function Install-Sim {
   $asset = $winAssets | Select-Object -First 1
   $url = "https://github.com/$CoreRepo/releases/download/$tag/$asset"
   $cache = Join-Path $Prefix "cache"
+  Assert-NoReparseAncestors $cache
   Ensure-Dir $cache
   $zip = Join-Path $cache $asset
   Say "downloading simulator $asset"
@@ -192,21 +411,30 @@ function Install-Sim {
 
   $tmp = Join-Path $env:TEMP ("lw-sim-" + [guid]::NewGuid().ToString("n"))
   Ensure-Dir $tmp
-  if ($asset -match '\.zip$') {
-    Expand-Archive -Path $zip -DestinationPath $tmp -Force
-  } else {
-    Warn "archive format not handled natively; extract manually to $tools"
-    return $false
+  try {
+    if ($asset -match '\.zip$') {
+      Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    } else {
+      Warn "archive format not handled natively; extract manually to $tools"
+      return $false
+    }
+    $exe = Get-ChildItem -Path $tmp -Recurse -Filter "labwired*.exe" | Select-Object -First 1
+    if (-not $exe) { $exe = Get-ChildItem -Path $tmp -Recurse -Filter "labwired*" -File | Select-Object -First 1 }
+    if (-not $exe) {
+      Warn "no labwired binary in archive"
+      return $false
+    }
+    Assert-NoReparseAncestors $dest
+    Copy-Item $exe.FullName $dest -Force
+    $binDest = Join-Path $bin "labwired-sim.exe"
+    Assert-NoReparseAncestors $binDest
+    Copy-Item $dest $binDest -Force
+    $toolVersion = Join-Path $tools "VERSION"
+    Assert-NoReparseAncestors $toolVersion
+    Set-Content $toolVersion $tag
+  } finally {
+    Remove-Safe $tmp -Recurse
   }
-  $exe = Get-ChildItem -Path $tmp -Recurse -Filter "labwired*.exe" | Select-Object -First 1
-  if (-not $exe) { $exe = Get-ChildItem -Path $tmp -Recurse -Filter "labwired*" -File | Select-Object -First 1 }
-  if (-not $exe) {
-    Warn "no labwired binary in archive"
-    return $false
-  }
-  Copy-Item $exe.FullName $dest -Force
-  Copy-Item $dest (Join-Path $bin "labwired-sim.exe") -Force
-  Set-Content (Join-Path $tools "VERSION") $tag
   Ok "simulator → $dest"
   return $true
 }
@@ -214,12 +442,17 @@ function Install-Sim {
 function Install-ProbeRs {
   $tools = Join-Path $Prefix "tools\probe-rs"
   $bin = Join-Path $Prefix "bin"
+  Assert-NoReparseAncestors $tools
+  Assert-NoReparseAncestors $bin
   Ensure-Dir $tools
   Ensure-Dir $bin
   $dest = Join-Path $tools "probe-rs.exe"
+  Assert-NoReparseAncestors $dest
   if (Test-Path $dest) {
     Ok "probe-rs already in prefix"
-    Copy-Item $dest (Join-Path $bin "probe-rs.exe") -Force
+    $binDest = Join-Path $bin "probe-rs.exe"
+    Assert-NoReparseAncestors $binDest
+    Copy-Item $dest $binDest -Force
     return $true
   }
 
@@ -231,67 +464,129 @@ function Install-ProbeRs {
     return $false
   }
   $cache = Join-Path $Prefix "cache"
+  Assert-NoReparseAncestors $cache
   Ensure-Dir $cache
   $zip = Join-Path $cache $asset.name
   Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing
   $tmp = Join-Path $env:TEMP ("lw-prs-" + [guid]::NewGuid().ToString("n"))
   Ensure-Dir $tmp
-  Expand-Archive -Path $zip -DestinationPath $tmp -Force
-  $exe = Get-ChildItem -Path $tmp -Recurse -Filter "probe-rs.exe" | Select-Object -First 1
-  if (-not $exe) {
-    Warn "probe-rs.exe not in archive"
-    return $false
+  try {
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    $exe = Get-ChildItem -Path $tmp -Recurse -Filter "probe-rs.exe" | Select-Object -First 1
+    if (-not $exe) {
+      Warn "probe-rs.exe not in archive"
+      return $false
+    }
+    Assert-NoReparseAncestors $dest
+    Copy-Item $exe.FullName $dest -Force
+    $binDest = Join-Path $bin "probe-rs.exe"
+    Assert-NoReparseAncestors $binDest
+    Copy-Item $dest $binDest -Force
+  } finally {
+    Remove-Safe $tmp -Recurse
   }
-  Copy-Item $exe.FullName $dest -Force
-  Copy-Item $dest (Join-Path $bin "probe-rs.exe") -Force
   Ok "probe-rs → $dest"
   return $true
 }
 
+function Stage-AgentKit {
+  $agent = Join-Path $Prefix "agent"
+  $stage = Join-Path $Prefix (".agent-stage-" + [guid]::NewGuid().ToString("n"))
+  Say "staging agent kit → $stage"
+  Assert-NoReparseAncestors $agent
+  Assert-NoReparseAncestors $stage
+  Ensure-Dir $stage
+  $complete = $false
+  try {
+    $robocopyArgs = @(
+      "$Src", "$stage", "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/nc", "/ns", "/np",
+      "/XD", ".git", "node_modules", ".grok", "dist"
+    )
+    & robocopy @robocopyArgs | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
+    $stagedReparse = Get-ChildItem -LiteralPath $stage -Recurse -Force | Where-Object {
+      $_.Attributes -band [IO.FileAttributes]::ReparsePoint
+    } | Select-Object -First 1
+    if ($stagedReparse) { throw "staged Agent contains reparse point: $($stagedReparse.FullName)" }
+    foreach ($required in @("VERSION", "bin\labwired-agent.ps1", "scripts\install.ps1")) {
+      if (-not (Test-Path -LiteralPath (Join-Path $stage $required) -PathType Leaf)) {
+        throw "staged Agent missing required file: $required"
+      }
+    }
+    $complete = $true
+    return $stage
+  } finally {
+    if (-not $complete -and (Test-Path -LiteralPath $stage)) { Remove-Safe $stage -Recurse }
+  }
+}
+
 function Install-AgentKit {
   $agent = Join-Path $Prefix "agent"
-  Say "installing agent kit → $agent"
-  Ensure-Dir $agent
-  # Copy kit (exclude git/node_modules)
-  $robocopyArgs = @(
-    "$Src", "$agent", "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/nc", "/ns", "/np",
-    "/XD", ".git", "node_modules", ".grok", "dist"
-  )
-  & robocopy @robocopyArgs | Out-Null
-  # robocopy exit 0-7 are success
-  if ($LASTEXITCODE -ge 8) { Die "robocopy failed with code $LASTEXITCODE" }
+  $stage = Stage-AgentKit
+  $backup = Join-Path $Prefix (".agent-backup-" + [guid]::NewGuid().ToString("n"))
+  Assert-NoReparseAncestors $agent
+  Assert-NoReparseAncestors $backup
+  try {
+    if (Test-Path -LiteralPath $agent) { Move-Safe $agent $backup }
+    Move-Safe $stage $agent
+  } catch {
+    if (Test-Path -LiteralPath $agent) { Remove-Safe $agent -Recurse }
+    if (Test-Path -LiteralPath $backup) { Move-Safe $backup $agent }
+    if (Test-Path -LiteralPath $stage) { Remove-Safe $stage -Recurse }
+    throw
+  }
+  $script:AgentLive = $agent
+  $script:AgentBackup = if (Test-Path -LiteralPath $backup) { $backup } else { $null }
+  $script:AgentStage = $stage
+  Say "installed agent kit → $agent"
 
   $bin = Join-Path $Prefix "bin"
+  Assert-NoReparseAncestors $bin
   Ensure-Dir $bin
 
-  # labwired.cmd — always works from cmd.exe / PowerShell
-  $cmd = @"
-@echo off
-set LABWIRED_HOME=$Prefix
-set LABWIRED_AGENT_HOME=%LABWIRED_HOME%\agent
-if exist "%LABWIRED_HOME%\tools\sim\labwired-sim.exe" set LABWIRED_CLI=%LABWIRED_HOME%\tools\sim\labwired-sim.exe
-if exist "%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe" set LABWIRED_PROBE_RS=%LABWIRED_HOME%\tools\probe-rs\probe-rs.exe
-powershell -NoProfile -ExecutionPolicy Bypass -File "%LABWIRED_AGENT_HOME%\bin\labwired.ps1" %*
-"@
-  Set-Content -Path (Join-Path $bin "labwired.cmd") -Value $cmd -Encoding ASCII
+  foreach ($launcher in @("labwired.cmd", "labwired.ps1", "labwired-agent.ps1")) {
+    $launcherSrc = Join-Path $Src "bin\$launcher"
+    if (Test-Path $launcherSrc) {
+      $launcherDest = Join-Path $bin $launcher
+      Assert-NoReparseAncestors $launcherDest
+      Protect-Mutation $launcherDest
+      Copy-Item -LiteralPath $launcherSrc -Destination $launcherDest -Force
+    }
+  }
+}
 
-  # Also copy labwired.ps1 into prefix bin for direct use
-  $ps1Src = Join-Path $Src "bin\labwired.ps1"
-  if (Test-Path $ps1Src) {
-    Copy-Item $ps1Src (Join-Path $bin "labwired.ps1") -Force
+function Restore-AgentKit {
+  if ($script:AgentLive -and (Test-Path -LiteralPath $script:AgentLive)) { Remove-Safe $script:AgentLive -Recurse }
+  if ($script:AgentBackup -and (Test-Path -LiteralPath $script:AgentBackup)) {
+    Assert-NoReparseAncestors $script:AgentLive
+    Move-Safe $script:AgentBackup $script:AgentLive
+  }
+}
+
+function Complete-AgentKit {
+  if ($script:AgentBackup -and (Test-Path -LiteralPath $script:AgentBackup)) {
+    try { Remove-Safe $script:AgentBackup -Recurse } catch { Warn "could not remove old Agent backup: $_" }
   }
 }
 
 function Install-UserShim {
+  Assert-NoReparseAncestors $UserBin
+  if (-not (Test-Path -LiteralPath $UserBin)) { Protect-Mutation $UserBin }
   Ensure-Dir $UserBin
   $srcCmd = Join-Path $Prefix "bin\labwired.cmd"
   $dstCmd = Join-Path $UserBin "labwired.cmd"
+  if (Test-ReparsePoint $dstCmd) { Die "refusing reparse-point user shim: $dstCmd" }
+  Protect-Mutation $dstCmd
   Copy-Item $srcCmd $dstCmd -Force
   Ok "user shim → $dstCmd"
 
   # Persist user PATH if missing
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  if ($userPath -notlike "*$UserBin*") {
+  if (-not $SkipPathUpdate -and $userPath -notlike "*$UserBin*") {
+    if (-not $script:UserPathCaptured) {
+      $script:OriginalUserPath = $userPath
+      $script:UserPathCaptured = $true
+    }
     [Environment]::SetEnvironmentVariable("Path", "$UserBin;$userPath", "User")
     $env:Path = "$UserBin;" + $env:Path
     Ok "added $UserBin to user PATH (new shells pick this up)"
@@ -300,24 +595,40 @@ function Install-UserShim {
 
 function Install-OpenCodeConfig {
   $cfg = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".config\opencode" }
-  Ensure-Dir (Join-Path $cfg "skills")
+  Assert-NoReparseAncestors $cfg
+  if (-not (Test-Path -LiteralPath $cfg)) { Protect-Mutation $cfg }
+  $skillsDir = Join-Path $cfg "skills"
+  Protect-Mutation $skillsDir
+  Ensure-Dir $skillsDir
   $agent = Join-Path $Prefix "agent"
   $srcCfg = Join-Path $agent "config\opencode.json"
   if ($Airgap -and (Test-Path (Join-Path $agent "config\opencode.airgap.json"))) {
     $srcCfg = Join-Path $agent "config\opencode.airgap.json"
   }
-  if (Test-Path $srcCfg) {
-    Copy-Item $srcCfg (Join-Path $cfg "opencode.json") -Force
+  if ((Test-Path $srcCfg) -and -not (Test-Path (Join-Path $cfg "opencode.json"))) {
+    $destination = Join-Path $cfg "opencode.json"
+    Protect-Mutation $destination
+    Copy-Safe $srcCfg $destination
   }
-  if (Test-Path (Join-Path $agent "config\AGENTS.md")) {
-    Copy-Item (Join-Path $agent "config\AGENTS.md") (Join-Path $cfg "AGENTS.md") -Force
+  if ((Test-Path (Join-Path $agent "config\AGENTS.md")) -and -not (Test-Path (Join-Path $cfg "AGENTS.md"))) {
+    $destination = Join-Path $cfg "AGENTS.md"
+    Protect-Mutation $destination
+    Copy-Safe (Join-Path $agent "config\AGENTS.md") $destination
   }
   if (Test-Path (Join-Path $agent "skills")) {
-    Copy-Item (Join-Path $agent "skills\*") (Join-Path $cfg "skills") -Recurse -Force
+    Get-ChildItem (Join-Path $agent "skills") -Directory | ForEach-Object {
+      $destination = Join-Path (Join-Path $cfg "skills") $_.Name
+      if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination -Recurse }
+    }
   }
   if (Test-Path (Join-Path $agent "branding")) {
-    Ensure-Dir (Join-Path $cfg "branding")
-    Copy-Item (Join-Path $agent "branding\*") (Join-Path $cfg "branding") -Recurse -Force
+    $brandingDir = Join-Path $cfg "branding"
+    Protect-Mutation $brandingDir
+    Ensure-Dir $brandingDir
+    Get-ChildItem (Join-Path $agent "branding") -File | ForEach-Object {
+      $destination = Join-Path (Join-Path $cfg "branding") $_.Name
+      if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination }
+    }
   }
   Ok "OpenCode config → $cfg"
 }
@@ -326,39 +637,68 @@ function Install-OpenCodeConfig {
 Say "LabWired Agent Windows install"
 Say "prefix: $Prefix  platform: $(Get-PlatformId)"
 
+Assert-NoReparseAncestors $Prefix
+Assert-NoReparseAncestors $UserBin
+$script:PrefixCreated = -not (Test-Path -LiteralPath $Prefix)
 Ensure-Dir $Prefix
-Ensure-Dir (Join-Path $Prefix "bin")
-Ensure-Dir (Join-Path $Prefix "tools")
-Ensure-Dir (Join-Path $Prefix "cache")
-Ensure-Dir (Join-Path $Prefix "agent")
+$prefixBin = Join-Path $Prefix "bin"
+Protect-Mutation $prefixBin
+Ensure-Dir $prefixBin
 
 $env:LABWIRED_HOME = $Prefix
 $env:LABWIRED_AGENT_HOME = Join-Path $Prefix "agent"
 
-Install-OpenCode
-Install-AgentKit
+try {
+  if (-not $SkipOpenCode) { Install-OpenCode }
+  Register-ExistingCore
+  Install-AgentKit
+  if ($TestFailAfterAgentSwap) { throw "injected failure after Agent swap" }
 
-if (-not $Minimal) {
-  $null = Install-ProbeRs
-  $hasSim = Install-Sim
-  if (-not $hasSim) {
-    Warn "Local twin binary not on Windows yet — use hosted verify or WSL for labwired-sim"
+  if ($Full) {
+    $toolsRoot = Join-Path $Prefix "tools"
+    $cacheRoot = Join-Path $Prefix "cache"
+    Protect-Mutation $toolsRoot
+    Protect-Mutation $cacheRoot
+    Ensure-Dir $toolsRoot
+    Ensure-Dir $cacheRoot
+    $null = Install-ProbeRs
+    $hasSim = Install-Sim
+    if (-not $hasSim) {
+      Warn "Local twin binary not on Windows yet — use hosted verify or WSL for labwired-sim"
+    }
+  } else {
+    Say "Agent-only install — skipped simulator, probe-rs, PlatformIO, and Editor"
   }
-} else {
-  Say "minimal install — skipped tools"
+
+  Install-OpenCodeConfig
+  Write-EnvPs1
+  Write-Manifest
+  Install-UserShim
+
+  if (-not $SkipPathUpdate) { $env:Path = "$UserBin;" + $env:Path }
+  $script:InstallCommitted = $true
+} catch {
+  Restore-AgentKit
+  Restore-Mutations
+  if ($script:UserPathCaptured) { [Environment]::SetEnvironmentVariable("Path", $script:OriginalUserPath, "User") }
+  throw
+} finally {
+  if ($script:AgentStage -and (Test-Path -LiteralPath $script:AgentStage)) { Remove-Safe $script:AgentStage -Recurse }
+  if ($script:InstallCommitted) {
+    Complete-AgentKit
+    Complete-Mutations
+  } elseif ($script:MutationState -and (Test-Path -LiteralPath $script:MutationState)) {
+    try { Remove-Safe $script:MutationState -Recurse } catch { Warn "could not remove rolled-back transaction state: $_" }
+  }
+  if (-not $script:InstallCommitted -and $script:PrefixCreated -and (Test-Path -LiteralPath $Prefix)) {
+    try { Remove-Safe $Prefix } catch { Warn "could not remove empty failed-install prefix: $_" }
+  }
 }
-
-Install-OpenCodeConfig
-Write-EnvPs1
-Write-Manifest
-Install-UserShim
-
-$env:Path = "$UserBin;" + $env:Path
 
 Write-Host ""
 Write-Host "✓ LabWired Agent installed" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Run:     labwired"
-Write-Host "  Check:   labwired doctor"
-Write-Host "  Update:  irm https://labwired.com/install.ps1 | iex"
+Write-Host "  Run:     labwired agent"
+Write-Host "  Check:   labwired agent doctor"
+Write-Host "  Update:  irm https://labwired.com/install/agent.ps1 | iex"
 Write-Host ""

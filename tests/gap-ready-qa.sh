@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="/opt/homebrew/opt/node@20/bin:${ROOT}/bin:${HOME}/.labwired/bin:${PATH}"
 RPC="$ROOT/server/rpc-server.mjs"
-EDITOR="/Users/andrii/Projects/labwired-cursor"
+EDITOR="${LABWIRED_EDITOR_ROOT:-$(cd "$ROOT/../labwired-cursor" 2>/dev/null && pwd || true)}"
 OUT="$ROOT/docs/qa/gap-ready-qa-latest.json"
 mkdir -p "$ROOT/docs/qa"
 cp -f "$RPC" "${HOME}/.labwired/agent/server/rpc-server.mjs" 2>/dev/null || true
@@ -47,7 +47,7 @@ ok("chat-ux-starters", has(f"{editor}/src/vs/workbench/contrib/void/browser/reac
 ok("chat-ux-claims", has(f"{editor}/src/vs/workbench/contrib/void/browser/react/src/sidebar-tsx/SidebarChat.tsx", r"model_verified"))
 
 # twin
-r = subprocess.run(["labwired", "assert-status", "model_verified", f"{root}/fixtures/gate1/artifacts/fixed.verify.json"], capture_output=True, text=True)
+r = subprocess.run([f"{root}/bin/labwired-agent", "assert-status", "model_verified", f"{root}/fixtures/gate1/artifacts/fixed.verify.json"], capture_output=True, text=True)
 ok("twin-gate1", r.returncode == 0, r.stderr[:80] or r.stdout[:80])
 
 # RPC
