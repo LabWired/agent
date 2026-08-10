@@ -43,13 +43,13 @@ run "gap-ready-qa"      "$ROOT/tests/gap-ready-qa.sh"
 if [[ "${LABWIRED_TEST_INSTALL_SMOKE:-1}" == "1" ]]; then
   run "install-smoke"   "$ROOT/tests/install-smoke.sh"
 else
-  echo "skip install-smoke (LABWIRED_TEST_INSTALL_SMOKE=0)"
+  echo "not run install-smoke (LABWIRED_TEST_INSTALL_SMOKE=0)"
 fi
 
 if [[ "${LABWIRED_TEST_LLM:-1}" == "1" ]]; then
   run "llm-deepinfra"   "$ROOT/tests/llm-deepinfra.sh"
 else
-  echo "skip llm-deepinfra (LABWIRED_TEST_LLM=0)"
+  echo "not run llm-deepinfra (LABWIRED_TEST_LLM=0)"
 fi
 
 echo ""

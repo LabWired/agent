@@ -2,10 +2,10 @@
 
 ## 0.3.7 — 2026-08-10 — Public Agent release
 
-- Start the Agent with `labwired agent` on Unix or Windows.
-- Install only the Agent from `/install/agent`.
+- Start the agent with `labwired agent`.
+- Install only the agent from `/install/agent`.
 - Keep existing LabWired Core commands working.
-- Update and remove the Agent without changing Core data.
+- Update and remove the agent without changing Core data.
 - Use shorter public documentation.
 
 ## 0.3.7 — 2026-08-06 — Close top gaps (knowledge, ship-gate, compose, start-here)

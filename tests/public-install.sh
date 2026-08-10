@@ -57,6 +57,20 @@ else
   fail=1
 fi
 
+if grep -Eq 'echo .*\bskip(ped)?\b' \
+  "$ROOT/tests/llm-deepinfra.sh" "$ROOT/tests/all.sh" "$ROOT/scripts/dev-cycle.sh"; then
+  echo "FAIL optional lanes must report not run"
+  fail=1
+elif grep -q 'not run llm-deepinfra' "$ROOT/tests/llm-deepinfra.sh" \
+  && grep -q 'not run install-smoke' "$ROOT/tests/all.sh" \
+  && grep -q 'twin not run' "$ROOT/scripts/dev-cycle.sh" \
+  && grep -q 'desk not run' "$ROOT/scripts/dev-cycle.sh"; then
+  echo "ok   optional lanes report not run"
+else
+  echo "FAIL optional lanes missing not run output"
+  fail=1
+fi
+
 # Windows scripts exist
 for f in scripts/public/install.ps1 scripts/install.ps1 bin/labwired.ps1 bin/labwired-agent.ps1 bin/labwired.cmd tests/windows-contract.ps1; do
   if [[ -f "$ROOT/$f" ]]; then

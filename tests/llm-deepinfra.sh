@@ -29,7 +29,7 @@ _load_secrets() {
 _load_secrets
 
 if [[ -z "${DEEPINFRA_API_KEY:-}" ]]; then
-  echo "skip llm-deepinfra: DEEPINFRA_API_KEY not set"
+  echo "not run llm-deepinfra: DEEPINFRA_API_KEY not set"
   echo "  export DEEPINFRA_API_KEY=…   # or put in ~/.local/secrets/labwired.env"
   echo "  model default: moonshotai/Kimi-K2.5"
   exit 0

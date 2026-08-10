@@ -14,8 +14,8 @@ Then enter this prompt:
 LabWired Agent can find board information, write firmware, repair failures, and
 check expected behavior. It reports what it observed and what it could not test.
 
-LabWired Agent is optional. It does not install LabWired Core or the Editor.
-Existing Core installations and data stay in place.
+LabWired Agent is optional. It does not install LabWired Core. Existing Core
+installations and data stay in place.
 
 ## Guides
 
