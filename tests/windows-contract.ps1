@@ -95,7 +95,12 @@ exit /b 0
   $result = Invoke-Dispatcher @("agent", "capture", "spaced value", "", "say`"hi", "tail")
   Assert-True ($result.Status -eq 0) "Agent argv capture exits zero"
   $actual = @(Get-Content $ArgsFile)
-  Assert-True (($actual -join '|') -eq '<capture>|<spaced value>|<>|<say"hi>|<tail>') "script component preserves spaced, empty, and quoted argv"
+  $joined = ($actual -join '|')
+  $expected = '<capture>|<spaced value>|<>|<say"hi>|<tail>'
+  if ($joined -ne $expected) {
+    Write-Host "DEBUG agent argv actual=[$joined] expected=[$expected] raw-out=[$($result.Output)]" -ForegroundColor Yellow
+  }
+  Assert-True ($joined -eq $expected) "script component preserves spaced, empty, and quoted argv"
 
   Remove-Item $ArgsFile -Force
   $shimCommand = '"{0}" agent capture "spaced value" "" tail' -f $Shim
