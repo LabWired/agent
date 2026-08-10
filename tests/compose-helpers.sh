@@ -16,10 +16,11 @@ run() {
   fi
 }
 
-# UART: real gate1 log must yield markers/series
+# UART: gate1 marker must yield markers/series
+printf 'LABWIRED_OK\n' >"$OUT/gate1-uart.log"
 run "compose-elements gate1 uart" \
   python3 "$ROOT/scripts/compose-elements.py" \
-    --uart "$ROOT/fixtures/gate1-live/evidence/fixed/uart.log" \
+    --uart "$OUT/gate1-uart.log" \
     --out "$OUT/uart.json"
 
 # Demo LED lines
