@@ -38,7 +38,9 @@ function Get-CoreBin {
 }
 
 function ConvertTo-WindowsNativeArgument([AllowEmptyString()][string]$Value) {
-  if ($Value.Length -gt 0 -and $Value -notmatch '[\s"]') { return $Value }
+  # Quote when empty, whitespace/quotes present, or cmd.exe metacharacters so
+  # values like a&b survive CreateProcess → cmd (.cmd/.bat Core launchers).
+  if ($Value.Length -gt 0 -and $Value -notmatch '[\s"&|<>()^%!]') { return $Value }
   $encoded = New-Object Text.StringBuilder
   $backslash = [char]92
   $quote = [char]34
@@ -87,7 +89,9 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
     [Console]::Error.WriteLine("Install it, or set $overrideName to its executable.")
     exit 1
   }
-  if ([IO.Path]::GetExtension($Path) -ieq ".exe") {
+  $ext = [IO.Path]::GetExtension($Path)
+  # .exe and .cmd/.bat need CreateProcess-style quoting; .ps1 can use PowerShell splat.
+  if ($ext -ieq ".exe" -or $ext -ieq ".cmd" -or $ext -ieq ".bat") {
     exit (Invoke-NativeComponent $Path $Arguments)
   }
   & $Path @Arguments
