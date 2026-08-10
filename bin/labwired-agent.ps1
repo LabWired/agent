@@ -46,6 +46,23 @@ if (Test-Path $prs) { $env:LABWIRED_PROBE_RS = $prs }
 function Say([string]$m) { Write-Host "==> $m" -ForegroundColor Cyan }
 function Fail([string]$m) { Write-Host "labwired: $m" -ForegroundColor Red; exit 1 }
 
+function Test-ReparsePoint([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  return [bool]((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)
+}
+
+function Assert-SafePath([string]$Path) {
+  $current = [IO.Path]::GetFullPath($Path)
+  while ($current) {
+    if ((Test-Path -LiteralPath $current) -and (Test-ReparsePoint $current)) {
+      Fail "refusing reparse-point path ancestor: $current"
+    }
+    $parent = Split-Path -Parent $current
+    if (-not $parent -or $parent -eq $current) { break }
+    $current = $parent
+  }
+}
+
 $cmd = if ($Rest -and $Rest.Count -gt 0) { $Rest[0] } else { "" }
 $argsRest = if ($Rest -and $Rest.Count -gt 1) { $Rest[1..($Rest.Count - 1)] } else { @() }
 
@@ -155,7 +172,9 @@ function Cmd-Package {
     }
     "uninstall" {
       if ($argsRest -notcontains "--yes") { Fail "re-run: labwired agent package uninstall --yes" }
-      Remove-Item (Join-Path $HomeDir "agent") -Recurse -Force -ErrorAction SilentlyContinue
+      $uninstallTarget = Join-Path $HomeDir "agent"
+      Assert-SafePath $uninstallTarget
+      Remove-Item -LiteralPath $uninstallTarget -Recurse -Force -ErrorAction SilentlyContinue
       Say "uninstalled Agent from $HomeDir (shared Core, tools, data, and dispatcher retained)"
     }
     default {
@@ -174,27 +193,28 @@ function Cmd-InstallDeps {
 }
 
 function Cmd-Update {
-  # Cursor-style: agent update → re-fetch kit + reinstall into prefix
+  # Clone into isolation; install.ps1 performs the verified atomic Agent swap.
   Say "LabWired self-update (Windows)"
   $repo = if ($env:LABWIRED_AGENT_REPO) { $env:LABWIRED_AGENT_REPO } else { "https://github.com/LabWired/agent.git" }
   $ref = if ($env:LABWIRED_AGENT_REF) { $env:LABWIRED_AGENT_REF } else { "main" }
-  if (Test-Path (Join-Path $AgentHome ".git")) {
-    Say "git fetch $ref"
-    git -C $AgentHome fetch --depth 1 origin $ref
-    git -C $AgentHome checkout -q FETCH_HEAD
-  } elseif (Get-Command git -ErrorAction SilentlyContinue) {
-    Say "cloning kit"
-    $tmp = Join-Path $env:TEMP ("lw-upd-" + [guid]::NewGuid().ToString("n"))
-    git clone --depth 1 --branch $ref $repo $tmp
-    if (Test-Path $AgentHome) { Remove-Item $AgentHome -Recurse -Force }
-    Move-Item $tmp $AgentHome
-  } else {
-    Fail "git required for update"
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "git required for update" }
+  $tmp = Join-Path $env:TEMP ("lw-upd-" + [guid]::NewGuid().ToString("n"))
+  Assert-SafePath $tmp
+  try {
+    Say "staging update"
+    & git clone --depth 1 --branch $ref $repo $tmp
+    if ($LASTEXITCODE -ne 0) { Fail "git clone failed with code $LASTEXITCODE" }
+    $install = Join-Path $tmp "scripts\install.ps1"
+    foreach ($required in @($install, (Join-Path $tmp "bin\labwired-agent.ps1"), (Join-Path $tmp "VERSION"))) {
+      if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { Fail "staged update is incomplete: $required" }
+    }
+    & $install -Prefix $HomeDir -AgentOnly
+    if (-not $?) { Fail "Agent installer failed" }
+    Say "update complete — run: labwired agent doctor"
+  } finally {
+    Assert-SafePath $tmp
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
   }
-  $install = Join-Path $AgentHome "scripts\install.ps1"
-  if (-not (Test-Path $install)) { Fail "install.ps1 missing after update" }
-  & $install -Prefix $HomeDir -AgentOnly
-  Say "update complete — run: labwired agent doctor"
 }
 
 switch ($cmd) {

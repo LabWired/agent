@@ -45,6 +45,10 @@ function Invoke-Component([string]$Path, [string]$Name, [string[]]$Arguments) {
     [Console]::Error.WriteLine("Install it, or set $overrideName to its executable.")
     exit 1
   }
+  # Windows PowerShell 5.1's native-command serializer cannot reliably encode
+  # empty arguments or literal embedded quotes. Script components and the cmd
+  # shim preserve them; for native Core binaries this dispatcher forwards every
+  # argument exactly as PowerShell represents it and adds no extra parsing.
   & $Path @Arguments
   if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
   if (-not $?) { exit 1 }

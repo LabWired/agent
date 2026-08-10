@@ -71,7 +71,11 @@ if grep -q '\[switch\]\$AgentOnly' "$ROOT/scripts/install.ps1" \
   && grep -q -- '-AgentOnly' "$ROOT/scripts/public/install.ps1" \
   && grep -Fq 'components\core\bin' "$ROOT/scripts/install.ps1" \
   && grep -Fq 'Join-Path $UserBin "labwired.exe"' "$ROOT/scripts/install.ps1" \
-  && grep -q 'Assert-NoReparseAncestors' "$ROOT/scripts/install.ps1"; then
+  && grep -q 'Assert-NoReparseAncestors' "$ROOT/scripts/install.ps1" \
+  && grep -q 'Stage-AgentKit' "$ROOT/scripts/install.ps1" \
+  && grep -q 'Restore-AgentKit' "$ROOT/scripts/install.ps1" \
+  && grep -q 'LABWIRED_CORE_COMMAND_CONTRACT=argv-v1' "$ROOT/scripts/install.ps1" \
+  && ! grep -q '& \$Path --version' "$ROOT/scripts/install.ps1"; then
   echo "ok   Windows installer/dispatcher static checks"
 else
   echo "FAIL Windows installer/dispatcher static checks incomplete"
