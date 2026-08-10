@@ -393,13 +393,17 @@ source "$(labwired_prefix_home)/env.sh" 2>/dev/null || true
 # Soft PATH persistence (portable — only if missing)
 _user_bin="$(labwired_user_bin)"
 _prefix="$(labwired_prefix_home)"
+# Marker must match the comment we write so reinstall is idempotent (temp
+# prefixes do not contain ~/.labwired paths that older greps looked for).
+_LW_PATH_MARKER='LabWired Agent (portable prefix)'
 for _rc in "${HOME}/.zprofile" "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
   if [[ -f "$_rc" ]] || [[ "$_rc" == "${HOME}/.zprofile" ]]; then
     if [[ ! -f "$_rc" ]]; then touch "$_rc"; fi
-    if ! grep -q 'LABWIRED_HOME\|labwired/env.sh\|\.labwired/bin' "$_rc" 2>/dev/null; then
+    if ! grep -Fq "$_LW_PATH_MARKER" "$_rc" 2>/dev/null \
+      && ! grep -q 'LABWIRED_HOME\|labwired/env.sh\|\.labwired/bin' "$_rc" 2>/dev/null; then
       {
         echo ""
-        echo "# LabWired Agent (portable prefix)"
+        echo "# ${_LW_PATH_MARKER}"
         echo "[ -f \"${_prefix}/env.sh\" ] && . \"${_prefix}/env.sh\""
         echo "export PATH=\"${_user_bin}:\$PATH\""
       } >>"$_rc"

@@ -1,5 +1,5 @@
 @echo off
-REM LabWired product dispatcher — Windows entry (cmd.exe)
+REM LabWired product dispatcher - Windows entry (cmd.exe)
 setlocal
 if defined LABWIRED_HOME goto :run
 set "LABWIRED_HOME=%USERPROFILE%\.labwired"

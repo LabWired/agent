@@ -229,8 +229,8 @@ exit /b 0
   $priorAgentPrefix = Join-Path $TempRoot "prior-agent-wrapper"
   New-Item -ItemType Directory -Path (Join-Path $priorAgentPrefix "bin") -Force | Out-Null
   $priorAgentContent = (Get-Content (Join-Path $Root "bin\labwired.cmd") -Raw).Replace(
-    "REM LabWired product dispatcher — Windows entry (cmd.exe)",
-    "REM LabWired Agent — Windows entry (cmd.exe)"
+    "REM LabWired product dispatcher - Windows entry (cmd.exe)",
+    "REM LabWired Agent - Windows entry (cmd.exe)"
   )
   [IO.File]::WriteAllText((Join-Path $priorAgentPrefix "bin\labwired.cmd"), $priorAgentContent, (New-Object Text.UTF8Encoding($true)))
   $result = Invoke-Installer @("-Prefix", $priorAgentPrefix, "-UserBin", (Join-Path $TempRoot "prior-agent-bin"), "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")

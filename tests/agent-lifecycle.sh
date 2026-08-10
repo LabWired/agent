@@ -72,7 +72,13 @@ grep -qx 'keep me' "$LABWIRED_HOME/user-data/keep.txt"
 test ! -e "$LABWIRED_HOME/tools/sim/labwired-sim"
 test ! -d "$LABWIRED_HOME/editor"
 grep -qx 'existing rc' "$HOME/.zprofile"
-[[ "$(grep -c 'LabWired Agent (portable prefix)' "$HOME/.zprofile")" -eq 1 ]]
+# Portable prefixes never contain ~/.labwired; hook idempotency is by marker comment.
+_hook_count="$(grep -c 'LabWired Agent (portable prefix)' "$HOME/.zprofile" || true)"
+if [[ "$_hook_count" -ne 1 ]]; then
+  echo "FAIL expected one PATH hook, got ${_hook_count}:" >&2
+  cat "$HOME/.zprofile" >&2
+  exit 1
+fi
 cmp "$CORE_TARGET" "$TMP/original-core"
 cmp "$TMP/original-config.json" "$OPENCODE_CONFIG_DIR/opencode.json.labwired-backup"
 grep -q '"custom"' "$OPENCODE_CONFIG_DIR/opencode.json"

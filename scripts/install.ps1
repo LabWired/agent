@@ -205,8 +205,8 @@ function Test-LegacyAgentLauncher([string]$Path) {
     $content = ((Get-Content -LiteralPath $Path -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
     $current = ((Get-Content -LiteralPath (Join-Path $Src "bin\labwired.cmd") -Raw).TrimStart([char]0xfeff)) -replace "`r`n", "`n"
     $priorCanonical = $current.Replace(
-      "REM LabWired product dispatcher — Windows entry (cmd.exe)",
-      "REM LabWired Agent — Windows entry (cmd.exe)"
+      "REM LabWired product dispatcher - Windows entry (cmd.exe)",
+      "REM LabWired Agent - Windows entry (cmd.exe)"
     )
     $generatedLegacy = @"
 @echo off
