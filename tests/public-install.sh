@@ -12,6 +12,7 @@ bash -n "$ROOT/lib/smoke.sh" || fail=1
 bash -n "$ROOT/lib/prefix.sh" || fail=1
 bash -n "$ROOT/lib/install-deps.sh" || fail=1
 bash -n "$ROOT/bin/labwired" || fail=1
+bash -n "$ROOT/bin/labwired-agent" || fail=1
 
 # Public install must mention windows redirect and tarball/codeload
 if grep -q 'win32\|Windows' "$ROOT/scripts/public/install"; then
