@@ -423,7 +423,7 @@ PY
     echo "labwired: warning — no project id yet; set LABWIRED_PROJECT before chatting" >&2
   fi
   say "session: $path"
-  say "start with: labwired"
+  say "start with: labwired agent"
   labwired_install_hosted_opencode_config || true
 }
 
