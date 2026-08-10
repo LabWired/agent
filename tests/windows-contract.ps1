@@ -109,7 +109,7 @@ exit /b 0
   Assert-True ((Get-Content $ArgsFile -Raw).Trim() -eq 'test "board one"') "Core receives a spaced argv intact"
   $result = Invoke-Dispatcher @("test", "board two")
   Assert-True ($result.Status -eq 0 -and $result.Output -match 'core:test') "legacy test routes to Core"
-  $result = Invoke-Dispatcher @("core", "test", "quoted value", "trail\", "100%", "bang!", "a&b", "(group)")
+  $result = Invoke-DispatcherWithExactArgs @("core", "test", "quoted value", "trail\", "100%", "bang!", "a&b", "(group)")
   Assert-True ($result.Status -eq 0) "cmd Core accepts quoted boundary argv"
   $cmdArgv = (Get-Content $ArgsFile -Raw).Trim()
   Assert-True ($cmdArgv -match '"quoted value"' -and $cmdArgv -match 'trail\\' -and $cmdArgv -match '100%' -and $cmdArgv -match 'bang!' -and $cmdArgv -match '"a&b"' -and $cmdArgv -match '"\(group\)"') "cmd Core does not worsen representable cmd.exe argv"
