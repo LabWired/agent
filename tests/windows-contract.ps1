@@ -141,7 +141,15 @@ public static class NativeArgvEcho {
   Assert-True ($result.Status -eq 0) "native Core executable route exits zero"
   $expectedNative = @($nativeArgs | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_)) })
   $actualNative = @($result.Output -split "`r?`n" | Where-Object { $_.Length -gt 0 })
-  Assert-True (($actualNative -join '|') -eq ($expectedNative -join '|')) "native Core preserves all argv boundaries"
+  $nativeJoined = ($actualNative -join '|')
+  $nativeExpectedJoined = ($expectedNative -join '|')
+  if ($nativeJoined -ne $nativeExpectedJoined) {
+    $decoded = @($actualNative | ForEach-Object {
+      try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) } catch { "<bad:$_>" }
+    })
+    Write-Host ("DEBUG native actual=[{0}] decoded=[{1}]" -f $nativeJoined, ($decoded -join '|')) -ForegroundColor Yellow
+  }
+  Assert-True ($nativeJoined -eq $nativeExpectedJoined) "native Core preserves all argv boundaries"
   $result = Invoke-DispatcherWithExactArgs @("core", "--exit=23")
   Assert-True ($result.Status -eq 23) "native Core nonzero exit is propagated exactly"
   $result = Invoke-DispatcherWithExactArgs @("core", "--streams")
