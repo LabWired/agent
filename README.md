@@ -3,7 +3,14 @@
 Write firmware and test its behavior on a digital twin.
 
 ```bash
-curl -fsSL https://labwired.com/install/agent | bash
+# macOS / Linux
+curl -fsSL https://labwired.com/install | bash
+labwired agent
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://labwired.com/install.ps1 | iex
 labwired agent
 ```
 

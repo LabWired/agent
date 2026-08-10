@@ -1,9 +1,16 @@
 # Changelog
 
+## 0.3.8 — 2026-08-10 — Product branding + install URLs
+
+- LabWired TUI theme (`branding/themes/labwired.json`) applied on install and agent start.
+- Splash banner, terminal title, and product start messages (OpenCode remains the engine).
+- Public install URLs match the live site: `labwired.com/install` (macOS/Linux) and `labwired.com/install.ps1` (Windows).
+- `labwired agent opencode` stays a supported alias.
+
 ## 0.3.7 — 2026-08-10 — Public Agent release
 
 - Start the agent with `labwired agent`.
-- Install only the agent from `/install/agent`.
+- Install only the agent from `labwired.com/install`.
 - Keep existing LabWired Core commands working.
 - Update and remove the agent without changing Core data.
 - Use shorter public documentation.

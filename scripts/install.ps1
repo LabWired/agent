@@ -32,7 +32,7 @@
   Require LABWIRED_MCP_ENTRY or mcp\vendor.
 
 .EXAMPLE
-  irm https://labwired.com/install/agent.ps1 | iex
+  irm https://labwired.com/install.ps1 | iex
   .\scripts\install.ps1 -Prefix $env:USERPROFILE\.labwired
 #>
 [CmdletBinding()]
@@ -621,16 +621,42 @@ function Install-OpenCodeConfig {
       if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination -Recurse }
     }
   }
+  # LabWired product chrome: always refresh theme; keep user banner if present.
+  $themeSrc = Join-Path $agent "branding\themes\labwired.json"
+  if (Test-Path $themeSrc) {
+    $themesDir = Join-Path $cfg "themes"
+    Protect-Mutation $themesDir
+    Ensure-Dir $themesDir
+    $themeDst = Join-Path $themesDir "labwired.json"
+    Protect-Mutation $themeDst
+    Copy-Safe $themeSrc $themeDst
+  }
   if (Test-Path (Join-Path $agent "branding")) {
     $brandingDir = Join-Path $cfg "branding"
     Protect-Mutation $brandingDir
     Ensure-Dir $brandingDir
     Get-ChildItem (Join-Path $agent "branding") -File | ForEach-Object {
-      $destination = Join-Path (Join-Path $cfg "branding") $_.Name
-      if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination }
+      $destination = Join-Path $brandingDir $_.Name
+      if (-not (Test-Path $destination)) {
+        Protect-Mutation $destination
+        Copy-Safe $_.FullName $destination
+      }
     }
   }
-  Ok "OpenCode config → $cfg"
+  $tuiSrc = Join-Path $agent "config\tui.json"
+  $tuiDst = Join-Path $cfg "tui.json"
+  if (Test-Path $tuiSrc) {
+    $shouldWriteTui = -not (Test-Path $tuiDst)
+    if (-not $shouldWriteTui) {
+      $existing = Get-Content -Raw $tuiDst
+      if ($existing -match '"theme"\s*:\s*"(system|opencode)"') { $shouldWriteTui = $true }
+    }
+    if ($shouldWriteTui) {
+      Protect-Mutation $tuiDst
+      Copy-Safe $tuiSrc $tuiDst
+    }
+  }
+  Ok "LabWired config → $cfg (OpenCode engine)"
 }
 
 # ── main ─────────────────────────────────────────────────────────────────────
@@ -700,5 +726,5 @@ Write-Host "✓ LabWired Agent installed" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Run:     labwired agent"
 Write-Host "  Check:   labwired agent doctor"
-Write-Host "  Update:  irm https://labwired.com/install/agent.ps1 | iex"
+Write-Host "  Update:  irm https://labwired.com/install.ps1 | iex"
 Write-Host ""

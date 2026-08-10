@@ -1,9 +1,10 @@
 # LabWired Agent — one-line install (Windows, Cursor-style)
 #
-#   irm https://labwired.com/install/agent.ps1 | iex
+#   irm https://labwired.com/install.ps1 | iex
 #   irm 'https://labwired.com/install?win32=true' | iex
 #
 # That's it. Then: labwired agent
+# Legacy: agent-install.ps1
 #Requires -Version 5.1
 $ErrorActionPreference = "Stop"
 

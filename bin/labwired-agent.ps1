@@ -71,7 +71,7 @@ function Show-Help {
 LabWired Agent (Windows)
 
 Usage:
-  labwired agent                 Start agent (OpenCode)
+  labwired agent                 Start LabWired Agent
   labwired agent doctor          Check install
   labwired agent update          Self-update kit + tools
   labwired agent version         Version
@@ -80,11 +80,62 @@ Usage:
   labwired agent install-deps    Refresh tools into prefix
   labwired agent help
 
+  Alias: labwired agent opencode …  (same start; OpenCode engine)
+
 Env:
   LABWIRED_HOME            Install root (default %USERPROFILE%\.labwired)
   LABWIRED_CLI / LABWIRED_SIM   Simulator
   LABWIRED_PROBE_RS        probe-rs.exe
 "@
+}
+
+function Apply-LabWiredBranding {
+  $cfg = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".config\opencode" }
+  $themesDir = Join-Path $cfg "themes"
+  $brandingDir = Join-Path $cfg "branding"
+  if (-not (Test-Path $themesDir)) { New-Item -ItemType Directory -Path $themesDir -Force | Out-Null }
+  if (-not (Test-Path $brandingDir)) { New-Item -ItemType Directory -Path $brandingDir -Force | Out-Null }
+  $themeSrc = Join-Path $AgentHome "branding\themes\labwired.json"
+  if (Test-Path $themeSrc) {
+    Copy-Item -Force $themeSrc (Join-Path $themesDir "labwired.json")
+  }
+  $bannerSrc = Join-Path $AgentHome "branding\banner.txt"
+  $bannerDst = Join-Path $brandingDir "banner.txt"
+  if ((Test-Path $bannerSrc) -and -not (Test-Path $bannerDst)) {
+    Copy-Item $bannerSrc $bannerDst
+  }
+  $tuiSrc = Join-Path $AgentHome "config\tui.json"
+  $tuiDst = Join-Path $cfg "tui.json"
+  $writeTui = -not (Test-Path $tuiDst)
+  if (-not $writeTui -and (Test-Path $tuiDst)) {
+    $existing = Get-Content -Raw $tuiDst
+    if ($existing -match '"theme"\s*:\s*"(system|opencode)"') { $writeTui = $true }
+  }
+  if ($writeTui) {
+    if (Test-Path $tuiSrc) {
+      Copy-Item -Force $tuiSrc $tuiDst
+    } else {
+      Set-Content -Path $tuiDst -Value @"
+{
+  "`$schema": "https://opencode.ai/tui.json",
+  "theme": "labwired"
+}
+"@ -Encoding utf8
+    }
+  }
+  try {
+    $Host.UI.RawUI.WindowTitle = "LabWired Agent"
+  } catch { }
+}
+
+function Show-LabWiredSplash {
+  $banner = Join-Path $AgentHome "branding\banner.txt"
+  if (Test-Path $banner) {
+    Write-Host (Get-Content $banner -Raw) -ForegroundColor Blue
+  } else {
+    Write-Host "  LabWired Agent" -ForegroundColor Blue
+    Write-Host "  Write firmware · check on a twin" -ForegroundColor Blue
+  }
 }
 
 function Cmd-Version {
@@ -232,20 +283,38 @@ switch ($cmd) {
   "update" { Cmd-Update }
   "self-update" { Cmd-Update }
   "upgrade" { Cmd-Update }
+  "opencode" {
+    # Alias for product start (OpenCode remains the engine).
+    if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
+      $pin = if ($env:OPENCODE_PIN) { $env:OPENCODE_PIN } else { "1.18.7" }
+      Fail "'opencode' not found. Install Node 18+, then: npm i -g opencode-ai@$pin"
+    }
+    Apply-LabWiredBranding
+    if (-not $env:LABWIRED_CLI) {
+      Write-Host "labwired: note — no local sim; hosted MCP verify still works." -ForegroundColor Yellow
+    }
+    Show-LabWiredSplash
+    Write-Host "labwired: starting LabWired Agent (OpenCode engine)" -ForegroundColor Cyan
+    & opencode @argsRest
+  }
   "" {
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
       $pin = if ($env:OPENCODE_PIN) { $env:OPENCODE_PIN } else { "1.18.7" }
       Fail "'opencode' not found. Install Node 18+, then: npm i -g opencode-ai@$pin"
     }
+    Apply-LabWiredBranding
     if (-not $env:LABWIRED_CLI) {
       Write-Host "labwired: note — no local sim; hosted MCP verify still works." -ForegroundColor Yellow
     }
+    Show-LabWiredSplash
+    Write-Host "labwired: starting LabWired Agent (OpenCode engine)" -ForegroundColor Cyan
     & opencode @argsRest
   }
   default {
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
       Fail "unknown command '$cmd' and opencode missing"
     }
+    Apply-LabWiredBranding
     & opencode @Rest
   }
 }
