@@ -217,6 +217,9 @@ exit /b 0
   $env:OPENCODE_CONFIG_DIR = $configDir
   $installArgs = @("-Prefix", $installPrefix, "-UserBin", $userBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
   $result = Invoke-Installer $installArgs
+  if ($result.Status -ne 0) {
+    Write-Host ("DEBUG installer status={0} out=[{1}]" -f $result.Status, $result.Output) -ForegroundColor Yellow
+  }
   Assert-True ($result.Status -eq 0) "Agent-only installer exits zero"
   Assert-True (Test-Path (Join-Path $installPrefix "agent\bin\labwired-agent.ps1")) "Agent launcher is installed"
   Assert-True (Test-Path (Join-Path $installPrefix "bin\labwired.ps1")) "dispatcher is installed"
