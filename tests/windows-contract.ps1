@@ -25,9 +25,15 @@ function Assert-True([bool]$Condition, [string]$Message) {
   Write-Host "ok   $Message"
 }
 
+function Invoke-NativePowerShell([string[]]$ArgumentList) {
+  # Capture native exit code before pipeline cmdlets (Out-String) clobber it.
+  $raw = & $PowerShellExe @ArgumentList 2>&1
+  $code = $LASTEXITCODE
+  return @{ Output = ($raw | Out-String); Status = $code }
+}
+
 function Invoke-Dispatcher([string[]]$Arguments) {
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $Dispatcher @Arguments 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Dispatcher) + @($Arguments)))
 }
 
 function Invoke-DispatcherWithExactArgs([string[]]$Arguments) {
@@ -39,15 +45,16 @@ function Invoke-DispatcherWithExactArgs([string[]]$Arguments) {
 `$encoded = @($literals)
 `$argv = @(`$encoded | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$_)) })
 & `$path @argv
+if (`$null -ne `$LASTEXITCODE) { exit `$LASTEXITCODE }
+if (-not `$?) { exit 1 }
+exit 0
 "@
   $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
 }
 
 function Invoke-Installer([string[]]$Arguments) {
-  $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $Installer @Arguments 2>&1 | Out-String
-  return @{ Output = $output; Status = $LASTEXITCODE }
+  return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Installer) + @($Arguments)))
 }
 
 try {
