@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # LabWired Agent — one-line install (Cursor-style)
 #
-#   curl -fsSL https://labwired.com/install | bash
+#   curl -fsSL https://labwired.com/install/agent | bash
 #
 # That's it. Then: labwired
 #
 # Windows:  irm https://labwired.com/install.ps1 | iex
-# Optional: curl -fsSL https://labwired.com/install | bash -s -- --prefix /opt/labwired
+# Optional: curl -fsSL https://labwired.com/install/agent | bash -s -- --prefix /opt/labwired
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || true)" == MINGW* ]] \
@@ -90,13 +90,5 @@ fi
 
 [[ -f "$AGENT_HOME/install.sh" ]] || die "install.sh missing in $AGENT_HOME"
 
-# Default: full stack (agent + sim + probe). Pass-through flags.
-has_mode=0
-for a in "$@"; do
-  case "$a" in --full|--minimal) has_mode=1 ;; esac
-done
-if [[ "$has_mode" -eq 0 ]]; then
-  exec bash "$AGENT_HOME/install.sh" --full "$@"
-else
-  exec bash "$AGENT_HOME/install.sh" "$@"
-fi
+# Public quick start is Agent-only. Core tools remain an explicit development mode.
+exec bash "$AGENT_HOME/install.sh" --agent-only "$@"

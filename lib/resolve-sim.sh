@@ -106,6 +106,7 @@ labwired_resolve_sim() {
   local prefix_home="${LABWIRED_HOME:-$HOME/.labwired}"
   if try_one "${prefix_home}/tools/sim/labwired-sim"; then return 0; fi
   if try_one "${prefix_home}/bin/labwired-sim"; then return 0; fi
+  if try_one "${prefix_home}/components/core/bin/labwired"; then return 0; fi
 
   # Prefer explicit sim names before generic `labwired`
   if try_one labwired-sim; then return 0; fi

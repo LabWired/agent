@@ -34,6 +34,9 @@ labwired_prefix_home() {
 
 labwired_prefix_agent() { echo "$(labwired_prefix_home)/agent"; }
 labwired_prefix_bin() { echo "$(labwired_prefix_home)/bin"; }
+labwired_prefix_components() { echo "$(labwired_prefix_home)/components"; }
+labwired_prefix_core_bin() { echo "$(labwired_prefix_components)/core/bin/labwired"; }
+labwired_prefix_agent_bin() { echo "$(labwired_prefix_agent)/bin/labwired-agent"; }
 labwired_prefix_tools() { echo "$(labwired_prefix_home)/tools"; }
 labwired_prefix_cache() { echo "$(labwired_prefix_home)/cache"; }
 labwired_prefix_manifest() { echo "$(labwired_prefix_home)/MANIFEST.json"; }
@@ -106,11 +109,43 @@ labwired_prefix_ensure_dirs() {
   mkdir -p \
     "$h/bin" \
     "$h/agent" \
+    "$h/components" \
     "$h/tools/sim" \
     "$h/tools/probe-rs" \
     "$h/tools/pio" \
     "$h/cache" \
     "$h/share"
+}
+
+# Preserve a pre-existing standalone Core binary before installing the product
+# dispatcher at the user-facing `labwired` path.
+labwired_prefix_register_existing_core() {
+  local source="${1:-}" target target_dir tmp
+  [[ -n "$source" && -x "$source" ]] || return 0
+  target="$(labwired_prefix_core_bin)"
+  [[ "$source" != "$target" ]] || return 0
+
+  # Never register one of our shell dispatchers/agent launchers as Core: doing
+  # so would make `labwired core` recursively dispatch to itself.
+  if head -n 80 "$source" 2>/dev/null \
+    | grep -Eq 'labwired_product_help|labwired_dispatch_exec_|LABWIRED_AGENT_HOME|LabWired Agent'; then
+    return 0
+  fi
+
+  target_dir="$(dirname "$target")"
+  mkdir -p "$target_dir"
+  tmp="${target}.tmp.$$"
+  rm -f "$tmp"
+  if ! cp "$source" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 0755 "$tmp"
+  if ! "$tmp" --version >/dev/null 2>&1 && ! "$tmp" --help >/dev/null 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$target"
 }
 
 # Write env.sh so users can: source ~/.labwired/env.sh

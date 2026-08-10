@@ -28,6 +28,35 @@ else
   fail=1
 fi
 
+if grep -q 'https://labwired.com/install/agent' "$ROOT/scripts/public/install" \
+  && grep -q 'https://labwired.com/install/agent' "$ROOT/scripts/agent-install.sh"; then
+  echo "ok   public agent install URL"
+else
+  echo "FAIL public scripts missing /install/agent URL"
+  fail=1
+fi
+if grep -REq "https://labwired\\.com/install([[:space:]]|\"|'|$)" \
+  "$ROOT/scripts/public/install" "$ROOT/scripts/agent-install.sh"; then
+  echo "FAIL stale bare /install URL in public agent examples"
+  fail=1
+else
+  echo "ok   no stale bare /install URL"
+fi
+
+if grep -q '\["--agent-only", \.\.\.args\]' "$ROOT/scripts/npm-install.js" \
+  && grep -q 'psArgs.push("-AgentOnly")' "$ROOT/scripts/npm-install.js"; then
+  echo "ok   npm installer defaults to Agent-only"
+else
+  echo "FAIL npm installer missing Agent-only defaults"
+  fail=1
+fi
+if grep -q 'if (isPost) process.exit(0)' "$ROOT/scripts/npm-install.js"; then
+  echo "ok   npm postinstall is non-mutating"
+else
+  echo "FAIL npm postinstall may install the product"
+  fail=1
+fi
+
 # Windows scripts exist
 for f in scripts/public/install.ps1 scripts/install.ps1 bin/labwired.ps1 bin/labwired.cmd; do
   if [[ -f "$ROOT/$f" ]]; then

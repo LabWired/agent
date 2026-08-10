@@ -20,6 +20,7 @@ labwired_prefix_ensure_dirs
 test -d "$LABWIRED_HOME/bin"
 test -d "$LABWIRED_HOME/tools/sim"
 test -d "$LABWIRED_HOME/cache"
+test -d "$LABWIRED_HOME/components"
 echo "ok   ensure_dirs"
 
 # platform shape
@@ -43,6 +44,20 @@ if [[ "$got" == "$LABWIRED_HOME/tools/sim/labwired-sim" ]]; then
   echo "ok   resolve-sim prefix"
 else
   echo "FAIL resolve-sim got=$got"
+  fail=1
+fi
+
+# Registered Core takes precedence over PATH fallbacks.
+rm -f "$LABWIRED_HOME/tools/sim/labwired-sim"
+mkdir -p "$(dirname "$(labwired_prefix_core_bin)")" "$TMP/path-bin"
+printf '#!/bin/sh\necho registered-core\n' >"$(labwired_prefix_core_bin)"
+printf '#!/bin/sh\necho path-sim\n' >"$TMP/path-bin/labwired-sim"
+chmod +x "$(labwired_prefix_core_bin)" "$TMP/path-bin/labwired-sim"
+PATH="$TMP/path-bin:$PATH" got="$(labwired_resolve_sim)"
+if [[ "$got" == "$(labwired_prefix_core_bin)" ]]; then
+  echo "ok   resolve-sim registered Core"
+else
+  echo "FAIL resolve registered Core got=$got"
   fail=1
 fi
 

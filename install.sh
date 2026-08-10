@@ -22,9 +22,11 @@ say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$1" >&2; }
 die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 
-# Optional: ./install.sh --airgap|--minimal|--full|--prefix DIR
-# Default: FULL portable stack under LABWIRED_HOME (default ~/.labwired).
-PROFILE="${LABWIRED_PROFILE:-online}"
+# Default: hosted Agent only under LABWIRED_HOME (default ~/.labwired).
+PROFILE="${LABWIRED_PROFILE:-hosted}"
+export LABWIRED_INSTALL_SIM="${LABWIRED_INSTALL_SIM:-0}"
+export LABWIRED_INSTALL_PROBE_RS="${LABWIRED_INSTALL_PROBE_RS:-0}"
+export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --airgap)
@@ -35,11 +37,14 @@ while [[ $# -gt 0 ]]; do
       PROFILE=hosted
       shift
       ;;
-    --minimal)
+    --agent-only|--minimal)
       export LABWIRED_MINIMAL=1
+      export LABWIRED_INSTALL_SIM=0
+      export LABWIRED_INSTALL_PROBE_RS=0
+      export LABWIRED_INSTALL_PIO=0
       shift
       ;;
-    --full)
+    --with-core-tools|--full)
       export LABWIRED_MINIMAL=0
       export LABWIRED_INSTALL_SIM=1
       export LABWIRED_INSTALL_PROBE_RS=1
@@ -66,7 +71,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<'USAGE'
-Usage: ./install.sh [--full] [--minimal] [--airgap] [--prefix DIR]
+Usage: ./install.sh [--agent-only] [--with-core-tools] [--airgap] [--prefix DIR]
 
 Portable, contained install (multi-platform):
 
@@ -74,21 +79,21 @@ Portable, contained install (multi-platform):
 
     $LABWIRED_HOME/
       agent/          kit (skills, lib, launcher)
-      tools/sim/      labwired-sim (oracle)
-      tools/probe-rs/ probe-rs
+      components/core/ preserved LabWired Core (when already installed)
       tools/pio/      optional PlatformIO venv
       bin/            shims (put this OR the thin user shim on PATH)
       env.sh          source to activate
       MANIFEST.json   versions + platform
 
-  Default / --full   Agent + labwired-sim + probe-rs (fast; PIO off)
+  Default / --agent-only  Hosted LabWired Agent only
+  --with-core-tools  Development install with simulator + probe-rs
   --with-pio         Also install PlatformIO (slower)
   --minimal          Agent kit only
   --airgap           Vendored MCP / LABWIRED_MCP_ENTRY
   --hosted           Remote MCP + api.labwired.com model (labwired login)
   --prefix DIR       Portable root (USB, CI, /opt/labwired)
 
-  curl -fsSL https://labwired.com/install | bash
+  curl -fsSL https://labwired.com/install/agent | bash
   irm 'https://labwired.com/install?win32=true' | iex   # Windows
   npx @labwired/agent
 
@@ -109,19 +114,24 @@ export LABWIRED_PROFILE="$PROFILE"
 export LABWIRED_HOME="$(labwired_prefix_home)"
 export LABWIRED_AGENT_HOME="$(labwired_prefix_agent)"
 BIN_DIR="$(labwired_user_bin)"
+EXISTING_LABWIRED="$(command -v labwired 2>/dev/null || true)"
 say "portable prefix: $LABWIRED_HOME (platform $(labwired_prefix_platform)$(labwired_prefix_is_wsl && echo '+wsl' || true))"
 if labwired_prefix_is_wsl; then
   say "WSL detected — using Linux prebuilts (same as native Linux)"
   say "USB boards: attach from Windows with usbipd, then labwired probe list"
 fi
 labwired_prefix_ensure_dirs
+labwired_prefix_register_existing_core "$EXISTING_LABWIRED" \
+  || die "existing LabWired Core failed verification; refusing to replace $EXISTING_LABWIRED"
 
 parse_opencode_version() {
   echo "$1" | sed -n 's/.*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1
 }
 
 # 1. pinned opencode ----------------------------------------------------------
-if command -v opencode >/dev/null 2>&1; then
+if [[ "${LABWIRED_TEST_SKIP_OPENCODE:-0}" == "1" ]]; then
+  say "skipping OpenCode setup (test mode)"
+elif command -v opencode >/dev/null 2>&1; then
   raw="$(opencode --version 2>&1 || true)"
   ver="$(parse_opencode_version "$raw")"
   if [[ "$ver" == "$OPENCODE_PIN" ]]; then
@@ -174,13 +184,17 @@ _labwired_link_opencode() {
   fi
   warn "could not place opencode on $BIN_DIR — ensure npm global bin is on PATH"
 }
-_labwired_link_opencode
+if [[ "${LABWIRED_TEST_SKIP_OPENCODE:-0}" != "1" ]]; then
+  _labwired_link_opencode
+fi
 
 # 2. Runtime tools into portable prefix (sim required for local twin; PIO optional)
 export LABWIRED_FAST="${LABWIRED_FAST:-1}"
 export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
-say "installing tools into prefix (sim + probe; PIO=${LABWIRED_INSTALL_PIO})"
-if ! labwired_install_full_deps; then
+say "installing optional tools (sim=${LABWIRED_INSTALL_SIM}; probe=${LABWIRED_INSTALL_PROBE_RS}; PIO=${LABWIRED_INSTALL_PIO})"
+if [[ "${LABWIRED_TEST_SKIP_NETWORK:-0}" == "1" ]]; then
+  say "skipping network dependency setup (test mode)"
+elif ! labwired_install_full_deps; then
   warn "some tools missing — agent still usable; later: labwired update --tools-only"
 fi
 if sim_path="$(labwired_resolve_sim 2>/dev/null)"; then
@@ -274,7 +288,7 @@ rsync -a --delete \
   done
 }
 
-# Prefix bin/labwired → agent kit (contained, portable)
+# Prefix bin/labwired → product dispatcher in the agent kit (contained, portable)
 mkdir -p "$PREFIX_BIN"
 _PH="$(labwired_prefix_home)"
 cat >"${PREFIX_BIN}/labwired" <<WRAP
@@ -359,7 +373,7 @@ $(printf '\033[32m✓\033[0m') LabWired Agent installed
 
   Run:     labwired
   Check:   labwired doctor
-  Update:  curl -fsSL https://labwired.com/install | bash
+  Update:  curl -fsSL https://labwired.com/install/agent | bash
 
 EOF
 
