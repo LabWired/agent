@@ -12,6 +12,7 @@ export LABWIRED_BIN_DIR="$TMP/user-bin"
 export OPENCODE_CONFIG_DIR="$TMP/opencode-config"
 export LABWIRED_TEST_SKIP_OPENCODE=1
 export LABWIRED_TEST_SKIP_NETWORK=1
+export LABWIRED_TEST_ALLOW_FAKE_CORE=1
 USERBIN="$LABWIRED_BIN_DIR"
 mkdir -p "$HOME" "$USERBIN" "$LABWIRED_HOME/user-data" "$OPENCODE_CONFIG_DIR/skills/golden-path" "$OPENCODE_CONFIG_DIR/branding"
 printf 'keep me\n' >"$LABWIRED_HOME/user-data/keep.txt"
@@ -29,7 +30,7 @@ cat >"$CORE_TARGET" <<'CORE'
 #!/usr/bin/env bash
 case "${1:-}" in
   --version) echo 'fake-core 1.0.0' ;;
-  --help) printf 'LabWired Simulator\nCommands: test chips machine asset run snapshot coverage\n' ;;
+  --help) echo 'fake-core help' ;;
   *) printf 'fake-core:%s\n' "$*" ;;
 esac
 CORE

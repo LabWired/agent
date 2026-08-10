@@ -42,8 +42,29 @@ chmod +x "$random"
 if labwired_prefix_register_existing_core "$random"; then
   test ! -e "$(labwired_prefix_core_bin)" || { echo "FAIL random executable registered as Core"; fail=1; }
 else
-  echo "ok   random executable rejected"
+echo "ok   random executable rejected"
 fi
+
+# The fake-Core test hook is inert unless both installer safe-mode flags are on.
+fake_core="$TMP/fake-core"
+cat >"$fake_core" <<'CORE'
+#!/bin/sh
+case "$1" in
+  --version) echo 'fake-core 1.0.0' ;;
+  --help) echo 'fake-core help' ;;
+esac
+CORE
+chmod +x "$fake_core"
+export LABWIRED_TEST_ALLOW_FAKE_CORE=1
+unset LABWIRED_TEST_SKIP_NETWORK LABWIRED_TEST_SKIP_OPENCODE
+if labwired_prefix_register_existing_core "$fake_core" 2>/dev/null; then
+  echo "FAIL fake-Core hook active outside safe test mode"
+  fail=1
+else
+  test ! -e "$(labwired_prefix_core_bin)"
+  echo "ok   fake-Core hook requires complete safe test mode"
+fi
+unset LABWIRED_TEST_ALLOW_FAKE_CORE
 
 # Component registration must not follow a symlinked destination directory.
 rm -rf "$LABWIRED_HOME/components"

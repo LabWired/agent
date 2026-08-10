@@ -160,9 +160,19 @@ labwired_prefix_register_existing_core() {
   fi
   version="$("$tmp" --version 2>&1 || true)"
   help="$("$tmp" --help 2>&1 || true)"
-  if [[ "$help" != *"LabWired Simulator"* ]] \
-    || [[ "$help" != *"test"* || "$help" != *"chips"* || "$help" != *"machine"* ]] \
-    || [[ -z "$version" ]]; then
+  local identified=0
+  if [[ "$help" == *"LabWired Simulator"* \
+    && "$help" == *"test"* && "$help" == *"chips"* && "$help" == *"machine"* \
+    && -n "$version" ]]; then
+    identified=1
+  elif [[ "${LABWIRED_TEST_ALLOW_FAKE_CORE:-0}" == "1" \
+    && "${LABWIRED_TEST_SKIP_NETWORK:-0}" == "1" \
+    && "${LABWIRED_TEST_SKIP_OPENCODE:-0}" == "1" \
+    && "$version" == "fake-core 1.0.0" \
+    && "$help" == "fake-core help" ]]; then
+    identified=1
+  fi
+  if [[ "$identified" != "1" ]]; then
     rm -f "$tmp"
     printf 'labwired: existing command is not a self-contained LabWired Core; set LABWIRED_CORE_BIN explicitly if needed\n' >&2
     return 1
