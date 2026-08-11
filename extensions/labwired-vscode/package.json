@@ -76,6 +76,12 @@
           "id": "labwired.plot",
           "name": "Plot",
           "icon": "media/labwired-mark.svg"
+        },
+        {
+          "type": "webview",
+          "id": "labwired.circuit",
+          "name": "Twin",
+          "icon": "media/labwired-mark.svg"
         }
       ]
     },
@@ -331,6 +337,12 @@
         "icon": "$(graph)"
       },
       {
+        "command": "labwired.openTwinCircuit",
+        "title": "Open Twin Circuit",
+        "category": "LabWired",
+        "icon": "$(circuit-board)"
+      },
+      {
         "command": "labwired.openEvidence",
         "title": "Open Evidence",
         "category": "LabWired"
@@ -580,6 +592,16 @@
           "scope": "machine-overridable",
           "description": "Absolute path to the labwired CLI. Empty = auto-detect."
         },
+        "labwired.twinBackend": {
+          "type": "string",
+          "enum": [
+            "local",
+            "hosted",
+            "auto"
+          ],
+          "default": "local",
+          "description": "Where to run the digital twin for development. local (default) = client machine via CLI smoke and/or npx @labwired/mcp (demo firmware). hosted = api.labwired.com (compile-from-source when signed in). auto = try local first, then hosted if signed in."
+        },
         "labwired.autoInstallCli": {
           "type": "boolean",
           "default": true,
@@ -691,7 +713,7 @@
     "package": "npm run compile && npx --yes @vscode/vsce package --no-dependencies -o labwired-vscode.vsix && npm run check:vsix",
     "vscode:prepublish": "npm run compile",
     "check:vsix": "python3 scripts/check-vsix-integrity.py",
-    "check:cli": "npm run compile && node scripts/check-cli-contract.mjs && node scripts/check-board-mint.mjs && node scripts/check-import-e2e.mjs && node scripts/check-composed-plot.mjs",
+    "check:cli": "npm run compile && node scripts/check-cli-contract.mjs && node scripts/check-board-mint.mjs && node scripts/check-import-e2e.mjs && node scripts/check-composed-plot.mjs && node scripts/check-circuit-graph.mjs",
     "check": "npm run check:cli && npm run package",
     "test:ship": "npm run compile && node ./out/test/runTest.js",
     "check:mint": "npm run compile && node scripts/check-board-mint.mjs",

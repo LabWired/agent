@@ -34,6 +34,18 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 3. If twin is not buildable, continue design from context + `labwired_part` / `labwired_datasheet`. Never invent pins.
 4. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
 
+## Local digital twins (client development)
+
+Local development should **not require cloud** for a basic twin loop:
+
+1. Mint `.labwired/diagram.json` (New board / Import).
+2. Run twin **local-first**: stdio `@labwired/mcp` `labwired_run` (board demo firmware) and/or CLI `smoke`.
+3. Extension setting `labwired.twinBackend`: `local` (default) | `hosted` | `auto`.
+4. For full F5 step-debug, use **LabWired Debugger** (DAP) on the same machine.
+5. Hosted MCP remains for compile-from-source and shared catalog when signed in — not the only path.
+
+Set `LABWIRED_REPO_ROOT` if local MCP needs board YAML packs from a monorepo checkout.
+
 
 ## Plots = elements (not ready-made views)
 

@@ -11,6 +11,7 @@ import { EvidenceViewProvider } from "./providers/evidenceProvider";
 import { HistoryViewProvider } from "./providers/historyProvider";
 import { PlanViewProvider } from "./providers/planProvider";
 import { PlotViewProvider } from "./providers/plotProvider";
+import { CircuitViewProvider } from "./providers/circuitProvider";
 import { SchematicEditorProvider } from "./providers/schematicEditor";
 import { ToolRunner } from "./tools/runner";
 import { TOOLS } from "./tools/registry";
@@ -36,6 +37,8 @@ import {
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("LabWired");
   const bridge = new LabWiredBridge(output, context.extensionPath);
+  // Local digital twin path uses CLI smoke + stdio MCP
+  void import("./twin/twinSession").then((m) => m.setTwinBridge(bridge));
   const session = new SessionState(context);
   const store = new ConversationStore(context);
   const diffs = new DiffService(context);
@@ -57,6 +60,7 @@ export function activate(context: vscode.ExtensionContext): void {
   bridge.refresh();
 
   const plot = new PlotViewProvider(context.extensionUri);
+  const circuit = new CircuitViewProvider(context.extensionUri);
   const overview = new OverviewViewProvider(
     context.extensionUri,
     bridge,
@@ -128,9 +132,9 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   }
 
-  // Chat-first IA: Agent (sidebar) + Monitor/Plot (panel on demand).
-  // Overview / Evidence / etc. stay as command-opened surfaces.
-  // Plot = thin glass over agent-composed elements (E4), not a ready-made plot product.
+  // Chat-first IA: Agent (sidebar) + Monitor / Plot / Twin circuit (panel).
+  // Twin circuit = parts as blocks + wires; develop/run actions on that twin.
+  // Plot = composed observability glass (E4). Overview / Evidence remain commands.
   context.subscriptions.push(
     output,
     { dispose: () => serial.dispose() },
@@ -140,6 +144,7 @@ export function activate(context: vscode.ExtensionContext): void {
     regView(ChatViewProvider.viewType, chat),
     regView(SerialViewProvider.viewType, serial),
     regView(PlotViewProvider.viewType, plot),
+    regView(CircuitViewProvider.viewType, circuit),
     vscode.window.registerCustomEditorProvider(
       SchematicEditorProvider.viewType,
       schematic,
@@ -180,17 +185,22 @@ export function activate(context: vscode.ExtensionContext): void {
       path: result.diagramPath,
       summary: result.summary,
     });
+    circuit.refresh();
     chat.refresh();
+    await circuit.reveal();
     await focus("labwired.chat");
     const next = await vscode.window.showInformationMessage(
       result.ok
         ? `Board ready · ${result.board} · ${result.supported.length} parts`
         : `Mint incomplete · ${result.errors[0] || "no supported parts"}`,
       result.ok ? "Start agent" : "OK",
+      "Open twin circuit",
       "Open coverage"
     );
     if (next === "Start agent") {
       await bridge.startAgentTerminal(session.getMode());
+    } else if (next === "Open twin circuit") {
+      await circuit.reveal();
     } else if (next === "Open coverage") {
       const doc = await vscode.workspace.openTextDocument(result.coveragePath);
       await vscode.window.showTextDocument(doc, { preview: true });
@@ -879,6 +889,12 @@ export function activate(context: vscode.ExtensionContext): void {
       "labwired.openComposedPlot",
       async () => {
         await plot.openComposedFile();
+      },
+    ],
+    [
+      "labwired.openTwinCircuit",
+      async () => {
+        await circuit.reveal();
       },
     ],
     [
