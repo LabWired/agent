@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import * as fs from "fs";
 import { LabWiredBridge } from "./cli/bridge";
 import { ConversationStore } from "./services/conversationStore";
 import { SessionState } from "./services/sessionState";
@@ -21,6 +22,16 @@ import { RpcClient, resolveAgentRoot } from "./cli/rpcClient";
 import { DatasheetService } from "./datasheet/agentic";
 import { ProbeDebugService } from "./debug/probeGdb";
 import { BillingService } from "./pro/billing";
+import { mintFromDiagramObject, mintFromFile } from "./board/boardMint";
+import {
+  buildStarterDiagram,
+  loadCatalogBoards,
+  type StarterPreset,
+} from "./board/catalogBoards";
+import {
+  importCircuitSource,
+  type ImportSourceKind,
+} from "./board/multiImport";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("LabWired");
@@ -96,38 +107,51 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     });
 
-  // Start Embedder-style JSON-RPC server (labwired server / rpc-server.mjs)
-  const ws =
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-  void rpc.start(ws).then(
-    () => {
-      output.appendLine("RPC server ready (Embedder --server clone).");
-    },
-    (e) => {
-      output.appendLine(`RPC server failed (using local agent fallback): ${e}`);
-    }
-  );
+  // Optional RPC server — do NOT block activation. Only start if setting enabled.
+  const startRpc = vscode.workspace
+    .getConfiguration("labwired")
+    .get<boolean>("autoStartRpc");
+  if (startRpc) {
+    const ws =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+    void rpc.start(ws).then(
+      () => {
+        output.appendLine("RPC server ready.");
+      },
+      (e) => {
+        output.appendLine(`RPC server failed: ${e}`);
+      }
+    );
+  } else {
+    output.appendLine(
+      "RPC auto-start off (labwired.autoStartRpc). CLI agent path is primary."
+    );
+  }
 
+  // Chat-first IA: Agent (sidebar) + Monitor/Plot (panel on demand).
+  // Overview / Evidence / etc. stay as command-opened surfaces.
+  // Plot = thin glass over agent-composed elements (E4), not a ready-made plot product.
   context.subscriptions.push(
     output,
     { dispose: () => serial.dispose() },
     { dispose: () => agent.stop() },
     { dispose: () => void rpc.stop() },
     { dispose: () => probeDebug.dispose() },
-    regView(OverviewViewProvider.viewType, overview),
     regView(ChatViewProvider.viewType, chat),
     regView(SerialViewProvider.viewType, serial),
-    regView(EvidenceViewProvider.viewType, evidence),
-    regView(HistoryViewProvider.viewType, history),
-    regView(PlanViewProvider.viewType, plan),
     regView(PlotViewProvider.viewType, plot),
-    regView(CatalogViewProvider.viewType, catalogView),
     vscode.window.registerCustomEditorProvider(
       SchematicEditorProvider.viewType,
       schematic,
       { webviewOptions: { retainContextWhenHidden: true } }
     )
   );
+  // Keep instances alive for commands (overview editor, twin evidence, history pick)
+  void overview;
+  void evidence;
+  void history;
+  void plan;
+  void catalogView;
 
   const focus = async (viewId: string) => {
     await vscode.commands.executeCommand("workbench.view.extension.labwired");
@@ -138,12 +162,409 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  const finishMint = async (
+    result: import("./board/boardMint").BoardMintResult
+  ) => {
+    store.append("tool", `✓ board\n${result.summary}`);
+    if (result.errors.length) {
+      store.append("system", result.errors.map((e) => `⚠ ${e}`).join("\n"));
+    }
+    if (result.dropped.length) {
+      store.append(
+        "system",
+        `Dropped from twin: ${result.dropped.map((d) => d.type).join(", ")}`
+      );
+    }
+    overview.setEvidence({
+      status: result.ok ? "twin_ready" : "empty",
+      path: result.diagramPath,
+      summary: result.summary,
+    });
+    chat.refresh();
+    await focus("labwired.chat");
+    const next = await vscode.window.showInformationMessage(
+      result.ok
+        ? `Board ready · ${result.board} · ${result.supported.length} parts`
+        : `Mint incomplete · ${result.errors[0] || "no supported parts"}`,
+      result.ok ? "Start agent" : "OK",
+      "Open coverage"
+    );
+    if (next === "Start agent") {
+      await bridge.startAgentTerminal(session.getMode());
+    } else if (next === "Open coverage") {
+      const doc = await vscode.workspace.openTextDocument(result.coveragePath);
+      await vscode.window.showTextDocument(doc, { preview: true });
+    }
+  };
+
+  /** Embedder-style: pick board from OUR catalog → mint twin. */
+  const runNewBoardFromCatalog = async () => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) {
+      void vscode.window.showErrorMessage(
+        "Open a workspace folder first — LabWired writes .labwired/ there."
+      );
+      return;
+    }
+    const boards = loadCatalogBoards(context.extensionPath);
+    const boardPick = await vscode.window.showQuickPick(
+      boards.map((b) => ({
+        label: b.id,
+        description: b.chip !== b.id ? b.chip : undefined,
+        detail: `MCU part ${b.mcuType} · blink pin ${b.ledPin}`,
+        board: b,
+      })),
+      {
+        title: "New board — LabWired twin catalog",
+        placeHolder: "Pick a board / MCU (product catalog, not a file hunt)",
+        matchOnDescription: true,
+        matchOnDetail: true,
+      }
+    );
+    if (!boardPick) return;
+
+    const presetPick = await vscode.window.showQuickPick(
+      [
+        {
+          label: "Blink LED starter",
+          description: "MCU + LED wired (recommended)",
+          preset: "blink" as StarterPreset,
+        },
+        {
+          label: "Bare MCU",
+          description: "Board only — no peripherals",
+          preset: "bare" as StarterPreset,
+        },
+      ],
+      { title: `Starter for ${boardPick.board.id}` }
+    );
+    if (!presetPick) return;
+
+    try {
+      const diagram = buildStarterDiagram(boardPick.board, presetPick.preset);
+      // Persist starter as source for remint
+      const lab = path.join(root, ".labwired");
+      fs.mkdirSync(lab, { recursive: true });
+      const sourcePath = path.join(lab, "source-diagram.json");
+      fs.writeFileSync(sourcePath, JSON.stringify(diagram, null, 2) + "\n");
+      const result = mintFromDiagramObject(
+        diagram,
+        root,
+        catalog.asMintLookup(),
+        `catalog:${boardPick.board.id}`
+      );
+      await finishMint(result);
+    } catch (e) {
+      void vscode.window.showErrorMessage(`New board failed: ${e}`);
+      store.append("system", `New board failed: ${e}`);
+    }
+  };
+
+  const runBoardMint = async (sourcePath?: string) => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) {
+      void vscode.window.showErrorMessage(
+        "Open a workspace folder to mint a twin from a board diagram."
+      );
+      return;
+    }
+    let src = sourcePath;
+    if (!src) {
+      const pick = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: { Diagram: ["json"] },
+        title: "Open local diagram.json (advanced)",
+        defaultUri: vscode.Uri.file(root),
+      });
+      if (!pick?.[0]) return;
+      src = pick[0].fsPath;
+    }
+    try {
+      try {
+        const copyTo = path.join(root, ".labwired", "source-diagram.json");
+        fs.mkdirSync(path.dirname(copyTo), { recursive: true });
+        if (path.resolve(src) !== path.resolve(copyTo)) {
+          fs.copyFileSync(src, copyTo);
+        }
+      } catch {
+        /* ignore */
+      }
+      const result = mintFromFile(src, root, catalog.asMintLookup());
+      await finishMint(result);
+    } catch (e) {
+      void vscode.window.showErrorMessage(`Board mint failed: ${e}`);
+      store.append("system", `Board mint failed: ${e}`);
+    }
+  };
+
+  const runImportCircuit = async () => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) {
+      void vscode.window.showErrorMessage(
+        "Open a workspace folder first — import writes under .labwired/."
+      );
+      return;
+    }
+
+    const sourcePick = await vscode.window.showQuickPick(
+      [
+        {
+          label: "$(file-pdf) PDF schematic",
+          description: "Customer board drawing",
+          forceKind: "pdf-schematic" as ImportSourceKind,
+        },
+        {
+          label: "$(book) Datasheet PDF",
+          description: "Part knowledge for agent",
+          forceKind: "pdf-datasheet" as ImportSourceKind,
+        },
+        {
+          label: "$(circuit-board) KiCad schematic",
+          description: ".kicad_sch",
+          forceKind: "kicad-sch" as ImportSourceKind,
+        },
+        {
+          label: "$(file-binary) Netlist",
+          description: ".net / spice-like",
+          forceKind: "netlist" as ImportSourceKind,
+        },
+        {
+          label: "$(json) LabWired diagram.json",
+          description: "Mint twin directly",
+          forceKind: "diagram-json" as ImportSourceKind,
+        },
+        {
+          label: "$(file-media) Image",
+          description: "Photo/scan of schematic",
+          forceKind: "image" as ImportSourceKind,
+        },
+        {
+          label: "$(table) BOM CSV",
+          description: "Parts list",
+          forceKind: "bom-csv" as ImportSourceKind,
+        },
+        {
+          label: "$(file-text) Text / notes",
+          description: ".txt / .md description",
+          forceKind: "text" as ImportSourceKind,
+        },
+        {
+          label: "$(code) Existing firmware / project",
+          description: "platformio.ini, main.c/cpp, sdkconfig — on-ramp to twin + FW loop",
+          forceKind: "text" as ImportSourceKind,
+        },
+        {
+          label: "$(file) Any file (auto-detect)",
+          description: "Guess from extension",
+          forceKind: undefined,
+        },
+      ],
+      { title: "On-ramp to twin + firmware loop (source format is incidental)" }
+    );
+    if (!sourcePick) return;
+
+    const filters: Record<string, string[]> = {
+      "pdf-schematic": ["pdf"],
+      "pdf-datasheet": ["pdf"],
+      "kicad-sch": ["kicad_sch", "kicad_pro", "sch"],
+      "kicad-pcb": ["kicad_pcb", "kicad_pro"],
+      netlist: ["net", "cir", "sp", "txt"],
+      "diagram-json": ["json"],
+      image: ["png", "jpg", "jpeg", "webp", "gif", "tif", "tiff"],
+      "bom-csv": ["csv", "tsv", "txt"],
+      text: ["txt", "md", "log"],
+    };
+    const fk = sourcePick.forceKind;
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: fk
+        ? { Import: filters[fk] || ["*"] }
+        : {
+            "Circuit sources": [
+              "pdf",
+              "kicad_sch",
+              "kicad_pcb",
+              "net",
+              "json",
+              "png",
+              "jpg",
+              "csv",
+              "txt",
+              "md",
+            ],
+          },
+      title: `Import: ${sourcePick.label.replace(/\$\([^)]+\)\s*/, "")}`,
+    });
+    if (!files?.[0]) return;
+
+    // User context is first-class: board, goals, and (for code) where the FW lives.
+    const userContext =
+      (await vscode.window.showInputBox({
+        title: "User context (optional but recommended)",
+        prompt:
+          "Board/MCU, goal (blink + prove), sensors, pins, or “this is existing FW for …”",
+        placeHolder:
+          "e.g. ESP32-C3 SuperMini, GPIO8 LED, existing PlatformIO project — prove on twin",
+        ignoreFocusOut: true,
+      })) || "";
+
+    const boards = loadCatalogBoards(context.extensionPath);
+    let partTypes: string[] = [];
+    try {
+      const facts = catalog.load();
+      partTypes = [
+        ...facts.device_types,
+        ...facts.parts.map((p) => p.type),
+        ...facts.chips,
+      ];
+    } catch {
+      partTypes = ["led", "button", "bme280", "ssd1306", "resistor"];
+    }
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "LabWired: importing circuit…",
+      },
+      async () => {
+        const result = importCircuitSource({
+          sourcePath: files[0].fsPath,
+          workspaceRoot: root,
+          boards,
+          partTypes,
+          lookup: catalog.asMintLookup(),
+          forceKind: sourcePick.forceKind,
+          autoMintStarter: true,
+          starterPreset: "blink",
+          userContext,
+        });
+
+        if (!result.ok) {
+          void vscode.window.showErrorMessage(result.summary);
+          store.append("system", result.summary);
+          await focus("labwired.chat");
+          return;
+        }
+
+        store.append("tool", `✓ import (${result.sourceKind})\n${result.summary}`);
+        await focus("labwired.chat");
+
+        if (result.sourceKind === "pdf-datasheet") {
+          try {
+            datasheets.ensureDirs();
+            datasheets.extractAll(true);
+            store.append("system", "Datasheet extracted for /datasheet tools.");
+          } catch (e) {
+            store.append("system", `Datasheet extract note: ${e}`);
+          }
+          void vscode.window.showInformationMessage(
+            "Datasheet imported — agent can use datasheet tools."
+          );
+          return;
+        }
+
+        if (result.minted?.ok) {
+          await finishMint(result.minted);
+          store.append(
+            "system",
+            "Twin minted. Design context also in .labwired/import/ (DESIGN_CONTEXT.md, AGENT_PROMPT.md)."
+          );
+          return;
+        }
+
+        // Twin optional — design context is still success
+        store.append(
+          "system",
+          "Twin not fully buildable (or not minted). Design context kept for drivers/FW — " +
+            ".labwired/import/DESIGN_CONTEXT.md + USER_CONTEXT.md + extracts."
+        );
+
+        const next = await vscode.window.showInformationMessage(
+          result.suggestedBoardId
+            ? `Imported · context ready · suggested ${result.suggestedBoardId}`
+            : "Imported · design context ready (twin incomplete)",
+          "Start agent (design / twin)",
+          "New board…",
+          "OK"
+        );
+        if (next === "Start agent (design / twin)") {
+          store.append(
+            "system",
+            "Starting agent with design context (import-circuit). Drivers OK even without full twin."
+          );
+          await bridge.sendPromptViaTerminal(
+            result.agentPrompt,
+            session.getMode()
+          );
+        } else if (next === "New board…") {
+          await runNewBoardFromCatalog();
+        }
+      }
+    );
+  };
+
   const cmds: [string, (...args: never[]) => unknown][] = [
+    [
+      "labwired.newBoard",
+      async () => {
+        await runNewBoardFromCatalog();
+      },
+    ],
+    [
+      "labwired.importCircuit",
+      async () => {
+        await runImportCircuit();
+      },
+    ],
+    [
+      "labwired.importPdf",
+      async () => {
+        // Back-compat: same multi-import, default PDF filter via auto
+        await runImportCircuit();
+      },
+    ],
+    [
+      "labwired.openBoardDiagram",
+      async () => {
+        await runBoardMint();
+      },
+    ],
+    [
+      "labwired.remintTwin",
+      async () => {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!root) return;
+        const candidates = [
+          path.join(root, ".labwired", "source-diagram.json"),
+          path.join(root, "diagram.json"),
+          path.join(root, ".labwired", "diagram.json"),
+        ];
+        // Prefer original source recorded in board.json
+        try {
+          const meta = JSON.parse(
+            fs.readFileSync(path.join(root, ".labwired", "board.json"), "utf8")
+          ) as { source?: string };
+          if (meta.source && fs.existsSync(meta.source)) {
+            await runBoardMint(meta.source);
+            return;
+          }
+        } catch {
+          /* */
+        }
+        const hit = candidates.find((c) => fs.existsSync(c));
+        if (!hit) {
+          void vscode.window.showWarningMessage(
+            "No diagram found — use Open board diagram…"
+          );
+          return;
+        }
+        await runBoardMint(hit);
+      },
+    ],
     [
       "labwired.openOverview",
       async () => {
         overview.openInEditor();
-        await focus("labwired.overview");
       },
     ],
     [
@@ -152,7 +573,6 @@ export function activate(context: vscode.ExtensionContext): void {
         overview.openInEditor();
         const ok = await overview.pullFromTwinInspect();
         if (!ok) await overview.pullFromWorkspaceFiles();
-        await focus("labwired.overview");
       },
     ],
     ["labwired.openChat", async () => focus("labwired.chat")],
@@ -352,7 +772,14 @@ export function activate(context: vscode.ExtensionContext): void {
         await billing.openBilling();
       },
     ],
-    ["labwired.viewHistory", async () => focus("labwired.history")],
+    [
+      "labwired.viewHistory",
+      async () => {
+        await vscode.commands.executeCommand(
+          "labwired.openConversationFromHistory"
+        );
+      },
+    ],
     [
       "labwired.switchTeam",
       async () => {
@@ -445,31 +872,135 @@ export function activate(context: vscode.ExtensionContext): void {
     [
       "labwired.openPlot",
       async () => {
-        await vscode.commands.executeCommand("labwired.plot.focus");
+        await plot.reveal();
       },
     ],
-    ["labwired.openEvidence", async () => focus("labwired.evidence")],
-    ["labwired.openPlan", async () => focus("labwired.plan")],
+    [
+      "labwired.openComposedPlot",
+      async () => {
+        await plot.openComposedFile();
+      },
+    ],
+    [
+      "labwired.openEvidence",
+      async () => {
+        await vscode.commands.executeCommand("labwired.loadEvidence");
+      },
+    ],
+    [
+      "labwired.openPlan",
+      async () => {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!root) {
+          void vscode.window.showInformationMessage(
+            "Open a workspace to use Plan."
+          );
+          return;
+        }
+        const planUri = vscode.Uri.joinPath(root, ".labwired", "plan.md");
+        try {
+          await vscode.workspace.fs.stat(planUri);
+        } catch {
+          await vscode.workspace.fs.createDirectory(
+            vscode.Uri.joinPath(root, ".labwired")
+          );
+          await vscode.workspace.fs.writeFile(
+            planUri,
+            Buffer.from("# LabWired plan\n\n", "utf8")
+          );
+        }
+        const doc = await vscode.workspace.openTextDocument(planUri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+      },
+    ],
     [
       "labwired.runTwin",
       async () => {
-        await focus("labwired.evidence");
+        await vscode.commands.executeCommand("labwired.runOnTwin");
+      },
+    ],
+    [
+      "labwired.runOnTwin",
+      async () => {
+        await focus("labwired.chat");
+        const { runOnTwin, formatTwinResultForChat } = await import(
+          "./twin/twinSession"
+        );
         const r = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: "LabWired twin/run…",
+            title: "LabWired: run on digital twin…",
+            cancellable: false,
           },
-          async () => evidence.runTwin("smoke")
+          () => runOnTwin()
         );
-        if (r) {
-          void vscode.window.showInformationMessage(
-            r.ok || r.twin_verified
-              ? `Twin OK · ${r.runId}`
-              : `Twin failed · ${r.runId || "?"}`
-          );
-        } else {
-          void vscode.window.showWarningMessage("twin/run failed");
+        store.append("tool", formatTwinResultForChat(r));
+        if (r.snapshot_id) {
+          void overview?.setEvidence?.({
+            status: r.ok ? "twin_ran" : "failed",
+            summary: r.summary,
+          });
         }
+        void vscode.window.showInformationMessage(
+          r.ok
+            ? `Twin run OK · ${r.board || ""}`
+            : `Twin run failed — ${r.error || r.summary}`.slice(0, 120)
+        );
+      },
+    ],
+    [
+      "labwired.proveOnTwin",
+      async () => {
+        await focus("labwired.chat");
+        const { proveOnTwin, formatTwinResultForChat } = await import(
+          "./twin/twinSession"
+        );
+        const r = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "LabWired: prove on digital twin…",
+            cancellable: false,
+          },
+          () => proveOnTwin()
+        );
+        store.append("tool", formatTwinResultForChat(r));
+        await evidence.showTwinResult({
+          ok: r.model_verified,
+          suite: "prove",
+          twin_verified: r.twin_ran,
+          model_verified: r.model_verified,
+          summary: r.summary,
+        });
+        void vscode.window.showInformationMessage(
+          r.model_verified
+            ? "model_verified — twin prove green"
+            : `Prove red — ${r.error || r.summary}`.slice(0, 120)
+        );
+      },
+    ],
+    [
+      "labwired.debugOnTwin",
+      async () => {
+        await focus("labwired.chat");
+        const { debugOnTwin, formatTwinResultForChat } = await import(
+          "./twin/twinSession"
+        );
+        const r = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "LabWired: debug on digital twin…",
+            cancellable: false,
+          },
+          () => debugOnTwin()
+        );
+        store.append("tool", formatTwinResultForChat(r));
+        void vscode.window.showInformationMessage(
+          r.ok
+            ? r.dapStarted
+              ? "Twin debug session started (F5 DAP)"
+              : "Twin debug probe done (MCP) — install LabWired Debugger for full F5"
+            : `Twin debug failed — ${r.error || r.summary}`.slice(0, 120)
+        );
       },
     ],
     [
@@ -616,7 +1147,7 @@ export function activate(context: vscode.ExtensionContext): void {
           );
           if (cap.evidencePath) {
             await evidence.loadPath(path.join(cap.evidencePath, "result.json"));
-            await focus("labwired.evidence");
+            await focus("labwired.chat");
           }
         } catch (e) {
           void vscode.window.showErrorMessage(String(e));
@@ -626,12 +1157,18 @@ export function activate(context: vscode.ExtensionContext): void {
     [
       "labwired.loadEvidence",
       async () => {
-        await focus("labwired.evidence");
         const uris = await vscode.window.showOpenDialog({
           canSelectMany: false,
           filters: { JSON: ["json"] },
+          title: "Load twin verify JSON",
         });
-        if (uris?.[0]) await evidence.loadPath(uris[0].fsPath);
+        if (!uris?.[0]) return;
+        await evidence.loadPath(uris[0].fsPath);
+        store.append(
+          "tool",
+          `✓ evidence loaded\n${uris[0].fsPath}`
+        );
+        await focus("labwired.chat");
       },
     ],
     ["labwired.startAgent", async () => bridge.startAgentTerminal(session.getMode())],
@@ -858,24 +1395,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const cs = catalog.stats();
   const cli = bridge.getCli();
-  store.append(
-    "system",
-    `LabWired workbench v0.6.3 — same start-here as CLI\n` +
-      `1. Log in (labwired login) → hosted MCP + model\n` +
-      `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
-      `3. Overview: twin display (inspect) · topology · serial · elements\n` +
-      `4. “Blink the LED and prove it on the twin.”\n` +
-      `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
-      `• Knowledge: MCP labwired_part / labwired_datasheet\n` +
-      `• Compose: labwired compose … (elements, not ready-made plots)\n` +
-      `• CLI: ${cli.path || "(missing)"} (${cli.source}${cli.version ? ` v${cli.version}` : ""})\n` +
-      `• Catalog: ${cs.parts} parts · tools: /tools`
-  );
+  // Empty-state UI is the onboarding; keep first system line short.
+  store.clearActive();
   output.appendLine(
-    `LabWired workbench v0.6.3 — tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"}`
+    `LabWired v0.7.0 chat-first — Embedder + twin · tools=${TOOLS.length} catalog=${cs.parts} cli=${cli.path || "missing"} flavor=${cli.flavor}`
   );
-  // Surface overview on first activation so visual glass matches LabWired UI
-  void overview.pushState();
+  void chat.refresh();
 }
 
 export function deactivate(): void {

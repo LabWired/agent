@@ -7,6 +7,12 @@ import type { ToolRunEvent } from "../tools/runner";
 import type { AgentSession } from "../agent/session";
 import type { RpcClient } from "../cli/rpcClient";
 import type { EvidenceViewProvider } from "./evidenceProvider";
+import { loadCloudSession } from "../cli/cloudSession";
+import { loadBoardMeta } from "../board/boardMint";
+import {
+  buildWorkspaceContext,
+  contextHandoffBlock,
+} from "../board/workspaceContext";
 import { TOOLS } from "../tools/registry";
 import { shellHtml, LW_MARK_SVG_LG } from "../webview/theme";
 
@@ -17,8 +23,11 @@ const MODE_LABEL: Record<AgentMode, string> = {
   verify: "Verify",
 };
 
+const PROVE_EXAMPLE = "Blink the LED and prove it on the twin.";
+
 /**
- * Embedder-clone chat + real LabWired tools in-panel.
+ * Embedder-class chat chrome + LabWired twin wedge.
+ * Default freeform path = CLI agent terminal (single brain).
  */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "labwired.chat";
@@ -96,8 +105,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     params: Record<string, string> = {}
   ): Promise<void> {
     this.store.append("system", `⚙ ${name}…`);
-    const ev = await this.tools.runNamed(name, params);
-    this.appendToolEvent(ev);
+    this.pushState();
+    try {
+      const ev = await this.tools.runNamed(name, params);
+      this.appendToolEvent(ev);
+      if (name === "doctor" || name === "doctor_strict") {
+        const ok = ev.status === "ok";
+        void vscode.window.showInformationMessage(
+          ok
+            ? `LabWired doctor OK`
+            : `LabWired doctor failed (exit ${ev.code ?? "?"}) — see Agent chat / Output`
+        );
+      }
+    } catch (e) {
+      this.store.append("system", `Tool ${name} crashed: ${e}`);
+      void vscode.window.showErrorMessage(`LabWired ${name}: ${e}`);
+    }
+    this.pushState();
   }
 
   private appendToolEvent(ev: ToolRunEvent) {
@@ -145,13 +169,77 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       case "listTools":
         this.store.append("tool", this.tools.listCatalog());
         break;
-      case "startAgent":
+      case "startAgent": {
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const ctx = buildWorkspaceContext(wsRoot);
+        this.store.append(
+          "system",
+          `labwired_context · ${ctx.summary}\nnext: ${ctx.next.join(" → ")}`
+        );
         await this.bridge.startAgentTerminal(this.session.getMode());
         this.store.append(
           "system",
-          `Agent terminal started (${MODE_LABEL[this.session.getMode()]}).`
+          `Agent started (${MODE_LABEL[this.session.getMode()]}) — CLI terminal. ` +
+            (ctx.twin_buildable
+              ? "Twin ready — prefer prove path."
+              : ctx.design_context_ok
+                ? "Design context ok — twin optional; do not invent pins."
+                : "No context yet — New board or Import first.")
         );
+        this.pushState();
         break;
+      }
+      case "login":
+        await vscode.commands.executeCommand("labwired.login");
+        this.pushState();
+        break;
+      case "doctor":
+        await this.invokeTool("doctor");
+        this.pushState();
+        break;
+      case "openBoard":
+      case "newBoard":
+        await vscode.commands.executeCommand("labwired.newBoard");
+        this.pushState();
+        break;
+      case "importPdf":
+      case "importCircuit":
+        await vscode.commands.executeCommand("labwired.importCircuit");
+        this.pushState();
+        break;
+      case "statusClick": {
+        const target = String(msg.target || "");
+        if (target === "cli") {
+          const cli = this.bridge.getCli();
+          if (!cli.path) await vscode.commands.executeCommand("labwired.installCli");
+          else await vscode.commands.executeCommand("labwired.showBuildInfo");
+        } else if (target === "session") {
+          await vscode.commands.executeCommand("labwired.login");
+        } else if (target === "mode") {
+          this.session.cycleMode();
+        } else if (target === "twin" || target === "board") {
+          await vscode.commands.executeCommand("labwired.newBoard");
+        } else if (target === "ctx") {
+          const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          const ctx = buildWorkspaceContext(root);
+          this.store.append("tool", contextHandoffBlock(ctx));
+          if (ctx.mode === "empty") {
+            await vscode.commands.executeCommand("labwired.newBoard");
+          }
+        }
+        this.pushState();
+        break;
+      }
+      case "fillExample": {
+        // Webview fills composer; optional auto-send handled client-side
+        break;
+      }
+      case "proveExample": {
+        const text = PROVE_EXAMPLE;
+        this.store.append("user", text);
+        await this.handleFreeform(text);
+        break;
+      }
       case "stop":
         this.agent.stop();
         this.bridge.stopGeneration();
@@ -161,19 +249,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand("labwired.openEvidence");
         break;
       case "runTwin": {
-        this.store.append("system", "⚙ twin/run (smoke)…");
-        const r = await this.evidence?.runTwin("smoke");
-        if (r) {
-          this.store.append(
-            "tool",
-            `${r.ok || r.twin_verified ? "✓" : "✗"} twin/run\n` +
-              `runId=${r.runId} twin_verified=${!!(r.ok || r.twin_verified)} model_verified=false\n` +
-              `${(r.summary || "").slice(0, 1200)}`
+        this.store.append("system", "⚙ run on digital twin…");
+        try {
+          const { runOnTwin, formatTwinResultForChat } = await import(
+            "../twin/twinSession"
           );
-          await vscode.commands.executeCommand("labwired.openEvidence");
-        } else {
-          this.store.append("system", "twin/run failed — is labwired server running?");
+          const r = await runOnTwin();
+          this.store.append("tool", formatTwinResultForChat(r));
+        } catch (e) {
+          this.store.append("system", `Twin run failed: ${e}`);
         }
+        this.pushState();
+        break;
+      }
+      case "proveTwin": {
+        this.store.append("system", "⚙ prove on digital twin…");
+        try {
+          const { proveOnTwin, formatTwinResultForChat } = await import(
+            "../twin/twinSession"
+          );
+          const r = await proveOnTwin();
+          this.store.append("tool", formatTwinResultForChat(r));
+        } catch (e) {
+          this.store.append("system", `Twin prove failed: ${e}`);
+        }
+        this.pushState();
+        break;
+      }
+      case "debugTwin": {
+        this.store.append("system", "⚙ debug on digital twin…");
+        try {
+          const { debugOnTwin, formatTwinResultForChat } = await import(
+            "../twin/twinSession"
+          );
+          const r = await debugOnTwin();
+          this.store.append("tool", formatTwinResultForChat(r));
+        } catch (e) {
+          this.store.append("system", `Twin debug failed: ${e}`);
+        }
+        this.pushState();
         break;
       }
       case "openSerial":
@@ -191,7 +305,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         text = await expandAtMentions(text);
         this.store.append("user", text);
 
-        // Real tools first (slash + NL shortcuts)
         if (text === "/tools" || text === "/help") {
           this.store.append("tool", this.tools.listCatalog());
           break;
@@ -199,62 +312,101 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const routed = await this.tools.tryRoute(text);
         if (routed) {
           this.appendToolEvent(routed);
+          this.pushState();
           break;
         }
 
-        // Freeform → Embedder-style server first, else local AgentSession
-        const mode = this.session.getMode();
-        this.store.append("assistant", "…");
-        const tab = this.store.getActive();
-        const asstMsg = tab.messages[tab.messages.length - 1];
-
-        // Verify mode: always run twin first and attach evidence (product wedge)
-        if (mode === "verify") {
-          this.store.append("system", "Verify mode → twin/run before answer…");
-          const twin = await this.evidence?.runTwin("smoke");
-          if (twin) {
-            this.store.append(
-              "tool",
-              `${twin.ok || twin.twin_verified ? "✓" : "✗"} twin/run\n` +
-                `twin_verified=${!!(twin.ok || twin.twin_verified)} model_verified=false\n` +
-                `evidence=${twin.evidencePath || twin.runId}\n` +
-                `${(twin.summary || "").slice(0, 800)}`
-            );
-            text =
-              `${text}\n\n[Host twin evidence]\n` +
-              `twin_verified=${!!(twin.ok || twin.twin_verified)}\n` +
-              `model_verified=false\n` +
-              `runId=${twin.runId}\n` +
-              `summary:\n${(twin.summary || "").slice(0, 1500)}`;
-          } else {
-            this.store.append(
-              "system",
-              "twin/run unavailable — answer must not claim verified."
-            );
-            text +=
-              "\n\n[Host] twin/run failed; do not claim model_verified or twin_verified.";
-          }
-        }
-
-        if (this.rpc?.isRunning()) {
-          this.rpcAssistant = "";
-          this.rpcAsstMsg = asstMsg;
-          try {
-            await this.rpc.request("mode/set", { mode });
-            await this.rpc.request("chat/send", { content: text, mode });
-          } catch (e) {
-            if (asstMsg) asstMsg.text = `RPC error: ${e}`;
-            this.pushState();
-            // fallback
-            await this.runLocalAgent(text, mode, asstMsg);
-          }
-          break;
-        }
-
-        await this.runLocalAgent(text, mode, asstMsg);
+        await this.handleFreeform(text);
         break;
       }
     }
+  }
+
+  /** Single brain: terminal CLI agent by default; optional in-panel LLM. */
+  private async handleFreeform(text: string): Promise<void> {
+    const mode = this.session.getMode();
+    const inPanel = vscode.workspace
+      .getConfiguration("labwired")
+      .get<boolean>("inPanelLlm");
+
+    // Verify mode: prove on digital twin first (wedge) — results always land in chat
+    if (mode === "verify") {
+      this.store.append("system", "Verify → labwired_verify on digital twin…");
+      try {
+        const { proveOnTwin, formatTwinResultForChat } = await import(
+          "../twin/twinSession"
+        );
+        const twin = await proveOnTwin();
+        this.store.append("tool", formatTwinResultForChat(twin));
+        text =
+          `${text}\n\n[Host twin prove]\n` +
+          `model_verified=${twin.model_verified}\n` +
+          `status=${twin.status || "—"}\n` +
+          `summary:\n${twin.summary.slice(0, 1500)}`;
+        if (!twin.model_verified) {
+          this.store.append(
+            "system",
+            "Twin not model_verified — do not claim verified until prove is green."
+          );
+        }
+      } catch (e) {
+        this.store.append("system", `Twin prove failed: ${e}`);
+      }
+    }
+
+    // Debug mode: twin debug probe (observational)
+    if (mode === "debug") {
+      this.store.append("system", "Debug → digital twin probe…");
+      try {
+        const { debugOnTwin, formatTwinResultForChat } = await import(
+          "../twin/twinSession"
+        );
+        const twin = await debugOnTwin();
+        this.store.append("tool", formatTwinResultForChat(twin));
+      } catch (e) {
+        this.store.append("system", `Twin debug failed: ${e}`);
+      }
+    }
+
+    if (!inPanel) {
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const ctx = buildWorkspaceContext(wsRoot, text);
+      const prompt =
+        ctx.mode === "empty"
+          ? text
+          : `${text}\n\n${contextHandoffBlock(ctx)}`;
+      this.store.append(
+        "system",
+        `Starting CLI agent (${MODE_LABEL[mode]})… · ${ctx.summary}`
+      );
+      await this.bridge.sendPromptViaTerminal(prompt, mode);
+      this.store.append(
+        "assistant",
+        "→ Agent terminal (Embedder-class CLI + labwired_context). Reply there; twin/prove tools run inside the agent."
+      );
+      this.pushState();
+      return;
+    }
+
+    this.store.append("assistant", "…");
+    const tab = this.store.getActive();
+    const asstMsg = tab.messages[tab.messages.length - 1];
+
+    if (this.rpc?.isRunning()) {
+      this.rpcAssistant = "";
+      this.rpcAsstMsg = asstMsg;
+      try {
+        await this.rpc.request("mode/set", { mode });
+        await this.rpc.request("chat/send", { content: text, mode });
+      } catch (e) {
+        if (asstMsg) asstMsg.text = `RPC error: ${e}`;
+        this.pushState();
+        await this.runLocalAgent(text, mode, asstMsg);
+      }
+      return;
+    }
+
+    await this.runLocalAgent(text, mode, asstMsg);
   }
 
   private async runLocalAgent(
@@ -321,13 +473,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const cli = this.bridge.getCli();
     const tab = this.store.getActive();
     const snap = this.session.snapshot();
+    const cloud = loadCloudSession();
+    const signedIn = !!(cloud?.accessToken);
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const boardMeta = ws ? loadBoardMeta(ws) : undefined;
+    const ctx = buildWorkspaceContext(ws);
     void this.view.webview.postMessage({
       type: "state",
       cliPath: cli.path || "",
       cliVersion: cli.version || "",
+      cliFlavor: cli.flavor || "",
       mode: snap.mode,
       model: snap.model,
-      project: snap.project,
+      project: snap.project || cloud?.projectId || "",
+      signedIn,
+      email: cloud?.email || "",
+      board: boardMeta?.board || ctx.board || "",
+      mcu: boardMeta?.mcu || ctx.mcu || "",
+      designContextOk: ctx.design_context_ok,
+      twinBuildable: ctx.twin_buildable,
+      contextMode: ctx.mode,
+      contextSummary: ctx.summary,
       tabs: this.store.listTabs().map((t) => ({
         id: t.id,
         title: t.title,
@@ -336,6 +502,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       messages: tab.messages,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name || "",
       toolCount: TOOLS.length,
+      proveExample: PROVE_EXAMPLE,
     });
   }
 
@@ -346,28 +513,43 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       title: "LabWired",
       body: `
 <div class="app">
+  <div class="status-strip" id="status">
+    <button type="button" class="status-chip" data-status="cli" id="stCli" title="CLI">CLI …</button>
+    <button type="button" class="status-chip" data-status="session" id="stSession" title="Session">Session …</button>
+    <button type="button" class="status-chip" data-status="mode" id="stMode" title="Mode">Mode …</button>
+    <button type="button" class="status-chip" data-status="ctx" id="stCtx" title="labwired_context — design always">Ctx · —</button>
+    <button type="button" class="status-chip" data-status="board" id="stBoard" title="Board">Board · —</button>
+    <button type="button" class="status-chip" data-status="twin" id="stTwin" title="Twin when buildable">Twin · —</button>
+  </div>
   <div class="tab-bar" id="tabs"></div>
   <div class="message-list" id="log" style="display:none"></div>
   <div class="empty-state" id="empty">
     <div class="empty-logo-mark">${LW_MARK_SVG_LG}</div>
     <h2>LabWired</h2>
-    <p>In-panel agent · live serial · local catalog. Tools: /doctor /probe /catalog bme280</p>
+    <p class="empty-tagline">Design context always · twin prove when ready</p>
     <div class="quick-actions">
-      <button class="quick-action" data-action="runTool" data-tool="doctor" type="button">Doctor</button>
-      <button class="quick-action" data-action="runTool" data-tool="smoke" type="button">Smoke</button>
-      <button class="quick-action" data-action="runTool" data-tool="probe_list" type="button">Probes</button>
-      <button class="quick-action" data-action="listTools" type="button">/tools</button>
-      <button class="quick-action" data-action="pickAndRun" type="button">All tools…</button>
-      <button class="quick-action" data-action="openSerial" type="button">Monitor</button>
-      <button class="quick-action" data-action="openEvidence" type="button">Evidence</button>
-      <button class="quick-action" data-action="runTwin" type="button">Twin</button>
+      <button class="quick-action primary" data-action="newBoard" type="button">New board…</button>
+      <button class="quick-action" data-action="importCircuit" type="button">Import…</button>
+      <button class="quick-action" data-action="startAgent" type="button">Start agent</button>
+      <button class="quick-action" data-action="login" type="button">Log in</button>
+      <button class="quick-action" data-action="doctor" type="button">Doctor</button>
+    </div>
+    <button type="button" class="example-prompt" data-action="proveExample" id="exampleBtn">
+      “Blink the LED and prove it on the twin.”
+    </button>
+    <p class="empty-hint">New board / Import → Run · Prove · Debug on digital twin (login required for hosted twin)</p>
+    <div class="quick-actions" style="margin-top:8px">
+      <button class="quick-action" data-action="runTwin" type="button">Run twin</button>
+      <button class="quick-action" data-action="proveTwin" type="button">Prove twin</button>
+      <button class="quick-action" data-action="debugTwin" type="button">Debug twin</button>
     </div>
   </div>
   <div class="composer">
     <div class="composer-shell mode-act" id="shell">
-      <textarea class="composer-input" id="input" rows="3" placeholder="Message agent…  /doctor  /catalog esp32  /probe list"></textarea>
+      <textarea class="composer-input" id="input" rows="3" placeholder="Ask the agent…  (/doctor · /tools)"></textarea>
       <div class="composer-footer">
-        <button type="button" class="composer-mode-pill" id="modePill" title="Cycle mode">Act</button>
+        <button type="button" class="composer-mode-pill" id="modePill" title="Cycle Plan / Act / Debug / Verify">Act</button>
+        <button type="button" class="composer-icon-btn" data-action="startAgent" title="Start agent terminal">▶</button>
         <button type="button" class="composer-icon-btn" data-action="pickAndRun" title="Tools">⚙</button>
         <span class="composer-spacer"></span>
         <button type="button" class="composer-icon-btn" data-action="undo" title="Undo">↶</button>
@@ -384,11 +566,69 @@ const input = document.getElementById('input');
 const shell = document.getElementById('shell');
 const modePill = document.getElementById('modePill');
 const tabsEl = document.getElementById('tabs');
+const stCli = document.getElementById('stCli');
+const stSession = document.getElementById('stSession');
+const stMode = document.getElementById('stMode');
+const stCtx = document.getElementById('stCtx');
+const stBoard = document.getElementById('stBoard');
+const stTwin = document.getElementById('stTwin');
 const labels = { act: 'Act', plan: 'Plan', debug: 'Debug', verify: 'Verify' };
 
 function setModeUi(m) {
   modePill.textContent = labels[m] || m;
   shell.className = 'composer-shell mode-' + m;
+  stMode.textContent = 'Mode · ' + (labels[m] || m);
+}
+
+function renderStatus(m) {
+  if (m.cliPath) {
+    stCli.textContent = 'CLI ✓' + (m.cliVersion ? ' v' + m.cliVersion : '');
+    stCli.classList.add('ok');
+    stCli.classList.remove('warn');
+  } else {
+    stCli.textContent = 'CLI missing';
+    stCli.classList.add('warn');
+    stCli.classList.remove('ok');
+  }
+  if (m.signedIn) {
+    stSession.textContent = m.email ? ('In · ' + m.email.split('@')[0]) : 'Signed in';
+    stSession.classList.add('ok');
+    stSession.classList.remove('warn');
+  } else {
+    stSession.textContent = 'Not signed in';
+    stSession.classList.add('warn');
+    stSession.classList.remove('ok');
+  }
+  // LabWired distinction: context always, twin when buildable
+  if (m.designContextOk) {
+    stCtx.textContent = m.contextMode === 'twin_ready' ? 'Ctx · full' : 'Ctx · design';
+    stCtx.classList.add('ok');
+    stCtx.classList.remove('warn');
+  } else {
+    stCtx.textContent = 'Ctx · —';
+    stCtx.classList.remove('ok');
+    stCtx.classList.add('warn');
+  }
+  if (m.board) {
+    stBoard.textContent = 'Board · ' + m.board;
+    stBoard.classList.add('ok');
+    stBoard.classList.remove('warn');
+  } else {
+    stBoard.textContent = 'Board · —';
+    stBoard.classList.remove('ok');
+  }
+  if (m.twinBuildable) {
+    stTwin.textContent = 'Twin · ready';
+    stTwin.classList.add('ok');
+    stTwin.classList.remove('warn');
+  } else if (m.designContextOk) {
+    stTwin.textContent = 'Twin · design-only';
+    stTwin.classList.remove('ok');
+    stTwin.classList.remove('warn');
+  } else {
+    stTwin.textContent = 'Twin · —';
+    stTwin.classList.remove('ok');
+  }
 }
 
 function renderMessages(messages) {
@@ -440,11 +680,25 @@ function renderTabs(tabs) {
 
 modePill.addEventListener('click', () => vscode.postMessage({ type: 'cycleMode' }));
 
+document.querySelectorAll('[data-status]').forEach(el => {
+  el.addEventListener('click', () => {
+    vscode.postMessage({ type: 'statusClick', target: el.dataset.status });
+  });
+});
+
 document.querySelectorAll('[data-action]').forEach(el => {
   el.addEventListener('click', () => {
     const action = el.dataset.action;
     if (action === 'runTool' && el.dataset.tool) {
       vscode.postMessage({ type: 'runTool', name: el.dataset.tool });
+      return;
+    }
+    if (action === 'proveTwin') {
+      vscode.postMessage({ type: 'proveTwin' });
+      return;
+    }
+    if (action === 'debugTwin') {
+      vscode.postMessage({ type: 'debugTwin' });
       return;
     }
     vscode.postMessage({ type: action });
@@ -470,7 +724,7 @@ input.addEventListener('input', () => {
   shell.classList.remove('input-mode-bash', 'input-mode-serial');
   if (v.startsWith('!')) shell.classList.add('input-mode-bash');
   else if (v.startsWith('~')) shell.classList.add('input-mode-serial');
-  else if (v.startsWith('/')) shell.classList.add('input-mode-bash'); // tool slash
+  else if (v.startsWith('/')) shell.classList.add('input-mode-bash');
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
 });
@@ -479,6 +733,7 @@ window.addEventListener('message', (event) => {
   const m = event.data;
   if (m.type !== 'state') return;
   setModeUi(m.mode || 'act');
+  renderStatus(m);
   renderTabs(m.tabs);
   renderMessages(m.messages);
 });

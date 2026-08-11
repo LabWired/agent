@@ -105,6 +105,30 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   }
 
   async runTwin(suite = "smoke"): Promise<TwinResult | null> {
+    // Prefer hosted digital twin (labwired_run) — VS Code–class path
+    try {
+      const { runOnTwin } = await import("../twin/twinSession");
+      this.post({ type: "status", text: `Running digital twin (${suite})…` });
+      const r = await runOnTwin();
+      const synth: TwinResult = {
+        runId: r.snapshot_id || `twin_${Date.now().toString(36)}`,
+        ok: r.ok,
+        suite,
+        twin_verified: r.twin_ran && r.ok,
+        model_verified: false,
+        summary: r.summary + (r.serial ? `\n${r.serial.slice(0, 2000)}` : ""),
+        code: r.ok ? 0 : 1,
+      };
+      await this.showTwinResult(synth);
+      if (r.ok || r.twin_ran) return synth;
+      // fall through to CLI if hosted failed without twin_ran
+      if (!r.error?.includes("Sign in") && !r.error?.includes("Not signed")) {
+        return synth;
+      }
+    } catch (e) {
+      this.post({ type: "status", text: `Hosted twin: ${e}` });
+    }
+
     if (!this.rpc?.isRunning()) {
       // Fallback: CLI smoke via bridge
       await this.bridge.ensureCli();
@@ -130,6 +154,29 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
       return result;
     } catch (e) {
       this.post({ type: "error", text: `twin/run failed: ${String(e)}` });
+      return null;
+    }
+  }
+
+  /** Prove path: labwired_verify → model_verified when green. */
+  async proveTwin(): Promise<TwinResult | null> {
+    try {
+      const { proveOnTwin } = await import("../twin/twinSession");
+      this.post({ type: "status", text: "Proving on digital twin…" });
+      const r = await proveOnTwin();
+      const synth: TwinResult = {
+        runId: `prove_${Date.now().toString(36)}`,
+        ok: r.ok && r.model_verified,
+        suite: "prove",
+        twin_verified: r.twin_ran,
+        model_verified: r.model_verified,
+        summary: r.summary + (r.serial ? `\n${r.serial.slice(0, 2000)}` : ""),
+        code: r.model_verified ? 0 : 1,
+      };
+      await this.showTwinResult(synth);
+      return synth;
+    } catch (e) {
+      this.post({ type: "error", text: `prove failed: ${String(e)}` });
       return null;
     }
   }
