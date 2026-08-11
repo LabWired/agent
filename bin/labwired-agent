@@ -211,6 +211,11 @@ cmd_doctor() {
   else
     printf '\033[33mwarn\033[0m tui: missing — re-run ./install.sh\n'
   fi
+  if [[ -f "$cfg/plugins/labwired-brand.tsx" ]] || [[ -f "$ROOT/plugins/labwired-brand.tsx" ]]; then
+    say "ok  brand-plugin: labwired.brand (replaces OpenCode home logo)"
+  else
+    printf '\033[33mwarn\033[0m brand-plugin: missing — re-run labwired agent or ./install.sh\n'
+  fi
 
   # Five primary packs (ship surface). Aliases optional.
   local skill
@@ -460,7 +465,7 @@ labwired_install_hosted_opencode_config() {
     done
     cp -R "$ROOT/skills/." "$cfg_dir/skills/"
   fi
-  say "OpenCode config: hosted (remote MCP + api.labwired.com/v1) → $cfg_dir/opencode.json"
+  say "LabWired config: hosted (api.labwired.com) → $cfg_dir/opencode.json"
 }
 
 cmd_logout() {
@@ -508,14 +513,14 @@ cmd_whoami() {
   echo "mcp:      remote https://api.labwired.com/mcp (shared labwired_* tools)"
 }
 
-# Product chrome for the OpenCode TUI substrate (theme, banner, terminal title).
-# OpenCode remains the engine; we brand the LabWired product surface.
+# Product chrome: LabWired theme, banner, terminal title, and home_logo plugin
+# that replaces the OpenCode wordmark. Engine remains OpenCode under the hood.
 labwired_apply_branding() {
   local cfg_dir
   cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
-  mkdir -p "$cfg_dir/themes" "$cfg_dir/branding"
+  mkdir -p "$cfg_dir/themes" "$cfg_dir/branding" "$cfg_dir/plugins"
 
-  # Product theme is always refreshed; user banner/logo stay if already present.
+  # Product theme is always refreshed; user banner assets stay if already present.
   if [[ -f "$ROOT/branding/themes/labwired.json" ]]; then
     cp "$ROOT/branding/themes/labwired.json" "$cfg_dir/themes/labwired.json"
   fi
@@ -529,18 +534,58 @@ labwired_apply_branding() {
       fi
     done
   fi
-  # Default product theme; do not clobber user-chosen themes (tokyonight, etc.).
-  if [[ ! -e "$cfg_dir/tui.json" ]]; then
-    if [[ -f "$ROOT/config/tui.json" ]]; then
-      cp "$ROOT/config/tui.json" "$cfg_dir/tui.json"
-    else
-      printf '%s\n' '{' '  "$schema": "https://opencode.ai/tui.json",' '  "theme": "labwired"' '}' >"$cfg_dir/tui.json"
-    fi
-  elif grep -Eq '"theme"[[:space:]]*:[[:space:]]*"(system|opencode)"' "$cfg_dir/tui.json" 2>/dev/null; then
-    if [[ -f "$ROOT/config/tui.json" ]]; then
-      cp "$ROOT/config/tui.json" "$cfg_dir/tui.json"
-    fi
+
+  # Always ship the brand plugin next to tui.json (path is relative to that file).
+  if [[ -f "$ROOT/plugins/labwired-brand.tsx" ]]; then
+    cp "$ROOT/plugins/labwired-brand.tsx" "$cfg_dir/plugins/labwired-brand.tsx"
   fi
+
+  # Ensure tui.json selects LabWired theme + brand plugin. Preserve other user
+  # keys (keybinds, attention, …) when a tui.json already exists.
+  if [[ -f "$cfg_dir/tui.json" ]]; then
+    python3 - "$cfg_dir/tui.json" <<'PY' 2>/dev/null || true
+import json, sys
+path = sys.argv[1]
+try:
+    cfg = json.load(open(path))
+except Exception:
+    cfg = {}
+if not isinstance(cfg, dict):
+    cfg = {}
+theme = cfg.get("theme")
+if theme in (None, "", "system", "opencode"):
+    cfg["theme"] = "labwired"
+plugins = cfg.get("plugin")
+if not isinstance(plugins, list):
+    plugins = []
+# Normalize plugin specs to strings for membership checks.
+def _spec(p):
+    if isinstance(p, str):
+        return p
+    if isinstance(p, list) and p:
+        return str(p[0])
+    return ""
+wanted = "./plugins/labwired-brand.tsx"
+if not any(_spec(p) == wanted or _spec(p).endswith("labwired-brand.tsx") for p in plugins):
+    plugins = [wanted] + plugins
+cfg["plugin"] = plugins
+cfg.setdefault("$schema", "https://opencode.ai/tui.json")
+open(path, "w").write(json.dumps(cfg, indent=2) + "\n")
+PY
+  elif [[ -f "$ROOT/config/tui.json" ]]; then
+    cp "$ROOT/config/tui.json" "$cfg_dir/tui.json"
+  else
+    cat >"$cfg_dir/tui.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "labwired",
+  "plugin": ["./plugins/labwired-brand.tsx"]
+}
+JSON
+  fi
+
+  # Product identity: do not let the engine rename the terminal tab.
+  export OPENCODE_DISABLE_TERMINAL_TITLE=1
 
   # Terminal window / tab title (OSC 0). No-op when not a TTY.
   if [[ -t 1 ]] || [[ -t 2 ]]; then
@@ -597,17 +642,17 @@ labwired_prepare_agent_start() {
     fi
     export LABWIRED_PROFILE=hosted
     export OPENCODE_CONFIG_DIR="$cfg_dir"
-    say "mode: hosted OpenCode + shared tools (api.labwired.com/mcp)"
+    say "mode: LabWired CLI (hosted · api.labwired.com)"
     say "model: ${LABWIRED_MODEL_URL:-}/  id=${LABWIRED_MODEL:-labwired-default}"
   else
     labwired_export_sim || true
     # Local default config if none
     if [[ ! -f "$cfg_dir/opencode.json" && -f "$ROOT/config/opencode.json" ]]; then
       cp "$ROOT/config/opencode.json" "$cfg_dir/opencode.json"
-      say "wrote local OpenCode config → $cfg_dir/opencode.json"
+      say "wrote LabWired config → $cfg_dir/opencode.json"
     fi
     export OPENCODE_CONFIG_DIR="$cfg_dir"
-    say "mode: local OpenCode (npx @labwired/mcp or LABWIRED_CLI sim)"
+    say "mode: LabWired CLI (local tools · npx @labwired/mcp or LABWIRED_CLI)"
   fi
 }
 
@@ -683,7 +728,7 @@ LabWired Agent — write firmware, check on a twin
 
 Usage:
   labwired agent                 Start LabWired Agent (golden-path + MCP)
-  labwired agent opencode …      Same start (OpenCode engine alias)
+  labwired agent opencode …      Same start (engine alias)
   labwired agent login           Device-code sign-in → hosted MCP + model gateway
   labwired agent logout          Clear cloud session
   labwired agent whoami          Show signed-in identity / project
@@ -706,7 +751,7 @@ Usage:
 Ship gate (CI / release):
   ./scripts/ship-gate.sh
 
-OpenCode is the agent runtime. Skills: golden-path · bringup · prove · observe · desk-hw
+LabWired CLI. Skills: golden-path · bringup · prove · observe · desk-hw
 (+ Superpowers process). Knowledge via MCP labwired_part / labwired_datasheet.
 
 Env:
@@ -1016,7 +1061,7 @@ case "${1:-}" in
     fi
     labwired_splash
     echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw" >&2
-    echo "labwired: engine OpenCode · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
+    echo "labwired: LabWired CLI · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
     exec opencode "$@"
     ;;
   "")

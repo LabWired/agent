@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.9 — 2026-08-11 — LabWired CLI brand (no OpenCode logo)
+
+- Replace OpenCode home wordmark with LabWired Agent branding via TUI plugin `labwired.brand`.
+- Install and start always ship `plugins/labwired-brand.tsx` + `tui.json` plugin entry.
+- User-facing start messages say LabWired CLI (engine stays OpenCode under the hood).
+
+
 ## 0.3.8 — 2026-08-10 — Product branding + install URLs
 
 - LabWired TUI theme (`branding/themes/labwired.json`) applied on install and agent start.

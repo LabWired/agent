@@ -80,7 +80,7 @@ Usage:
   labwired agent install-deps    Refresh tools into prefix
   labwired agent help
 
-  Alias: labwired agent opencode ...  (same start; OpenCode engine)
+  Alias: labwired agent opencode ...  (same start; engine alias)
 
 Env:
   LABWIRED_HOME            Install root (default %USERPROFILE%\.labwired)
@@ -93,8 +93,10 @@ function Apply-LabWiredBranding {
   $cfg = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".config\opencode" }
   $themesDir = Join-Path $cfg "themes"
   $brandingDir = Join-Path $cfg "branding"
+  $pluginsDir = Join-Path $cfg "plugins"
   if (-not (Test-Path $themesDir)) { New-Item -ItemType Directory -Path $themesDir -Force | Out-Null }
   if (-not (Test-Path $brandingDir)) { New-Item -ItemType Directory -Path $brandingDir -Force | Out-Null }
+  if (-not (Test-Path $pluginsDir)) { New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null }
   $themeSrc = Join-Path $AgentHome "branding\themes\labwired.json"
   if (Test-Path $themeSrc) {
     Copy-Item -Force $themeSrc (Join-Path $themesDir "labwired.json")
@@ -104,25 +106,48 @@ function Apply-LabWiredBranding {
   if ((Test-Path $bannerSrc) -and -not (Test-Path $bannerDst)) {
     Copy-Item $bannerSrc $bannerDst
   }
+  $pluginSrc = Join-Path $AgentHome "plugins\labwired-brand.tsx"
+  if (Test-Path $pluginSrc) {
+    Copy-Item -Force $pluginSrc (Join-Path $pluginsDir "labwired-brand.tsx")
+  }
   $tuiSrc = Join-Path $AgentHome "config\tui.json"
   $tuiDst = Join-Path $cfg "tui.json"
-  $writeTui = -not (Test-Path $tuiDst)
-  if (-not $writeTui -and (Test-Path $tuiDst)) {
-    $existing = Get-Content -Raw $tuiDst
-    if ($existing -match '"theme"\s*:\s*"(system|opencode)"') { $writeTui = $true }
-  }
-  if ($writeTui) {
+  $wantedPlugin = "./plugins/labwired-brand.tsx"
+  if (-not (Test-Path $tuiDst)) {
     if (Test-Path $tuiSrc) {
       Copy-Item -Force $tuiSrc $tuiDst
     } else {
-      Set-Content -Path $tuiDst -Value @"
-{
-  "`$schema": "https://opencode.ai/tui.json",
-  "theme": "labwired"
-}
-"@ -Encoding utf8
+      Set-Content -Path $tuiDst -Value (@{
+        '$schema' = 'https://opencode.ai/tui.json'
+        theme = 'labwired'
+        plugin = @($wantedPlugin)
+      } | ConvertTo-Json) -Encoding utf8
+    }
+  } else {
+    try {
+      $cfgObj = Get-Content -Raw $tuiDst | ConvertFrom-Json
+      if (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
+        $cfgObj | Add-Member -NotePropertyName theme -NotePropertyValue 'labwired' -Force
+      }
+      $plugins = @()
+      if ($cfgObj.plugin) { $plugins = @($cfgObj.plugin) }
+      $hasBrand = $false
+      foreach ($p in $plugins) {
+        $s = if ($p -is [string]) { $p } elseif ($p -is [array] -and $p.Count -gt 0) { [string]$p[0] } else { '' }
+        if ($s -eq $wantedPlugin -or $s.EndsWith('labwired-brand.tsx')) { $hasBrand = $true; break }
+      }
+      if (-not $hasBrand) {
+        $cfgObj | Add-Member -NotePropertyName plugin -NotePropertyValue (@($wantedPlugin) + $plugins) -Force
+      }
+      if (-not $cfgObj.'$schema') {
+        $cfgObj | Add-Member -NotePropertyName '$schema' -NotePropertyValue 'https://opencode.ai/tui.json' -Force
+      }
+      ($cfgObj | ConvertTo-Json -Depth 8) | Set-Content -Path $tuiDst -Encoding utf8
+    } catch {
+      if (Test-Path $tuiSrc) { Copy-Item -Force $tuiSrc $tuiDst }
     }
   }
+  $env:OPENCODE_DISABLE_TERMINAL_TITLE = "1"
   try {
     $Host.UI.RawUI.WindowTitle = "LabWired Agent"
   } catch { }
@@ -294,7 +319,7 @@ switch ($cmd) {
       Write-Host "labwired: note - no local sim; hosted MCP verify still works." -ForegroundColor Yellow
     }
     Show-LabWiredSplash
-    Write-Host "labwired: starting LabWired Agent (OpenCode engine)" -ForegroundColor Cyan
+    Write-Host "labwired: starting LabWired CLI" -ForegroundColor Cyan
     & opencode @argsRest
   }
   "" {
@@ -307,7 +332,7 @@ switch ($cmd) {
       Write-Host "labwired: note - no local sim; hosted MCP verify still works." -ForegroundColor Yellow
     }
     Show-LabWiredSplash
-    Write-Host "labwired: starting LabWired Agent (OpenCode engine)" -ForegroundColor Cyan
+    Write-Host "labwired: starting LabWired CLI" -ForegroundColor Cyan
     & opencode @argsRest
   }
   default {

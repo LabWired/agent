@@ -320,7 +320,7 @@ rsync -a --delete \
   --exclude '.DS_Store' \
   --exclude '.grok' \
   "$SRC/" "$AGENT_HOME/" 2>/dev/null || {
-  for d in bin lib config skills branding fixtures mcp scripts docs tests share examples; do
+  for d in bin lib config skills branding plugins fixtures mcp scripts docs tests share examples; do
     if [[ -d "$SRC/$d" ]]; then
       mkdir -p "$AGENT_HOME/$d"
       cp -R "$SRC/$d/." "$AGENT_HOME/$d/"
@@ -354,10 +354,10 @@ WRAP
 chmod 0755 "$_prefix_dispatcher_tmp"
 mv -f "$_prefix_dispatcher_tmp" "${PREFIX_BIN}/labwired"
 
-# Branding into OpenCode config (product identity).
-# Force-refresh LabWired theme + default tui theme. Flat branding files are
-# owned only when absent so user banners/custom assets survive reinstall.
-mkdir -p "$CFG_DIR/branding" "$CFG_DIR/themes"
+# Branding into config (product identity).
+# Force-refresh LabWired theme, brand plugin (replaces OpenCode home logo), and
+# default tui theme. Flat branding files are owned only when absent.
+mkdir -p "$CFG_DIR/branding" "$CFG_DIR/themes" "$CFG_DIR/plugins"
 if [[ -f "$AGENT_HOME/branding/themes/labwired.json" ]]; then
   cp "$AGENT_HOME/branding/themes/labwired.json" "$CFG_DIR/themes/labwired.json"
   grep -Fqx "themes/labwired.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "themes/labwired.json" >>"$MANIFEST"
@@ -370,15 +370,47 @@ while IFS= read -r branding_file; do
   esac
   _install_owned_file_if_absent "$branding_file" "$CFG_DIR/branding/$rel"
 done < <(find "$AGENT_HOME/branding" -type f -print 2>/dev/null)
+if [[ -f "$AGENT_HOME/plugins/labwired-brand.tsx" ]]; then
+  cp "$AGENT_HOME/plugins/labwired-brand.tsx" "$CFG_DIR/plugins/labwired-brand.tsx"
+  grep -Fqx "plugins/labwired-brand.tsx" "$MANIFEST" 2>/dev/null || printf '%s\n' "plugins/labwired-brand.tsx" >>"$MANIFEST"
+fi
 if [[ -f "$AGENT_HOME/config/tui.json" ]]; then
+  # Always refresh product tui defaults (theme + brand plugin). User keybinds
+  # survive if already present via merge below.
   if [[ ! -e "$CFG_DIR/tui.json" && ! -L "$CFG_DIR/tui.json" ]]; then
     cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
-    grep -Fqx "tui.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "tui.json" >>"$MANIFEST"
-  elif grep -Eq '"theme"[[:space:]]*:[[:space:]]*"(system|opencode)"' "$CFG_DIR/tui.json" 2>/dev/null; then
-    # Upgrade stock OpenCode defaults to LabWired product theme.
-    cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
-    grep -Fqx "tui.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "tui.json" >>"$MANIFEST"
+  else
+    python3 - "$CFG_DIR/tui.json" "$AGENT_HOME/config/tui.json" <<'PY' 2>/dev/null || cp "$AGENT_HOME/config/tui.json" "$CFG_DIR/tui.json"
+import json, sys
+dst, src = sys.argv[1], sys.argv[2]
+try:
+    cfg = json.load(open(dst))
+except Exception:
+    cfg = {}
+try:
+    product = json.load(open(src))
+except Exception:
+    product = {"theme": "labwired", "plugin": ["./plugins/labwired-brand.tsx"]}
+if not isinstance(cfg, dict):
+    cfg = {}
+if cfg.get("theme") in (None, "", "system", "opencode"):
+    cfg["theme"] = product.get("theme", "labwired")
+plugins = cfg.get("plugin")
+if not isinstance(plugins, list):
+    plugins = []
+wanted = "./plugins/labwired-brand.tsx"
+def _spec(p):
+    if isinstance(p, str): return p
+    if isinstance(p, list) and p: return str(p[0])
+    return ""
+if not any(_spec(p) == wanted or _spec(p).endswith("labwired-brand.tsx") for p in plugins):
+    plugins = [wanted] + list(plugins)
+cfg["plugin"] = plugins
+cfg.setdefault("$schema", product.get("$schema", "https://opencode.ai/tui.json"))
+open(dst, "w").write(json.dumps(cfg, indent=2) + "\n")
+PY
   fi
+  grep -Fqx "tui.json" "$MANIFEST" 2>/dev/null || printf '%s\n' "tui.json" >>"$MANIFEST"
 fi
 
 # Thin user PATH shim — self-contained (no need to source env.sh first)

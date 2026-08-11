@@ -623,7 +623,7 @@ function Install-OpenCodeConfig {
       if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination -Recurse }
     }
   }
-  # LabWired product chrome: always refresh theme; keep user banner if present.
+  # LabWired product chrome: theme + brand plugin (replaces OpenCode home logo).
   $themeSrc = Join-Path $agent "branding\themes\labwired.json"
   if (Test-Path $themeSrc) {
     $themesDir = Join-Path $cfg "themes"
@@ -645,20 +645,47 @@ function Install-OpenCodeConfig {
       }
     }
   }
+  $pluginSrc = Join-Path $agent "plugins\labwired-brand.tsx"
+  if (Test-Path $pluginSrc) {
+    $pluginsDir = Join-Path $cfg "plugins"
+    Protect-Mutation $pluginsDir
+    Ensure-Dir $pluginsDir
+    $pluginDst = Join-Path $pluginsDir "labwired-brand.tsx"
+    Protect-Mutation $pluginDst
+    Copy-Safe $pluginSrc $pluginDst
+  }
   $tuiSrc = Join-Path $agent "config\tui.json"
   $tuiDst = Join-Path $cfg "tui.json"
   if (Test-Path $tuiSrc) {
-    $shouldWriteTui = -not (Test-Path $tuiDst)
-    if (-not $shouldWriteTui) {
-      $existing = Get-Content -Raw $tuiDst
-      if ($existing -match '"theme"\s*:\s*"(system|opencode)"') { $shouldWriteTui = $true }
-    }
-    if ($shouldWriteTui) {
-      Protect-Mutation $tuiDst
+    Protect-Mutation $tuiDst
+    if (-not (Test-Path $tuiDst)) {
       Copy-Safe $tuiSrc $tuiDst
+    } else {
+      # Merge product theme + brand plugin into existing tui.json.
+      try {
+        $cfgObj = Get-Content -Raw $tuiDst | ConvertFrom-Json
+        $product = Get-Content -Raw $tuiSrc | ConvertFrom-Json
+        if (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
+          $cfgObj | Add-Member -NotePropertyName theme -NotePropertyValue $product.theme -Force
+        }
+        $wanted = "./plugins/labwired-brand.tsx"
+        $plugins = @()
+        if ($cfgObj.plugin) { $plugins = @($cfgObj.plugin) }
+        $has = $false
+        foreach ($p in $plugins) {
+          $s = if ($p -is [string]) { $p } else { '' }
+          if ($s -eq $wanted -or $s.EndsWith('labwired-brand.tsx')) { $has = $true; break }
+        }
+        if (-not $has) {
+          $cfgObj | Add-Member -NotePropertyName plugin -NotePropertyValue (@($wanted) + $plugins) -Force
+        }
+        ($cfgObj | ConvertTo-Json -Depth 8) | Set-Content -Path $tuiDst -Encoding utf8
+      } catch {
+        Copy-Safe $tuiSrc $tuiDst
+      }
     }
   }
-  Ok "LabWired config -> $cfg (OpenCode engine)"
+  Ok "LabWired config -> $cfg"
 }
 
 # -- main ----------------------------------------

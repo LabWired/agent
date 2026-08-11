@@ -1,4 +1,5 @@
 {
   "$schema": "https://opencode.ai/tui.json",
-  "theme": "labwired"
+  "theme": "labwired",
+  "plugin": ["./plugins/labwired-brand.tsx"]
 }
