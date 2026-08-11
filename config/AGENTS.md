@@ -27,6 +27,14 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 `hardware_observed` (flash + serial/RTT marker) is **never** upgraded to
 `model_verified`.
 
+## Session orientation
+
+1. Prefer MCP `labwired_context` (or an injected `[labwired_context]` block) before assuming board or twin state.
+2. Prefer `labwired_import` with `diagram_json` (P0) over hand-parsing schematics.
+3. If twin is not buildable, continue design from context + `labwired_part` / `labwired_datasheet`. Never invent pins.
+4. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
+
+
 ## Plots = elements (not ready-made views)
 
 When the user wants a **plot, chart, scope, overlay, or “show X over time”**:
