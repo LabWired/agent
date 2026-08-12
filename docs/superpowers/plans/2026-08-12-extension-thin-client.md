@@ -395,7 +395,7 @@ export function parseGdbState(p: any): GdbState {
 ```
 
 Run: `npm run test:unit`
-Expected: PASS — 8 tests.
+Expected: PASS — 9 tests.
 
 - [ ] **Step 3: Rewrite chatProvider subscriptions + Stop button**
 
@@ -604,7 +604,7 @@ In `ext/src/extension.ts`, find `new ToolRunner(...)` and pass the existing `rpc
 - [ ] **Step 4: Run tests + contract**
 
 Run: `npm run test:unit && npm run contract`
-Expected: all PASS (12 tests); contract OK baseline 17.
+Expected: all PASS (13 tests); contract OK baseline 17.
 
 - [ ] **Step 5: Commit**
 
@@ -803,7 +803,7 @@ cd /Users/andrii/projects/labwired-agent
 ./tests/rpc-contract.sh                       # PASS
 cd extensions/labwired-vscode
 npm run compile                               # clean
-npm run test:unit                             # 12 tests pass
+npm run test:unit                             # 13 tests pass
 npm run contract                              # baseline 0, OK
 npm run package                               # VSIX built
 unzip -l labwired-vscode.vsix | grep rpc-server.mjs
@@ -840,7 +840,7 @@ In `/Users/andrii/projects/labwired-cursor/docs/superpowers/plans/2026-07-31-gap
 
 ## Definition of Done (Part 6)
 
-- [ ] `npm run compile`, `npm run test:unit` (12 tests), `npm run contract` (baseline 0) all green
+- [ ] `npm run compile`, `npm run test:unit` (13 tests), `npm run contract` (baseline 0) all green
 - [ ] `tests/rpc-contract.sh` wired into `tests/all.sh`, green
 - [ ] VSIX contains `server/rpc-server.mjs` + `server/AGENT_VERSION`
 - [ ] Manual smoke: `/doctor`, chat stream, chat stop, plan-mode flash refusal — all honest
