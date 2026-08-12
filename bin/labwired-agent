@@ -819,6 +819,11 @@ cmd_compose() {
   local sub="${1:-}"
   shift || true
   case "$sub" in
+    job|show)
+      # One path: user need → recipe → compose (ties up D5 without Open Plot).
+      # usage: compose job --ask "plot LED vs UART" --uart log|--from last-run [--out f]
+      exec python3 "$ROOT/scripts/compose-job.py" "$@"
+      ;;
     uart)
       local file="" out=""
       while [[ $# -gt 0 ]]; do
@@ -860,14 +865,20 @@ cmd_compose() {
       cat <<'CEOF'
 labwired agent compose — assemble observability elements (not ready-made plots)
 
+  # Preferred (skill job): user need → recipe → composed.json
+  labwired agent compose job --ask "plot LED vs UART" --uart <log> [--out composed.json]
+  labwired agent compose job --ask "plot LED vs UART" --from last-run [--out composed.json]
+  labwired agent compose job --ask "show logic capture" --capture <json> [--out composed.json]
+
+  # Low-level
   labwired agent compose uart --file <uart.log> [--out composed.json]
   labwired agent compose capture --capture <capture.json> [--uart log] [--out out.json]
 
-Uses kit scripts; agent should call this instead of inventing waveforms.
+Never invent waveforms. Observation only — not model_verified / hardware_observed.
 CEOF
       ;;
     *)
-      fail "unknown compose subcommand: $sub (try: uart | capture | help)"
+      fail "unknown compose subcommand: $sub (try: job | uart | capture | help)"
       ;;
   esac
 }

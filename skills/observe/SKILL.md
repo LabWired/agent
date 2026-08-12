@@ -1,9 +1,9 @@
 ---
 name: observe
 description: >-
-  Plots and overlays from observability elements (serial, gpio edges, bus,
-  registers, evidence) — not ready-made plot products. Assemble any view the
-  user wants; never invent waveforms.
+  Construct a graph/view from the user's need using real run data only.
+  One job: ask → recipe → compose → present. Never invent series; never claim
+  twin or desk green from a plot.
 license: MIT
 compatibility: opencode
 metadata:
@@ -12,71 +12,65 @@ metadata:
   pack: "observe"
 ---
 
-# Observe (compose elements → any plot)
+# Observe — compose a view from user need
 
-**Rule:** We do **not** ship ready-made plots. We ship **elements** you assemble.
+**Product rule:** We do **not** ship ready-made Open Plot products. We **do** build the graph the user asked for from **elements** in real logs/captures.
+
+**One command (prefer this):**
+
+```bash
+labwired agent compose job --ask "<user words>" --uart <path> --out composed.json
+# or after a twin run that left uart.log under evidence:
+labwired agent compose job --ask "plot LED vs UART" --from last-run --out composed.json
+```
+
+## When to load
+
+User says show / plot / graph / overlay / “what did the bus/LED do” / “LED vs UART”.
 
 ## Hard rules
 
-1. Parse the user ask into **elements** (pins, UART, bus, time window).  
-2. Pull via tools / run artifacts — **never invent** series.  
-3. A composed plot is **observation**, never `model_verified` or `hardware_observed`.  
-4. Prefer helpers over reinventing parsers.
+1. **Never invent** series, edges, or sample points.  
+2. A composed view is **observation only** — not `model_verified`, not `hardware_observed`.  
+3. If source missing or empty match → say **missing** / empty; stop.  
+4. Prefer **`compose job`** over freeform Plotly/HTML/React generation.
 
-## Elements agent may compose (catalog)
+## Ordered job (do this every time)
 
-| Element | Source | Compose helper |
-|---------|--------|----------------|
-| Serial / UART markers | run / monitor / fixture log | `labwired compose uart` |
-| LED digital series | `LED ON`/`OFF` / marker lines | same (derived_from_uart) |
-| Numeric series from UART | `key=value` / CSV lines | same |
-| GPIO edges | inspect / LA export | `labwired compose capture` |
-| Bus samples | peripherals / traces | capture / inspect |
-| Registers | `labwired_inspect` | inspect JSON |
-| Faults | run diagnosis | evidence only |
-| Evidence | verify JSON (illustrate only) | never mint claims |
+| Step | Action |
+|------|--------|
+| 1 | Restate the need in one line (LED vs UART, logic edges, temp series, …). |
+| 2 | Resolve source: user path, or last twin `uart.log`, or capture JSON. |
+| 3 | Run `labwired agent compose job --ask "…" --uart …` (or `--capture …`). |
+| 4 | If exit ≠ 0 or empty series/markers → report cannot compose (no invent). |
+| 5 | Present: path to `composed.json` + short narrative of `series` / `markers` ids. Offer workbench Plot glass only as a **viewer** of that JSON. |
 
-Catalog: `share/observability/element-catalog.json`
+## Recipes (catalog)
 
-### “Show me X” one path (Task 11)
+Defined in `share/observability/element-catalog.json` → `compose_examples`:
 
-```bash
-# Fixed recipe: UART log with LED/marker lines → non-empty series or markers
-python3 scripts/compose-elements.py \
-  --uart fixtures/gate1-live/evidence/fixed/uart.log \
-  --out /tmp/composed.json
-# require: series or markers non-empty
-```
+| Ask (examples) | Recipe | Source |
+|----------------|--------|--------|
+| plot LED vs UART / show serial markers | `e3_led_vs_uart` | UART log |
+| show logic capture / pin edges | `la_capture` | capture JSON |
 
-## Agent-callable helpers (prefer CLI)
+## Low-level (only if job cannot express it)
 
 ```bash
-labwired compose uart --file uart.log --out composed.json
-labwired compose capture --capture capture.json --out composed.json
-labwired compose capture --capture capture.json --uart uart.log --out composed.json
+labwired agent compose uart --file uart.log --out composed.json
+labwired agent compose capture --capture capture.json [--uart log] --out composed.json
 ```
-
-(Scripts under `scripts/compose-*.py` are the implementation; call via **`labwired compose`**.)
-
-## E3 recipe — LED vs UART
-
-1. Run (or use last run) with `LED ON`/`LED OFF` or marker lines.  
-2. Compose UART markers + optional gpio; if only serial, digital-from-log with
-   provenance `derived_from_uart`.  
-3. Narrative + series JSON; prove path stays **`prove`** pack if user asked green.
-
-## VS Code glass (E4)
-
-Workbench panel **Plot** (`labwired.plot`) is dumb multi-series glass:
-
-- Command **LabWired: Open Plot** — show panel  
-- **LabWired: Open Composed Plot JSON…** — load `composed.json` from `labwired compose`  
-- Paste composed JSON into the panel, or stream live serial numbers  
-
-Do **not** claim a ready-made plot product; point users at compose + glass.
 
 ## Never
 
 - “Opening the SPI plot product…”  
-- Invent sample points  
-- Claim plot = model-verified  
+- Generating charts from imagined data  
+- Claiming plot success = twin green or desk green  
+
+## Handoff
+
+| Need | Pack |
+|------|------|
+| Twin green first | `prove` |
+| Desk marker | `desk-hw` |
+| Dual-claim write-up | `prove` / `report-evidence` |

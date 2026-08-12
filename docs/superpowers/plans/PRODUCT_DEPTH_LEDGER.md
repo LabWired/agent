@@ -40,3 +40,4 @@
 | Task | Blocker | Since |
 |------|---------|-------|
 | 9 full desk | Optional: full hardware_observed with flash+port on attached board (script ready) | 2026-08-12 |
+| D5 polish | Plot glass multi-series JSON load (job path exists; glass still mostly live numbers) | 2026-08-12 |

@@ -11,7 +11,7 @@
 | D2 | Import | Multi-source → design context always; twin when catalog allows | 🔶 diagram_json twin; bom/text/kicad design | Stranger can import BOM/KiCad/PDF text and get mapped/dropped honesty + twin when possible |
 | D3 | Twin prove | Write → compile → run → `model_verified` | ✅ gated | Remains green; expand board matrix |
 | D4 | Desk silicon | Flash + serial marker → desk green; RTT path | 🔶 UART; RTT partial | Real probe E2E gate + RTT attach/read when probe supports |
-| D5 | Observability | Agent-composed elements, not Open Plot | 🔶 | “Show me X” via elements E2E |
+| D5 | Observability | Agent-composed elements, not Open Plot | 🔶→✅ job path | `compose job --ask` + observe skill; not invent |
 | D6 | Workbench | Marketplace-quality chrome for agent jobs | 🔶 | G2 checklist green; no fake panels |
 | D7 | Enterprise trust | SOC2/ISO path, DPA, air-gap agent package | ⬜ | Security pack + self-host docs shippable |
 | D8 | Wedge ★ | Twin/CI without flaky HIL; dual claims | ✅ | Never dilute for instrument parity |

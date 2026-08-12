@@ -64,12 +64,23 @@ else
   bad "live-gate1"; tail -12 "$OUT/live-gate1.txt"
 fi
 
-# 5 compose CLI (agent-callable surface)
+# 5 compose CLI (agent-callable surface) + job path (need → recipe → view)
 if "$LABWIRED" compose uart --file "$ROOT/fixtures/gate1-live/evidence/fixed/uart.log" \
   --out "$OUT/compose.json" >"$OUT/compose.txt" 2>&1; then
   pass "labwired compose uart"
 else
   bad "labwired compose"; cat "$OUT/compose.txt"
+fi
+if "$LABWIRED" compose job --ask "plot LED vs UART" \
+  --uart "$ROOT/fixtures/gate1-live/evidence/fixed/uart.log" \
+  --out "$OUT/compose-job.json" >"$OUT/compose-job.txt" 2>&1; then
+  if python3 -c "import json;d=json.load(open('$OUT/compose-job.json')); assert d.get('ok') and (d.get('series') or d.get('markers'))"; then
+    pass "labwired compose job (need→view)"
+  else
+    bad "compose job empty json"; cat "$OUT/compose-job.json"
+  fi
+else
+  bad "compose job"; cat "$OUT/compose-job.txt"
 fi
 
 # 6 knowledge heroes

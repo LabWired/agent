@@ -48,7 +48,8 @@ Build for target → LabWired VS Code F5 / probe-rs → serial observe → hones
 Optional later: when twin available, re-run **prove**.
 
 ### 4. Observe (optional)
-Load **`observe`** if user wants a plot/overlay from run elements.
+Load **`observe`** if user wants a plot/graph:  
+`labwired agent compose job --ask "<their words>" --uart <log>|--from last-run`.
 
 ### 5. Desk-hw (optional)
 Load **`desk-hw`** only if user has hardware and wants promote.

@@ -79,6 +79,52 @@ else
   echo "ok   empty uart rejects (no invent)"
 fi
 
+# compose-job: ask → recipe → non-empty (ties D5 without invent)
+run "compose-job LED vs UART" \
+  python3 "$ROOT/scripts/compose-job.py" \
+    --ask "plot LED vs UART" \
+    --uart "$OUT/demo-uart.log" \
+    --out "$OUT/job-led.json"
+
+python3 - <<PY
+import json, subprocess, sys
+from pathlib import Path
+out = Path("$OUT")
+root = Path("$ROOT")
+fail = 0
+job = json.loads((out / "job-led.json").read_text())
+if not job.get("ok") or not (job.get("series") or job.get("markers")):
+    print("FAIL compose-job empty")
+    fail = 1
+else:
+    print("ok   compose-job non-empty")
+if job.get("recipe_id") != "e3_led_vs_uart":
+    print(f"FAIL recipe_id={job.get('recipe_id')}")
+    fail = 1
+else:
+    print("ok   compose-job recipe e3_led_vs_uart")
+if job.get("status") == "model_verified":
+    print("FAIL job must not set status=model_verified")
+    fail = 1
+else:
+    print("ok   compose-job is observation")
+(out / "empty-src.log").write_text("")
+r = subprocess.run(
+    [sys.executable, str(root / "scripts/compose-job.py"),
+     "--ask", "plot LED vs UART", "--uart", str(out / "empty-src.log"),
+     "--out", str(out / "job-empty.json")],
+    capture_output=True, text=True,
+)
+if r.returncode == 0:
+    print("FAIL compose-job empty uart should fail")
+    fail = 1
+else:
+    print("ok   compose-job empty uart fails closed")
+sys.exit(fail)
+PY
+ec=$?
+if [[ "$ec" -ne 0 ]]; then fail=1; fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "compose-helpers FAILED"
   exit 1
