@@ -1,0 +1,21 @@
+# Known client->server drift as of 2026-08-12. Delete lines as tasks fix them.
+# This file is deleted in Task 5 when it reaches empty.
+call trace/sessionStart
+call trace/sessionStop
+call instrument/list
+call instrument/open
+call instrument/scpi
+call instrument/capture
+call twin/run
+call twin/evidence
+call plot/start
+call serial/getState
+call auth/logout
+call auth/loginWithToken
+call auth/startDeviceCode
+call auth/completeDeviceCode
+call auth/status
+call entitlement/status
+call project/list
+call project/create
+call project/select
