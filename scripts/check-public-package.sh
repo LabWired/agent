@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${LABWIRED_PACKAGE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PUBLIC_DOCS=(README.md docs/INSTALL.md docs/USAGE.md docs/VERIFY.md docs/DEVELOPMENT.md docs/TESTING.md scripts/public/DEPLOY.md)
 fail=0
 PACK_JSON="$(mktemp "${TMPDIR:-/tmp}/labwired-pack.XXXXXX")"
-TRACKED_LIST="$(mktemp "${TMPDIR:-/tmp}/labwired-tracked.XXXXXX")"
-trap 'rm -f "$PACK_JSON" "$TRACKED_LIST"' EXIT
-(cd "$ROOT" && git ls-files -z >"$TRACKED_LIST")
+trap 'rm -f "$PACK_JSON"' EXIT
 
 for file in "${PUBLIC_DOCS[@]}"; do
   if [[ ! -f "$ROOT/$file" ]]; then
@@ -55,10 +53,10 @@ if ! (cd "$ROOT" && npm pack --dry-run --json >"$PACK_JSON"); then
   printf 'FAIL package.json: npm pack --dry-run failed\n' >&2
   fail=1
 else
-  if ! node - "$ROOT" "$PACK_JSON" "$TRACKED_LIST" <<'NODE'
+  if ! node - "$ROOT" "$PACK_JSON" "${PUBLIC_DOCS[@]}" <<'NODE'
 const fs = require('fs');
 const path = require('path');
-const [root, reportPath, trackedPath] = process.argv.slice(2);
+const [root, reportPath, ...publicDocs] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
 const files = new Set((report[0]?.files || []).map(entry => entry.path));
 let failed = false;
@@ -110,8 +108,7 @@ for (const file of files) {
   if (forbiddenPath.test(file) || forbiddenSkillArtifact.test(file)) fail(file, 0, 'forbidden public package path');
 }
 
-const tracked = fs.readFileSync(trackedPath).toString('utf8').split('\0').filter(Boolean);
-const publicSources = new Set([...tracked, ...files]);
+const publicSources = new Set([...files, ...publicDocs]);
 
 const { scanBuffer } = require(path.join(root, 'scripts/check-public-text.js'));
 for (const file of [...publicSources].sort()) {
