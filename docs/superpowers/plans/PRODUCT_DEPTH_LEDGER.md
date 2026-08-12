@@ -11,7 +11,7 @@
 | 4 | bringup tools-before-invent | **done** | grep never invent + part + datasheet | ordered tools-before-invent |
 | 5 | Multi-source import on prod MCP | **done** | bom_csv/text/pdf_text/kicad_sch/diagram_json design_context_ok | #1612 merged + API deploy |
 | 6 | Agent multi-source import smoke | **done** | both smokes exit 0; ship-gate wired | fixtures/import + import-multi-smoke.sh |
-| 7 | Catalog aliases for dropped tokens | pending | BOM maps ADXL345/BME280 | |
+| 7 | Catalog aliases for dropped tokens | **in progress** | local tests map ADXL345/BME280; PR #1615 | no admin merge — wait CI |
 | 8 | Second twin chip live-gate | pending | two LABWIRED_GATE1_CHIP green | |
 | 9 | Physical desk E2E | pending | desk-hw-physical exit 0 w/ probe | exit 2 if NEED_PROBE |
 | 10 | RTT capture claim JSON | pending | rtt-capture or NEED_RTT + Task 9 | |
