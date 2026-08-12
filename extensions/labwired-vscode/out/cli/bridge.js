@@ -248,6 +248,8 @@ class LabWiredBridge {
             ...process.env,
             LABWIRED_VSCODE: "1",
             LABWIRED_EDITOR: "1",
+            // Product chrome: never let the engine rename the terminal tab to "OpenCode".
+            OPENCODE_DISABLE_TERMINAL_TITLE: "1",
             ...(0, cloudSession_1.cloudSessionEnv)(process.env, { preferBase: true }),
         };
         if (mode)

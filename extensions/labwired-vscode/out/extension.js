@@ -398,6 +398,19 @@ function activate(context) {
                 await vscode.commands.executeCommand("labwired.plot.focus");
             },
         ],
+        [
+            "labwired.openComposedPlot",
+            async () => {
+                const picked = await vscode.window.showOpenDialog({
+                    canSelectMany: false,
+                    filters: { JSON: ["json"] },
+                    title: "Open composed.json from labwired compose job",
+                });
+                if (!picked?.[0])
+                    return;
+                await plot.loadComposedFile(picked[0]);
+            },
+        ],
         ["labwired.openEvidence", async () => focus("labwired.evidence")],
         ["labwired.openPlan", async () => focus("labwired.plan")],
         [
@@ -753,7 +766,7 @@ function activate(context) {
     const cli = bridge.getCli();
     store.append("system", `LabWired workbench v0.6.3 — same start-here as CLI\n` +
         `1. Log in (labwired login) → hosted MCP + model\n` +
-        `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
+        `2. Doctor → Start Agent (Terminal) → LabWired Agent + golden-path\n` +
         `3. Overview: twin display (inspect) · topology · serial · elements\n` +
         `4. “Blink the LED and prove it on the twin.”\n` +
         `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +
