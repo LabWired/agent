@@ -102,8 +102,9 @@ A script that extracts every RPC method the client calls and every notification 
 - Create: `ext/scripts/rpc-contract-baseline.txt`
 
 Conventions this script enforces (Tasks 3–5 make the client conform):
-- Client requests are always `rpc.request('<method>', ...)` or `tryRpc(rpc, '<method>', ...)` — literal first/second arg.
-- Client notification subscriptions are always `onNotification(rpc, '<method>', handler)` — literal second arg.
+- Client requests are always `rpc.request('<method>', ...)` — literal first arg — and are hard-gated against the server dispatch table.
+- Client notification subscriptions are always `onNotification(rpc, '<method>', handler)` — literal second arg — and are hard-gated against server `notify()` emissions.
+- `tryRpc(rpc, '<method>', ...)` is the documented escape hatch for **optional** capabilities (it resolves `null` when the server lacks the method) and is deliberately **exempt** from the gate.
 - Server methods are `case '<method>':` in the dispatch switch of `server/rpc-server.mjs`; server notifications are `notify('<method>', ...)`.
 
 - [ ] **Step 1: Write the contract checker**
@@ -114,6 +115,13 @@ Create `ext/scripts/rpc-contract-check.mjs`:
 #!/usr/bin/env node
 // rpc-contract-check.mjs — fail if the extension calls/subscribes RPC methods
 // the server does not implement. Zero-dep; regex-based by convention.
+// Conventions enforced (literal string args only — template literals / computed
+// names evade this check):
+//   hard-gated:  rpc.request('x/y', ...)          client -> server request
+//                onNotification(rpc, 'x/y', ...)   client subscription
+//   exempt:       tryRpc(rpc, 'x/y', ...)          optional capability; tolerates absence
+// Server surface: case "x/y": in the dispatch switch, notify("x/y", ...) emissions.
+// Note: clientCalls/clientSubs are keyed by method; DRIFT messages report one file per method.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,21 +142,19 @@ function* walk(dir) {
 // --- server surface ---
 const serverSrc = readFileSync(serverFile, 'utf8');
 const serverMethods = new Set();
-for (const m of serverSrc.matchAll(/case ['"]([a-z]+\/[a-zA-Z]+)['"]:/g)) serverMethods.add(m[1]);
+for (const m of serverSrc.matchAll(/case ['"]([\w]+\/[\w]+)['"]:/g)) serverMethods.add(m[1]);
 for (const m of serverSrc.matchAll(/case ['"](initialize|ping)['"]:/g)) serverMethods.add(m[1]);
 const serverNotifications = new Set();
-for (const m of serverSrc.matchAll(/notify\(['"]([a-z]+\/[a-zA-Z]+)['"]/g)) serverNotifications.add(m[1]);
+for (const m of serverSrc.matchAll(/notify\(['"]([\w]+\/[\w]+)['"]/g)) serverNotifications.add(m[1]);
 
 // --- client surface ---
 const clientCalls = new Map();   // method -> file
 const clientSubs = new Map();    // notification -> file
 for (const f of walk(join(extRoot, 'src'))) {
   const src = readFileSync(f, 'utf8');
-  for (const m of src.matchAll(/\.request\(\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
+  for (const m of src.matchAll(/\.request\(\s*['"]([\w]+\/[\w]+)['"]/g))
     clientCalls.set(m[1], f);
-  for (const m of src.matchAll(/tryRpc\(\s*[\w.]+\s*,\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
-    clientCalls.set(m[1], f);
-  for (const m of src.matchAll(/onNotification\(\s*[\w.]+\s*,\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
+  for (const m of src.matchAll(/onNotification\(\s*[\w.]+\s*,\s*['"]([\w]+\/[\w]+)['"]/g))
     clientSubs.set(m[1], f);
 }
 
@@ -352,7 +358,9 @@ export function onNotification(
   rpc.on('notification', (m, params) => { if (m === method) handler(params); });
 }
 
-/** Call an optional server method; resolve null when the server lacks it. */
+/** Call an optional server method; resolve null when the server lacks it.
+ *  NOTE: tryRpc is exempt from scripts/rpc-contract-check.mjs by design — it is
+ *  the escape hatch for optional capabilities that tolerate server absence. */
 export async function tryRpc(rpc: Requester, method: string, params: unknown): Promise<any | null> {
   try {
     return await rpc.request(method, params);
@@ -611,6 +619,8 @@ git commit -m "feat(ext): route tool execution through RPC tool/run with CLI fal
 ### Task 5: Eliminate dead RPC calls — baseline to zero
 
 Remove or gracefully degrade every baseline entry, then delete the baseline file so drift becomes a hard failure.
+
+**Mechanics note:** `tryRpc` is exempt from the contract checker. So when a step below wraps a `.request(...)` call in `tryRpc(...)` (or deletes it outright), that method drops out of the checker's client-call set and its baseline line goes STALE — **delete the corresponding baseline line in the same step/commit** so `npm run contract` stays green throughout.
 
 **Files:**
 - Modify: `ext/src/extension.ts:454-620` (delete `labwired.runTwin`? No — keep `runTwin`, fix its path in evidenceProvider; delete `startRtt`/`stopRtt`/`instruments` handlers and their `trace/*` listeners at 516-523)
