@@ -378,7 +378,7 @@ export class BillingService {
       "## Start-here (same as CLI)",
       "1. LabWired: Log in → `labwired login`",
       "2. LabWired: Run Doctor",
-      "3. LabWired: Start Agent (Terminal) → OpenCode + golden-path + MCP",
+      "3. LabWired: Start Agent (Terminal) → LabWired Agent + golden-path + MCP",
       "4. Chat: *Blink the LED and prove it on the twin.*",
       "",
       "Session file: `~/.labwired/session/cloud.json`",

@@ -717,13 +717,36 @@ PY
 JSON
   fi
 
-  # Product identity: do not let the engine rename the terminal tab.
+  # Product identity: do not let the engine rename the terminal tab to "OpenCode".
+  # OpenCode only accepts "1" or "true" (case-insensitive).
   export OPENCODE_DISABLE_TERMINAL_TITLE=1
 
-  # Terminal window / tab title (OSC 0). No-op when not a TTY.
+  labwired_set_window_title "LabWired Agent"
+}
+
+# Set terminal window + tab title (OSC 0 and OSC 2). Safe no-op off TTY.
+labwired_set_window_title() {
+  local title="${1:-LabWired Agent}"
   if [[ -t 1 ]] || [[ -t 2 ]]; then
-    printf '\033]0;LabWired Agent\007' 2>/dev/null || true
+    # OSC 0 = icon+title, OSC 2 = window title (xterm / Terminal / iTerm / VS Code)
+    printf '\033]0;%s\007' "$title" 2>/dev/null || true
+    printf '\033]2;%s\007' "$title" 2>/dev/null || true
   fi
+}
+
+# Always brand the process before handing off to the engine binary.
+# argv0 "labwired-agent" is what some terminals show when they ignore OSC titles.
+labwired_exec_opencode() {
+  export OPENCODE_DISABLE_TERMINAL_TITLE=1
+  labwired_set_window_title "LabWired Agent"
+  local bin
+  bin="$(command -v opencode 2>/dev/null || true)"
+  if [[ -z "$bin" ]]; then
+    fail "LabWired Agent runtime not found. Re-run: curl -fsSL https://labwired.com/install | bash"
+  fi
+  # argv0 rename: process list / some terminal tabs say labwired-agent, not opencode.
+  # OPENCODE_DISABLE_TERMINAL_TITLE stops the engine from overwriting to "OpenCode".
+  exec -a labwired-agent "$bin" "$@"
 }
 
 labwired_splash() {
@@ -1139,7 +1162,9 @@ case "${1:-}" in
     if [[ "${1:-}" == "--http" ]]; then
       shift
       if command -v opencode >/dev/null 2>&1; then
-        exec opencode serve "$@"
+        export OPENCODE_DISABLE_TERMINAL_TITLE=1
+        labwired_set_window_title "LabWired Agent"
+        exec -a labwired-agent "$(command -v opencode)" serve "$@"
       fi
       fail "LabWired Agent runtime not found for --http — re-run install"
     fi
@@ -1210,7 +1235,7 @@ case "${1:-}" in
     labwired_splash
     echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw/import-circuit" >&2
     echo "labwired: LabWired Agent · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
-    exec opencode "$@"
+    labwired_exec_opencode "$@"
     ;;
   "")
     # Ensure prefix tools visible for this session
@@ -1236,7 +1261,7 @@ case "${1:-}" in
     labwired_splash
     echo "labwired: starting LabWired Agent — skill golden-path (firmware first)" >&2
     echo "labwired: start-here: account login → doctor → labwired agent → “blink and prove it”" >&2
-    exec opencode "$@"
+    labwired_exec_opencode "$@"
     ;;
   *)
     # Pass through to agent runtime (e.g. labwired agent mcp list)
@@ -1255,6 +1280,6 @@ case "${1:-}" in
     else
       labwired_export_sim || true
     fi
-    exec opencode "$@"
+    labwired_exec_opencode "$@"
     ;;
 esac

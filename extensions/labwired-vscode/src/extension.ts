@@ -862,7 +862,7 @@ export function activate(context: vscode.ExtensionContext): void {
     "system",
     `LabWired workbench v0.6.3 — same start-here as CLI\n` +
       `1. Log in (labwired login) → hosted MCP + model\n` +
-      `2. Doctor → Start Agent (Terminal) → OpenCode + golden-path\n` +
+      `2. Doctor → Start Agent (Terminal) → LabWired Agent + golden-path\n` +
       `3. Overview: twin display (inspect) · topology · serial · elements\n` +
       `4. “Blink the LED and prove it on the twin.”\n` +
       `• Packs: golden-path · bringup · prove · observe · desk-hw\n` +

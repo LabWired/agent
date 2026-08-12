@@ -236,7 +236,7 @@
           {
             "id": "installCli",
             "title": "Install the LabWired CLI",
-            "description": "Workbench is chrome; the brain is `labwired` (OpenCode + packs + MCP).\n\n[Install CLI](command:labwired.installCli)",
+            "description": "Workbench is chrome; the brain is `labwired` (LabWired Agent packs + MCP).\n\n[Install CLI](command:labwired.installCli)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
             "completionEvents": ["onCommand:labwired.installCli"]
           },
@@ -256,7 +256,7 @@
           },
           {
             "id": "startAgent",
-            "title": "Start Agent (OpenCode)",
+            "title": "Start LabWired Agent",
             "description": "Opens a terminal and runs bare `labwired` — prepare skills + golden-path + shared labwired_* tools.\n\n[Start Agent](command:labwired.startAgent)",
             "media": { "image": "media/labwired-mark.svg", "altText": "LabWired" },
             "completionEvents": ["onCommand:labwired.startAgent"]
