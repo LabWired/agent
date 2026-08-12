@@ -37,6 +37,7 @@ exports.ChatViewProvider = void 0;
 const vscode = __importStar(require("vscode"));
 const registry_1 = require("../tools/registry");
 const theme_1 = require("../webview/theme");
+const messages_1 = require("../rpc/messages");
 const MODE_LABEL = {
     act: "Act",
     plan: "Plan",
@@ -68,36 +69,33 @@ class ChatViewProvider {
         this.evidence = evidence;
         store.onChange(() => this.pushState());
         session.onChange(() => this.pushState());
-        rpc?.on("notification", (method, params) => {
-            void this.onRpcNotification(method, params);
-        });
+        if (rpc) {
+            (0, messages_1.onNotification)(rpc, "chat/textDelta", (p) => {
+                this.rpcAssistant += (0, messages_1.parseChatTextDelta)(p);
+                if (this.rpcAsstMsg) {
+                    this.rpcAsstMsg.text = this.rpcAssistant;
+                    this.pushState();
+                }
+            });
+            (0, messages_1.onNotification)(rpc, "chat/toolCall", (p) => {
+                const t = (0, messages_1.parseChatToolCall)(p);
+                this.store.append("tool", `⚙ ${t.name || "tool"}\n${JSON.stringify(t.params || {}).slice(0, 800)}`);
+            });
+            (0, messages_1.onNotification)(rpc, "chat/toolResult", (p) => {
+                const r = (0, messages_1.parseChatToolResult)(p);
+                this.store.append("tool", `${r.code !== 0 ? "✗" : "✓"} ${r.name || "tool"}\n${r.detail}`);
+            });
+            (0, messages_1.onNotification)(rpc, "chat/done", () => {
+                if (this.rpcAsstMsg && !this.rpcAssistant) {
+                    this.rpcAsstMsg.text = "(done)";
+                }
+                this.rpcAsstMsg = null;
+                this.pushState();
+            });
+        }
     }
     rpcAssistant = "";
     rpcAsstMsg = null;
-    onRpcNotification(method, params) {
-        if (method === "chat/textDelta") {
-            const delta = String(params.delta || "");
-            this.rpcAssistant += delta;
-            if (this.rpcAsstMsg) {
-                this.rpcAsstMsg.text = this.rpcAssistant;
-                this.pushState();
-            }
-        }
-        else if (method === "chat/toolCall") {
-            this.store.append("tool", `⚙ ${params.toolName || "tool"}\n${JSON.stringify(params.args || {}).slice(0, 800)}`);
-        }
-        else if (method === "chat/toolResult") {
-            const r = params.result;
-            this.store.append("tool", `${r?.success === false ? "✗" : "✓"} ${params.toolName || "tool"}\n${r?.summary || ""}`);
-        }
-        else if (method === "chat/done") {
-            if (this.rpcAsstMsg && !this.rpcAssistant) {
-                this.rpcAsstMsg.text = "(done)";
-            }
-            this.rpcAsstMsg = null;
-            this.pushState();
-        }
-    }
     resolveWebviewView(webviewView, _ctx, _token) {
         this.view = webviewView;
         webviewView.webview.options = {
@@ -163,6 +161,11 @@ class ChatViewProvider {
             case "stop":
                 this.agent.stop();
                 this.bridge.stopGeneration();
+                if (this.rpc?.isRunning()) {
+                    this.rpc.request("chat/stop").catch(() => {
+                        /* server already gone */
+                    });
+                }
                 this.store.append("system", "Stopped.");
                 break;
             case "openEvidence":

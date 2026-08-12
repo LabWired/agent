@@ -104,6 +104,15 @@ class PlotViewProvider {
         this.composed = null;
         this.repaint();
     }
+    /** Accept a server-fed series map (plot/update) and re-render. */
+    updateSeries(series) {
+        this.composed = {
+            title: "live",
+            series: Object.entries(series).map(([id, values]) => ({ id, values })),
+        };
+        this.samples = [];
+        this.repaint();
+    }
     /** Load output of `labwired compose job` / compose uart. */
     loadComposed(doc) {
         this.composed = doc;

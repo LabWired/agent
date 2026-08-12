@@ -55,6 +55,7 @@ const catalogProvider_1 = require("./providers/catalogProvider");
 const overviewProvider_1 = require("./providers/overviewProvider");
 const session_1 = require("./agent/session");
 const rpcClient_1 = require("./cli/rpcClient");
+const messages_1 = require("./rpc/messages");
 const agentic_1 = require("./datasheet/agentic");
 const probeGdb_1 = require("./debug/probeGdb");
 const billing_1 = require("./pro/billing");
@@ -80,17 +81,9 @@ function activate(context) {
     evidence.setOverview(overview);
     const serial = new serialProvider_1.SerialViewProvider(context.extensionUri, bridge, plot, rpc, overview);
     billing.setRpc(rpc);
-    // Prefer RPC plot stream when server emits plot/data
-    rpc.on("notification", (method, params) => {
-        if (method === "plot/data") {
-            const vals = params.values;
-            if (vals?.length) {
-                for (const v of vals) {
-                    plot.pushSample(v);
-                    overview.pushSample(v);
-                }
-            }
-        }
+    // Server-fed plot stream (plot/update carries named series)
+    (0, messages_1.onNotification)(rpc, "plot/update", (p) => {
+        plot.updateSeries((0, messages_1.parsePlotUpdate)(p));
     });
     const chat = new chatProvider_1.ChatViewProvider(context.extensionUri, bridge, store, session, tools, agent, rpc, evidence);
     const history = new historyProvider_1.HistoryViewProvider(context.extensionUri, store);

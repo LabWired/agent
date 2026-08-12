@@ -37,6 +37,7 @@ exports.SerialViewProvider = void 0;
 const vscode = __importStar(require("vscode"));
 const live_1 = require("../serial/live");
 const theme_1 = require("../webview/theme");
+const messages_1 = require("../rpc/messages");
 /**
  * Embedder Monitor: multi-tab + live UART stream + capture tool.
  */
@@ -75,36 +76,20 @@ class SerialViewProvider {
         this.live.on("close", () => {
             this.broadcast({ type: "liveState", open: false });
         });
-        rpc?.on("notification", (method, params) => {
-            if (method === "serial/data") {
+        if (rpc) {
+            (0, messages_1.onNotification)(rpc, "serial/data", (p) => {
                 this.useRpc = true;
-                this.appendLive(String(params.data || ""));
-            }
-            else if (method === "serial/connectionState") {
+                this.appendLive((0, messages_1.parseSerialData)(p));
+            });
+            (0, messages_1.onNotification)(rpc, "serial/connectionState", (p) => {
                 this.broadcast({
                     type: "liveState",
-                    open: !!params.connected,
-                    port: params.port,
-                    baud: params.baud,
+                    open: (0, messages_1.parseSerialConnectionState)(p),
+                    port: p?.port,
+                    baud: p?.baud,
                 });
-            }
-            else if (method === "serial/portsChanged") {
-                this.broadcast({
-                    type: "state",
-                    ports: params.ports || this.bridge.listSerialPorts(),
-                    baud: this.active().baud,
-                    tabs: this.tabs,
-                    activeId: this.activeId,
-                });
-            }
-            else if (method === "plot/data") {
-                const vals = params.values;
-                if (vals?.length) {
-                    for (const v of vals)
-                        this.plot?.pushSample(v);
-                }
-            }
-        });
+            });
+        }
     }
     appendLive(s) {
         this.active().log += s;
@@ -153,9 +138,7 @@ class SerialViewProvider {
                 let live = this.live.getState();
                 if (this.rpc?.isRunning()) {
                     try {
-                        const st = (await this.rpc.request("serial/getState", {}));
-                        if (st.ports?.length)
-                            ports = st.ports;
+                        const st = (await this.rpc.request("serial/status", {}));
                         live = {
                             open: !!st.open,
                             port: st.port,
@@ -234,15 +217,6 @@ class SerialViewProvider {
                             baud,
                             plot: true,
                         });
-                        try {
-                            await this.rpc.request("plot/start", {
-                                source: "serial",
-                                clear: false,
-                            });
-                        }
-                        catch {
-                            /* */
-                        }
                         const line = `[rpc] connected ${port} @ ${baud} (plot on)\n`;
                         this.active().log += line;
                         post({ type: "log", text: line, tabId: this.activeId });
