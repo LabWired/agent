@@ -55,6 +55,16 @@ labwired compose capture --capture capture.json --uart uart.log --out composed.j
    provenance `derived_from_uart`.  
 3. Narrative + series JSON; prove path stays **`prove`** pack if user asked green.
 
+## VS Code glass (E4)
+
+Workbench panel **Plot** (`labwired.plot`) is dumb multi-series glass:
+
+- Command **LabWired: Open Plot** — show panel  
+- **LabWired: Open Composed Plot JSON…** — load `composed.json` from `labwired compose`  
+- Paste composed JSON into the panel, or stream live serial numbers  
+
+Do **not** claim a ready-made plot product; point users at compose + glass.
+
 ## Never
 
 - “Opening the SPI plot product…”  

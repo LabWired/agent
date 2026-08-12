@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.10 — 2026-08-12 — Release gate: auth honesty + twin/desk/knowledge paths
+
+- **Doctor / session:** live-probe hosted model gateway + MCP; dead tokens fail hosted-tools (no false “signed in”).
+- **Login:** HTTP User-Agent on device-code so Cloudflare does not block sign-in.
+- **Ship-gate:** twin live-gate1, assert-status, compose, skills-verify, import-diagram, desk-hw polish, knowledge MCP (list/part/datasheet/import).
+- **Skills:** `import-circuit` first-class; packs golden-path · bringup · prove · observe · desk-hw · import-circuit; dual claims (`model_verified` twin-only, `hardware_observed` desk-only).
+- **Docs / brand:** README + AGENTS dual-claim path; LabWired Agent branding; legal pointers.
+
 ## 0.3.9 — 2026-08-11 — LabWired CLI brand (no OpenCode logo)
 
 - Replace OpenCode home wordmark with LabWired Agent branding via TUI plugin `labwired.brand`.

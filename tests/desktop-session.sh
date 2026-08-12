@@ -101,13 +101,14 @@ grep -q '^mode=local$' <<<"$out" \
 # `opencode` and assert what landed in OPENCODE_CONFIG_DIR — persona, skill
 # permissions and both SKUs are exactly what the LOCAL profile silently drops.
 SB="$TMP/e2e"
-mkdir -p "$SB/bin" "$SB/home/.config/opencode"
+mkdir -p "$SB/bin" "$SB/home/.config/labwired-agent"
 printf '#!/bin/sh\nexit 0\n' >"$SB/bin/opencode"
 chmod +x "$SB/bin/opencode"
 
 if env -i PATH="$SB/bin:/usr/bin:/bin" HOME="$SB/home" \
 	LABWIRED_HOME="$SB/home/.labwired" \
-	OPENCODE_CONFIG_DIR="$SB/home/.config/opencode" \
+	LABWIRED_AGENT_CONFIG_DIR="$SB/home/.config/labwired-agent" \
+	OPENCODE_CONFIG_DIR="$SB/home/.config/labwired-agent" \
 	LABWIRED_MODEL_KEY="lwd_desktoptoken" \
 	LABWIRED_PROJECT="proj_desktop" \
 	LABWIRED_MODEL="labwired-default" \
@@ -115,21 +116,25 @@ if env -i PATH="$SB/bin:/usr/bin:/bin" HOME="$SB/home" \
 	LABWIRED_AGENT_BIN="$ROOT/bin/labwired-agent" \
 	LABWIRED_EDITOR=1 LABWIRED_MODE=agent \
 	bash "$ROOT/bin/labwired" agent >/dev/null 2>&1; then
-	CONFIG="$SB/home/.config/opencode/opencode.json" python3 - <<'PY' && ok "desktop app lands on the full hosted config" || bad "desktop app landed on a degraded config"
+	CONFIG="$SB/home/.config/labwired-agent/opencode.json" python3 - <<'PY' && ok "desktop app lands on the full hosted config" || bad "desktop app landed on a degraded config"
 import json, os, sys
 cfg = json.load(open(os.environ["CONFIG"]))
 provider = cfg.get("provider", {}).get("labwired", {})
 problems = []
 if sorted(provider.get("models", {})) != ["labwired-default", "labwired-fast"]:
     problems.append(f"models={sorted(provider.get('models', {}))}")
-if cfg.get("default_agent") != "labwired":
+if cfg.get("default_agent") != "build":
     problems.append(f"default_agent={cfg.get('default_agent')}")
-if "labwired" not in cfg.get("agent", {}):
-    problems.append("no LabWired Agent persona")
+if "build" not in cfg.get("agent", {}):
+    problems.append("no LabWired Agent persona on build primary")
 if not cfg.get("permission", {}).get("skill"):
     problems.append("no skill permission allowlist")
-if cfg.get("mcp", {}).get("labwired", {}).get("type") != "remote":
+mcp = cfg.get("mcp", {}).get("labwired", {})
+if mcp.get("type") != "remote":
     problems.append("MCP is not the hosted remote endpoint")
+if mcp.get("oauth") is not False:
+    problems.append("MCP oauth must be false (LabWired account Bearer, not OpenCode OAuth)")
+# Account / desktop token via env only — no OpenCode auth.json seeding.
 if problems:
     print("  " + "; ".join(problems), file=sys.stderr)
     sys.exit(1)

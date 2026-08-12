@@ -74,11 +74,11 @@ labwired_smoke() {
     fail=1
   fi
 
-  # 5) opencode (needed to run agent TUI)
+  # 5) agent runtime (needed to run agent TUI)
   if command -v opencode >/dev/null 2>&1; then
-    printf '\033[32mok \033[0m opencode (%s)\n' "$(opencode --version 2>&1 | head -1 | tr -d '\n')"
+    printf '\033[32mok \033[0m agent-runtime (%s)\n' "$(opencode --version 2>&1 | head -1 | tr -d '\n')"
   else
-    printf '\033[33mwarn\033[0m opencode not on PATH — agent TUI needs: npm i -g opencode-ai\n'
+    printf '\033[33mwarn\033[0m agent-runtime not on PATH — re-run: curl -fsSL https://labwired.com/install | bash\n'
   fi
 
   if [[ "$fail" -eq 0 ]]; then

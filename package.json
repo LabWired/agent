@@ -1,6 +1,6 @@
 {
   "name": "@labwired/agent",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Firmware agent with LabWired twin verification",
   "license": "MIT",
   "homepage": "https://labwired.com",
@@ -118,7 +118,14 @@
     "docs/DEVELOPMENT.md",
     "docs/TESTING.md",
     "docs/KNOWLEDGE.md",
-    "docs/GOLDEN_PATH.md"
+    "docs/GOLDEN_PATH.md",
+    "scripts/ship-gate.sh",
+    "scripts/knowledge-mcp-smoke.sh",
+    "scripts/import-diagram-smoke.sh",
+    "scripts/desk-hw-smoke.sh",
+    "scripts/knowledge-top-parts.py",
+    "docs/LEGAL.md",
+    "docs/UPSTREAM_OPENCODE.md"
   ],
   "os": [
     "darwin",

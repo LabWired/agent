@@ -1,12 +1,10 @@
 /**
  * LabWired TUI brand plugin.
  *
- * Replaces the OpenCode home_logo slot so the product surface is LabWired CLI,
- * not OpenCode. Engine remains OpenCode under the hood.
- *
- * Loaded via config/tui.json → plugin: ["./plugins/labwired-brand.tsx"]
- * (path is relative to the tui.json that declares it; install copies this
- * file next to ~/.config/opencode/tui.json as plugins/labwired-brand.tsx).
+ * Replaces the stock engine home_logo slot so the product surface is
+ * LabWired Agent (logo + tagline). Loaded via config/tui.json.
+ * Install copies this file next to ~/.config/opencode/tui.json as
+ * plugins/labwired-brand.tsx.
  */
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
@@ -20,9 +18,47 @@ function color(map: ColorMap, name: string, fallback: string): unknown {
   return fallback
 }
 
+/**
+ * Build a fixed-width logo block.
+ * Wire L is left-aligned as one unit (not per-line centered — that looked shifted),
+ * then the whole block is padded so the outer box can center it cleanly.
+ */
+function labwiredLogoArt(): string[] {
+  // L-mark columns must match: stem under top node.
+  const mark = ["●", "│", "│", "└──●"]
+  const title = "L A B W I R E D"
+  const rule = "───────────────"
+  const agent = "A G E N T"
+  const tag = "The easy way to build hardware"
+  // Indent a *group* by the same amount so relative columns stay fixed.
+  const indentGroup = (lines: string[]) => {
+    const groupW = Math.max(0, ...lines.map((l) => l.length))
+    const n = Math.max(0, Math.floor((title.length - groupW) / 2))
+    const pad = " ".repeat(n)
+    return lines.map((l) => pad + l)
+  }
+  const under = (s: string) => {
+    const n = Math.max(0, Math.floor((title.length - s.length) / 2))
+    return " ".repeat(n) + s
+  }
+  const core = [
+    ...indentGroup(mark),
+    "",
+    title,
+    rule,
+    under(agent),
+    "",
+    tag,
+  ]
+  // Equal width via RIGHT pad only — left edges stay fixed so the L never shifts.
+  // Outer alignItems=center then moves the whole block as one unit.
+  const width = Math.max(...core.map((l) => l.length))
+  return core.map((l) => l + " ".repeat(width - l.length))
+}
+
 const tui: TuiPlugin = async (api) => {
   api.slots.register({
-    // Win replace mode against the built-in OpenCode Logo.
+    // Win replace mode against the built-in stock home logo.
     order: 0,
     slots: {
       home_logo(ctx) {
@@ -30,19 +66,21 @@ const tui: TuiPlugin = async (api) => {
         const primary = color(map, "primary", "#3d8fd1")
         const muted = color(map, "textMuted", "#8b91a3")
         const text = color(map, "text", "#e8eaf0")
-        // Simple, product-owned mark — not the OpenCode wordmark.
-        const art = [
-          "  L A B W I R E D",
-          "  ───────────────",
-          "  A G E N T",
-        ]
+        const art = labwiredLogoArt()
+        const isMuted = (line: string) => line.trim() === "───────────────"
+        const isTag = (line: string) =>
+          line.trim().startsWith("The easy way to build hardware")
         return (
           <box flexDirection="column" alignItems="center">
-            {art.map((line, i) => (
-              <text fg={i === 1 ? muted : primary}>{line}</text>
+            {art.map((line) => (
+              <text
+                fg={
+                  isTag(line) ? text : isMuted(line) ? muted : primary
+                }
+              >
+                {line.length ? line : " "}
+              </text>
             ))}
-            <box height={1} />
-            <text fg={text}>Write firmware · check on a twin</text>
           </box>
         )
       },

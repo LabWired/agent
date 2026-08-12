@@ -80,7 +80,6 @@ Usage:
   labwired agent install-deps    Refresh tools into prefix
   labwired agent help
 
-  Alias: labwired agent opencode ...  (same start; engine alias)
 
 Env:
   LABWIRED_HOME            Install root (default %USERPROFILE%\.labwired)
@@ -89,8 +88,31 @@ Env:
 "@
 }
 
+function Get-LabWiredAgentConfigDir {
+  if ($env:LABWIRED_AGENT_CONFIG_DIR) { return $env:LABWIRED_AGENT_CONFIG_DIR }
+  if ($env:OPENCODE_CONFIG_DIR -and ($env:OPENCODE_CONFIG_DIR -notmatch '[\\/]\.config[\\/]opencode[\\/]?$')) {
+    return $env:OPENCODE_CONFIG_DIR
+  }
+  return (Join-Path $env:USERPROFILE ".config\labwired-agent")
+}
+
+function Ensure-LabWiredAgentConfigDir {
+  $cfg = Get-LabWiredAgentConfigDir
+  $old = Join-Path $env:USERPROFILE ".config\opencode"
+  if (-not (Test-Path $cfg)) { New-Item -ItemType Directory -Path $cfg -Force | Out-Null }
+  $newCfg = Join-Path $cfg "opencode.json"
+  $oldCfg = Join-Path $old "opencode.json"
+  if (-not (Test-Path $newCfg) -and (Test-Path $oldCfg)) {
+    Say "migrating agent config -> $cfg"
+    Copy-Item -Recurse -Force (Join-Path $old "*") $cfg -ErrorAction SilentlyContinue
+  }
+  $env:LABWIRED_AGENT_CONFIG_DIR = $cfg
+  $env:OPENCODE_CONFIG_DIR = $cfg
+  return $cfg
+}
+
 function Apply-LabWiredBranding {
-  $cfg = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".config\opencode" }
+  $cfg = Ensure-LabWiredAgentConfigDir
   $themesDir = Join-Path $cfg "themes"
   $brandingDir = Join-Path $cfg "branding"
   $pluginsDir = Join-Path $cfg "plugins"
@@ -159,7 +181,7 @@ function Show-LabWiredSplash {
     Write-Host (Get-Content $banner -Raw) -ForegroundColor Blue
   } else {
     Write-Host "  LabWired Agent" -ForegroundColor Blue
-    Write-Host "  Write firmware * check on a twin" -ForegroundColor Blue
+    Write-Host "  The easy way to build hardware" -ForegroundColor Blue
   }
 }
 
@@ -173,9 +195,9 @@ function Cmd-Version {
   Write-Host "prefix   $HomeDir"
   Write-Host "platform windows"
   if (Get-Command opencode -ErrorAction SilentlyContinue) {
-    Write-Host "opencode $((& opencode --version 2>&1 | Select-Object -First 1))"
+    Write-Host "runtime $((& opencode --version 2>&1 | Select-Object -First 1))"
   } else {
-    Write-Host "opencode (missing - install Node + npm i -g opencode-ai)"
+    Write-Host "runtime (missing - re-run LabWired install)"
   }
 }
 
@@ -186,9 +208,9 @@ function Cmd-Doctor {
   Say "prefix $HomeDir"
 
   if (Get-Command opencode -ErrorAction SilentlyContinue) {
-    Say "ok  opencode: $((Get-Command opencode).Source)"
+    Say "ok  agent-runtime: present"
   } else {
-    Write-Host "FAIL opencode not on PATH" -ForegroundColor Red
+    Write-Host "FAIL agent-runtime not on PATH - re-run LabWired install" -ForegroundColor Red
     $ok = 1
   }
 
@@ -207,9 +229,9 @@ function Cmd-Doctor {
     $ok = 1
   }
 
-  $cfg = Join-Path $env:USERPROFILE ".config\opencode"
+  $cfg = Get-LabWiredAgentConfigDir
   if (Test-Path (Join-Path $cfg "opencode.json")) {
-    Say "ok  config: $cfg\opencode.json"
+    Say "ok  agent-config: present"
   } else {
     Write-Host "FAIL config missing - re-run install.ps1" -ForegroundColor Red
     $ok = 1
@@ -309,35 +331,33 @@ switch ($cmd) {
   "self-update" { Cmd-Update }
   "upgrade" { Cmd-Update }
   "opencode" {
-    # Alias for product start (OpenCode remains the engine).
+    # Internal engine alias — same product start as bare labwired agent.
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-      $pin = if ($env:OPENCODE_PIN) { $env:OPENCODE_PIN } else { "1.18.7" }
-      Fail "'opencode' not found. Install Node 18+, then: npm i -g opencode-ai@$pin"
+      Fail "LabWired Agent runtime not found. Re-run LabWired install."
     }
     Apply-LabWiredBranding
     if (-not $env:LABWIRED_CLI) {
       Write-Host "labwired: note - no local sim; hosted MCP verify still works." -ForegroundColor Yellow
     }
     Show-LabWiredSplash
-    Write-Host "labwired: starting LabWired CLI" -ForegroundColor Cyan
+    Write-Host "labwired: starting LabWired Agent" -ForegroundColor Cyan
     & opencode @argsRest
   }
   "" {
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-      $pin = if ($env:OPENCODE_PIN) { $env:OPENCODE_PIN } else { "1.18.7" }
-      Fail "'opencode' not found. Install Node 18+, then: npm i -g opencode-ai@$pin"
+      Fail "LabWired Agent runtime not found. Re-run LabWired install."
     }
     Apply-LabWiredBranding
     if (-not $env:LABWIRED_CLI) {
       Write-Host "labwired: note - no local sim; hosted MCP verify still works." -ForegroundColor Yellow
     }
     Show-LabWiredSplash
-    Write-Host "labwired: starting LabWired CLI" -ForegroundColor Cyan
+    Write-Host "labwired: starting LabWired Agent" -ForegroundColor Cyan
     & opencode @argsRest
   }
   default {
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-      Fail "unknown command '$cmd' and opencode missing"
+      Fail "unknown command '$cmd' (LabWired Agent runtime missing — re-run install)"
     }
     Apply-LabWiredBranding
     & opencode @Rest

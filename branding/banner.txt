@@ -1,4 +1,10 @@
-
-  L A B W I R E D   A G E N T
-  Write firmware · check on a twin
-
+     ●                        
+     │                        
+     │                        
+     └──●                     
+                              
+L A B W I R E D               
+───────────────               
+   A G E N T                  
+                              
+The easy way to build hardware

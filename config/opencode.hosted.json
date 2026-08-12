@@ -5,6 +5,7 @@
       "type": "remote",
       "url": "https://api.labwired.com/mcp",
       "enabled": true,
+      "oauth": false,
       "headers": {
         "Authorization": "Bearer {env:LABWIRED_ACCESS_TOKEN}"
       }
@@ -30,13 +31,16 @@
       "using-superpowers": "allow",
       "verification-before-completion": "allow",
       "writing-plans": "allow",
-      "writing-skills": "allow"
+      "writing-skills": "allow",
+      "customize-labwired-agent": "allow",
+      "customize-opencode": "deny",
+      "import-circuit": "allow"
     }
   },
   "provider": {
     "labwired": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "LabWired",
+      "name": "Hosted",
       "options": {
         "baseURL": "https://api.labwired.com/v1",
         "apiKey": "{env:LABWIRED_ACCESS_TOKEN}",
@@ -46,10 +50,10 @@
       },
       "models": {
         "labwired-default": {
-          "name": "LabWired \u00b7 Default"
+          "name": "Default"
         },
         "labwired-fast": {
-          "name": "LabWired \u00b7 Fast"
+          "name": "Fast"
         }
       }
     }
@@ -58,12 +62,11 @@
   "autoupdate": false,
   "share": "disabled",
   "agent": {
-    "labwired": {
-      "name": "LabWired Agent",
-      "description": "START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
+    "build": {
+      "description": "LabWired Agent \u2014 START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
       "mode": "primary",
       "color": "#0056b3"
     }
   },
-  "default_agent": "labwired"
+  "default_agent": "build"
 }

@@ -14,6 +14,14 @@ bad() { echo "FAIL $*"; fail=1; }
 
 echo "==> ship-gate (start-here path)"
 
+# 0a auth honesty (dead token cannot probe green)
+if bash "$ROOT/tests/hosted-auth-probe.sh" >"$OUT/hosted-auth-probe.txt" 2>&1; then
+  pass "hosted-auth-probe"
+else
+  bad "hosted-auth-probe"; tail -20 "$OUT/hosted-auth-probe.txt"
+fi
+
+
 # 1 doctor
 if "$LABWIRED" doctor >"$OUT/doctor.txt" 2>&1; then
   if grep -qiE '(^|[^a-z])not ready' "$OUT/doctor.txt"; then
@@ -109,6 +117,32 @@ if bash "$ROOT/tests/skills-verify-all.sh" >"$OUT/skills-verify.txt" 2>&1; then
   pass "skills-verify-all"
 else
   bad "skills-verify-all"; tail -10 "$OUT/skills-verify.txt"
+fi
+
+
+# 10 import diagram (catalog-honest twin_buildable)
+if bash "$ROOT/scripts/import-diagram-smoke.sh" >"$OUT/import-smoke.txt" 2>&1; then
+  pass "import-diagram twin_buildable"
+else
+  bad "import-diagram"; tail -15 "$OUT/import-smoke.txt"
+fi
+
+# 11 desk-hw polish
+if bash "$ROOT/scripts/desk-hw-smoke.sh" >"$OUT/desk-hw-smoke.txt" 2>&1; then
+  pass "desk-hw polish"
+else
+  bad "desk-hw polish"; tail -20 "$OUT/desk-hw-smoke.txt"
+fi
+
+# 12 hosted knowledge (required when session file exists; skip only if unsigned)
+if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
+  if bash "$ROOT/scripts/knowledge-mcp-smoke.sh" >"$OUT/knowledge-mcp.txt" 2>&1; then
+    pass "knowledge MCP list+part+datasheet+import"
+  else
+    bad "knowledge MCP"; tail -30 "$OUT/knowledge-mcp.txt"
+  fi
+else
+  bad "knowledge MCP skipped — not signed in (golden path requires login)"
 fi
 
 if [[ "$fail" -ne 0 ]]; then

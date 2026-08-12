@@ -11,7 +11,7 @@ export LABWIRED_MCP_ENTRY=/path/to/node_modules/@labwired/mcp/dist/index.js
 ./install.sh --airgap
 ```
 
-The resolver rewrites OpenCode config to:
+The resolver rewrites LabWired Agent config to:
 
 ```json
 ["node", "/absolute/path/to/index.js"]

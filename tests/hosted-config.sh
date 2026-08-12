@@ -22,6 +22,8 @@ cfg = json.loads(Path("$cfg").read_text())
 mcp = cfg.get("mcp", {}).get("labwired", {})
 assert mcp.get("type") == "remote", mcp
 assert mcp.get("url") == "https://api.labwired.com/mcp", mcp
+# Bearer header is the product auth path — do not open OpenCode MCP OAuth /connect.
+assert mcp.get("oauth") is False, mcp
 auth = (mcp.get("headers") or {}).get("Authorization", "")
 assert "{env:LABWIRED_ACCESS_TOKEN}" in auth, auth
 prov = cfg.get("provider", {}).get("labwired", {})
@@ -39,7 +41,8 @@ skills = (cfg.get("permission") or {}).get("skill") or {}
 for required in ("golden-path", "bringup", "prove", "observe", "desk-hw"):
     assert skills.get(required) == "allow", (required, skills)
 # Agent description must point at golden-path / prove (oracle dispose)
-desc = ((cfg.get("agent") or {}).get("labwired") or {}).get("description") or ""
+desc = ((cfg.get("agent") or {}).get("build") or {}).get("description") or ""
+assert cfg.get("default_agent") == "build", cfg.get("default_agent")
 assert "golden-path" in desc.lower() or "prove" in desc.lower(), desc
 assert "model_verified" in desc or "labwired_verify" in desc or "never invent" in desc.lower(), desc
 print("ok   hosted config schema")
@@ -63,6 +66,13 @@ if grep -q 'cmd_login' "$ROOT/bin/labwired-agent" && grep -q 'labwired_prepare_a
   ok "bin/labwired-agent login + prepare"
 else
   bad "bin/labwired-agent missing hosted commands"
+fi
+if grep -q 'labwired_ensure_account' "$ROOT/bin/labwired-agent" \
+  && grep -q 'cmd_auth' "$ROOT/bin/labwired-agent" \
+  && ! grep -q 'labwired_sync_opencode_auth' "$ROOT/bin/labwired-agent"; then
+  ok "bin/labwired-agent first-start account login (no engine auth seed)"
+else
+  bad "bin/labwired-agent missing LabWired account-first auth path"
 fi
 bash -n "$ROOT/bin/labwired"
 bash -n "$ROOT/bin/labwired-agent"
