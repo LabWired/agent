@@ -380,7 +380,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -p . -w",
-    "test:unit": "npm run compile && mocha --ui tdd out/test/unit/**/*.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd \"out/test/unit/**/*.test.js\"",
     "contract": "node scripts/rpc-contract-check.mjs",
     "package": "npm run compile && npx --yes @vscode/vsce package --no-dependencies -o labwired-vscode.vsix",
     "vscode:prepublish": "npm run compile"

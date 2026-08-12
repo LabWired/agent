@@ -169,8 +169,13 @@ export class RpcClient extends EventEmitter {
           const p = this.pending.get(msg.id);
           this.pending.delete(msg.id);
           if (p) {
-            if (msg.error) p.reject(new Error(msg.error.message));
-            else p.resolve(msg.result);
+            if (msg.error) {
+              const err = new Error(msg.error.message) as Error & {
+                code?: number;
+              };
+              err.code = msg.error.code;
+              p.reject(err);
+            } else p.resolve(msg.result);
           }
         } else if (msg.method) {
           this.emit("notification", msg.method, msg.params || {});
