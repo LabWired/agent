@@ -6,7 +6,7 @@
 
 ## Goal
 
-Ship a dependable, Embedder-class firmware development workflow now, accepting limited reliability where hardware knowledge or virtual-hardware coverage is incomplete.
+Ship a hardware-aware firmware development workflow now, accepting limited reliability where hardware knowledge or virtual-hardware coverage is incomplete.
 
 The workflow must support both greenfield requests and existing firmware repositories:
 
@@ -40,12 +40,14 @@ The release may degrade gracefully when grounding or model coverage is incomplet
 
 Keep the implementation small:
 
-- One strong `develop` workflow skill controls the sequence.
+- One strong `develop` workflow skill directs the sequence.
 - Existing `labwired_*` tools perform catalog, context, import, compile, run, inspect, and verify operations.
-- New deterministic code is added only where needed for project detection, hardware-fact validation, retry bounds, or evidence classification.
+- Existing tool statuses and claim rules provide the deterministic gates; no new orchestrator is introduced.
 - There is no general workflow engine, state-machine framework, or new persistence system in this release.
 
-The workflow runs autonomously by default. It stops when acceptance checks pass, three repair cycles have failed, the user cancels, or no new evidence supports another attempt.
+The workflow runs autonomously by default. It stops when acceptance checks pass, three total edit-and-test attempts have completed without success, the user cancels, or no new evidence supports the next allowed attempt. There is no fourth attempt.
+
+The normal tool sequence is `labwired_context` → knowledge tools as needed → `labwired_compile` → `labwired_run` / `labwired_inspect` → `labwired_verify`. Circuit import tools are used only when the request includes circuit input. If a tool is unavailable, report that gap rather than replacing it with model judgment.
 
 ## Workflow
 
@@ -68,7 +70,7 @@ Before hardware-sensitive edits, retrieve the best available context from:
 - Schematics and netlists
 - Vendor SDK headers and existing project definitions
 
-Prefer vendor SDK, HAL, framework, and symbolic register definitions over handwritten numeric constants. Facts with sources are treated as grounded. Reasonable deductions may be used when required for progress, but the final report must label them as inferred.
+Prefer vendor SDK, HAL, framework, and symbolic register definitions over handwritten numeric constants. For important hardware choices—pins, peripheral instances, addresses, clocks, timing limits, and register fields—the final report names the value and its catalog ID, document section, schematic/netlist location, SVD symbol, SDK symbol, or project file. Reasonable deductions may be used when required for progress, but they are labeled `inferred`.
 
 Conflicting sources are not silently reconciled. Prefer project-specific wiring over generic development-board defaults, and report material conflicts that affect behavior.
 
@@ -82,7 +84,7 @@ If compilation fails, use compiler diagnostics and grounded project context to m
 
 ### 4. Check on virtual hardware
 
-After a successful compile, automatically run every applicable virtual-hardware check supported by the selected LabWired target. Checks may inspect GPIO, serial output, registers, timing, buses, or display state when those capabilities exist.
+After a successful compile, turn each observable behavior in the request into a twin check when supported. Use `labwired_verify` for assertions and `labwired_run` plus `labwired_inspect` for observations. Anything else becomes an explicit coverage gap. A workflow may not say “tested” if it ran no checks.
 
 Unsupported peripherals or behaviors do not fail otherwise valid checks. They are recorded as coverage gaps requiring physical confirmation.
 
@@ -92,20 +94,19 @@ Only `labwired_verify` may produce `model_verified`. A compile or ordinary twin 
 
 When compilation or supported virtual-hardware checks fail, diagnose from concrete evidence and repair the smallest relevant surface.
 
-The default limit is three repair cycles. A fourth attempt is allowed only when the latest attempt produced materially new evidence and the next change directly addresses it.
+The limit is three total edit-and-test attempts, including the initial implementation. The workflow stops after the third unsuccessful result and reports the remaining blocker.
 
 ### 6. Report
 
-Every completed workflow returns a compact report that distinguishes:
+Every completed workflow returns a short report with five headings:
 
-- Changes made
-- Hardware facts used and important inferences
-- Compilation result
-- Virtual-hardware observations
-- Assertions that received `model_verified`
-- Behavior not covered by the twin
-- Behavior requiring confirmation on a physical board
-- Remaining failures or risks
+- **Changed** — files and behavior changed
+- **Grounded by** — important hardware values and their sources, including labeled inferences
+- **Compiled** — command and result
+- **Twin checked** — behaviors observed or `model_verified`
+- **Still needs hardware** — unsupported, unavailable, or non-observable behavior
+
+The report ends with one overall result: `verified`, `partially verified`, `compiled only`, `failed`, or `blocked`.
 
 `hardware_observed` remains exclusive to evidence from a physical-board workflow. Twin evidence must never be presented as physical evidence.
 
@@ -126,7 +127,7 @@ The workflow remains useful under partial availability:
 Acceptable claims:
 
 - Develop firmware with datasheet and board context.
-- Compile, test on virtual hardware, and repair failures.
+- Compile firmware, attempt supported virtual-hardware checks, and repair observed failures.
 - Ground hardware decisions in registers, schematics, and SDK definitions when available.
 - See what was tested and what still requires a physical board.
 
@@ -139,13 +140,13 @@ Claims excluded from this release:
 
 ## Acceptance Tests
 
-The release requires five end-to-end cases:
+The release requires five fixed smoke scenarios:
 
-1. **Greenfield:** create firmware for a named board and framework, compile it, run applicable twin checks, and report evidence.
-2. **Existing project:** detect and modify an existing project without replacing its structure, then compile and check it.
-3. **Compile recovery:** encounter a deliberate compile failure, diagnose it, make a focused repair, and compile successfully within the retry bound.
-4. **Partial twin coverage:** pass supported assertions while reporting an unsupported peripheral or behavior as unverified.
-5. **Unsupported hardware:** make useful progress from repository or SDK context and finish with an explicit uncertainty and physical-confirmation report.
+1. **Greenfield ESP32-C3:** prompt: “Create PlatformIO Arduino firmware for ESP32-C3 DevKitM-1 that blinks the configured LED once per second and prints `alive` over serial.” Expected: compile passes; at least one requested behavior is checked; every unchecked behavior is listed.
+2. **Existing STM32F103 project:** start from the checked-in minimal STM32F103 fixture with an established build layout. Prompt: “Add a one-second heartbeat without restructuring the project.” Expected: existing layout and build command remain; compile passes; a supported heartbeat observation or explicit coverage gap is present.
+3. **Compile recovery ESP32-C3:** start from scenario 1 with one deliberate compiler error. Expected: the first compile fails, a focused repair removes that diagnostic, and a later compile passes within three total attempts.
+4. **Partial coverage ESP32-C3:** prompt requests LED blink plus Wi-Fi association. Expected: supported LED behavior is verified or observed; Wi-Fi is recorded as `unsupported`, `unavailable`, or `not_observable`; workflow is not reported as fully `verified` unless both behaviors are checked.
+5. **Unsupported custom board:** use a minimal buildable repository whose board is absent from the LabWired target catalog. Expected: the report says `compiled only` at best and requires physical confirmation.
 
 Tests must also confirm that compilation alone never yields `model_verified`, twin results never yield `hardware_observed`, and missing coverage never becomes a passing assertion.
 
