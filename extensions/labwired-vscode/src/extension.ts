@@ -18,6 +18,7 @@ import { CatalogViewProvider } from "./providers/catalogProvider";
 import { OverviewViewProvider } from "./providers/overviewProvider";
 import { AgentSession } from "./agent/session";
 import { RpcClient, resolveAgentRoot } from "./cli/rpcClient";
+import { onNotification, parsePlotUpdate } from "./rpc/messages";
 import { DatasheetService } from "./datasheet/agentic";
 import { ProbeDebugService } from "./debug/probeGdb";
 import { BillingService } from "./pro/billing";
@@ -61,17 +62,9 @@ export function activate(context: vscode.ExtensionContext): void {
     overview
   );
   billing.setRpc(rpc);
-  // Prefer RPC plot stream when server emits plot/data
-  rpc.on("notification", (method: string, params: Record<string, unknown>) => {
-    if (method === "plot/data") {
-      const vals = params.values as number[] | undefined;
-      if (vals?.length) {
-        for (const v of vals) {
-          plot.pushSample(v);
-          overview.pushSample(v);
-        }
-      }
-    }
+  // Server-fed plot stream (plot/update carries named series)
+  onNotification(rpc, "plot/update", (p) => {
+    plot.updateSeries(parsePlotUpdate(p));
   });
   const chat = new ChatViewProvider(
     context.extensionUri,

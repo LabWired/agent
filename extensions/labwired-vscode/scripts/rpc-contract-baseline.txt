@@ -8,8 +8,6 @@ call instrument/scpi
 call instrument/capture
 call twin/run
 call twin/evidence
-call plot/start
-call serial/getState
 call auth/logout
 call auth/loginWithToken
 call auth/startDeviceCode

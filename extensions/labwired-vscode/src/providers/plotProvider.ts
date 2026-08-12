@@ -94,6 +94,16 @@ export class PlotViewProvider implements vscode.WebviewViewProvider {
     this.repaint();
   }
 
+  /** Accept a server-fed series map (plot/update) and re-render. */
+  updateSeries(series: Record<string, number[]>): void {
+    this.composed = {
+      title: "live",
+      series: Object.entries(series).map(([id, values]) => ({ id, values })),
+    };
+    this.samples = [];
+    this.repaint();
+  }
+
   /** Load output of `labwired compose job` / compose uart. */
   loadComposed(doc: ComposedDoc): void {
     this.composed = doc;

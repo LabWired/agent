@@ -9,6 +9,12 @@ import type { RpcClient } from "../cli/rpcClient";
 import type { EvidenceViewProvider } from "./evidenceProvider";
 import { TOOLS } from "../tools/registry";
 import { shellHtml, LW_MARK_SVG_LG } from "../webview/theme";
+import {
+  onNotification,
+  parseChatTextDelta,
+  parseChatToolCall,
+  parseChatToolResult,
+} from "../rpc/messages";
 
 const MODE_LABEL: Record<AgentMode, string> = {
   act: "Act",
@@ -36,41 +42,40 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   ) {
     store.onChange(() => this.pushState());
     session.onChange(() => this.pushState());
-    rpc?.on("notification", (method: string, params: Record<string, unknown>) => {
-      void this.onRpcNotification(method, params);
-    });
+    if (rpc) {
+      onNotification(rpc, "chat/textDelta", (p) => {
+        this.rpcAssistant += parseChatTextDelta(p);
+        if (this.rpcAsstMsg) {
+          this.rpcAsstMsg.text = this.rpcAssistant;
+          this.pushState();
+        }
+      });
+      onNotification(rpc, "chat/toolCall", (p) => {
+        const t = parseChatToolCall(p);
+        this.store.append(
+          "tool",
+          `⚙ ${t.name || "tool"}\n${JSON.stringify(t.params || {}).slice(0, 800)}`
+        );
+      });
+      onNotification(rpc, "chat/toolResult", (p) => {
+        const r = parseChatToolResult(p);
+        this.store.append(
+          "tool",
+          `${r.code !== 0 ? "✗" : "✓"} ${r.name || "tool"}\n${r.detail}`
+        );
+      });
+      onNotification(rpc, "chat/done", () => {
+        if (this.rpcAsstMsg && !this.rpcAssistant) {
+          this.rpcAsstMsg.text = "(done)";
+        }
+        this.rpcAsstMsg = null;
+        this.pushState();
+      });
+    }
   }
 
   private rpcAssistant = "";
   private rpcAsstMsg: { text: string; role: string } | null = null;
-
-  private onRpcNotification(method: string, params: Record<string, unknown>) {
-    if (method === "chat/textDelta") {
-      const delta = String(params.delta || "");
-      this.rpcAssistant += delta;
-      if (this.rpcAsstMsg) {
-        this.rpcAsstMsg.text = this.rpcAssistant;
-        this.pushState();
-      }
-    } else if (method === "chat/toolCall") {
-      this.store.append(
-        "tool",
-        `⚙ ${params.toolName || "tool"}\n${JSON.stringify(params.args || {}).slice(0, 800)}`
-      );
-    } else if (method === "chat/toolResult") {
-      const r = params.result as { summary?: string; success?: boolean } | undefined;
-      this.store.append(
-        "tool",
-        `${r?.success === false ? "✗" : "✓"} ${params.toolName || "tool"}\n${r?.summary || ""}`
-      );
-    } else if (method === "chat/done") {
-      if (this.rpcAsstMsg && !this.rpcAssistant) {
-        this.rpcAsstMsg.text = "(done)";
-      }
-      this.rpcAsstMsg = null;
-      this.pushState();
-    }
-  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -155,6 +160,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       case "stop":
         this.agent.stop();
         this.bridge.stopGeneration();
+        if (this.rpc?.isRunning()) {
+          this.rpc.request("chat/stop").catch(() => {
+            /* server already gone */
+          });
+        }
         this.store.append("system", "Stopped.");
         break;
       case "openEvidence":

@@ -5,6 +5,11 @@ import type { PlotViewProvider } from "./plotProvider";
 import type { OverviewViewProvider } from "./overviewProvider";
 import { LiveSerial } from "../serial/live";
 import { shellHtml } from "../webview/theme";
+import {
+  onNotification,
+  parseSerialConnectionState,
+  parseSerialData,
+} from "../rpc/messages";
 
 type SerialTab = {
   id: string;
@@ -49,32 +54,20 @@ export class SerialViewProvider implements vscode.WebviewViewProvider {
       this.broadcast({ type: "liveState", open: false });
     });
 
-    rpc?.on("notification", (method: string, params: Record<string, unknown>) => {
-      if (method === "serial/data") {
+    if (rpc) {
+      onNotification(rpc, "serial/data", (p) => {
         this.useRpc = true;
-        this.appendLive(String(params.data || ""));
-      } else if (method === "serial/connectionState") {
+        this.appendLive(parseSerialData(p));
+      });
+      onNotification(rpc, "serial/connectionState", (p) => {
         this.broadcast({
           type: "liveState",
-          open: !!params.connected,
-          port: params.port,
-          baud: params.baud,
+          open: parseSerialConnectionState(p),
+          port: p?.port,
+          baud: p?.baud,
         });
-      } else if (method === "serial/portsChanged") {
-        this.broadcast({
-          type: "state",
-          ports: params.ports || this.bridge.listSerialPorts(),
-          baud: this.active().baud,
-          tabs: this.tabs,
-          activeId: this.activeId,
-        });
-      } else if (method === "plot/data") {
-        const vals = params.values as number[] | undefined;
-        if (vals?.length) {
-          for (const v of vals) this.plot?.pushSample(v);
-        }
-      }
-    });
+      });
+    }
   }
 
   private appendLive(s: string) {
@@ -139,13 +132,13 @@ export class SerialViewProvider implements vscode.WebviewViewProvider {
         let live: Record<string, unknown> = this.live.getState();
         if (this.rpc?.isRunning()) {
           try {
-            const st = (await this.rpc.request("serial/getState", {})) as {
-              ports?: string[];
-              open?: boolean;
+            const st = (await this.rpc.request("serial/status", {})) as {
               port?: string;
               baud?: number;
+              open?: boolean;
+              bytesIn?: number;
+              bytesOut?: number;
             };
-            if (st.ports?.length) ports = st.ports;
             live = {
               open: !!st.open,
               port: st.port,
@@ -224,14 +217,6 @@ export class SerialViewProvider implements vscode.WebviewViewProvider {
               baud,
               plot: true,
             });
-            try {
-              await this.rpc.request("plot/start", {
-                source: "serial",
-                clear: false,
-              });
-            } catch {
-              /* */
-            }
             const line = `[rpc] connected ${port} @ ${baud} (plot on)\n`;
             this.active().log += line;
             post({ type: "log", text: line, tabId: this.activeId });
