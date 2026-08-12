@@ -1,0 +1,2 @@
+(kicad_sch (version 20230121)
+  (symbol (lib_id "Sensor:BME280") (property "Value" "BME280")))

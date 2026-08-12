@@ -129,6 +129,8 @@ Same for `kicad_sch` and `pdf_text` sample payloads (design_context_ok true).
 
 ## Task 6 — Agent multi-source import smoke + fixtures
 
+**Status: done**
+
 **Files:**
 
 - Create `fixtures/import/sample.bom.csv`
@@ -154,9 +156,9 @@ Wire ADXL345 to ESP32-C3 Super Mini over I2C. Optional SSD1306.
   (symbol (lib_id "Sensor:BME280") (property "Value" "BME280")))
 ```
 
-- [ ] Smoke: for each fixture, live MCP import OR local board-config importCircuit → `design_context_ok`
-- [ ] Keep existing diagram_json twin_buildable check
-- [ ] Commit: `test(import): multi-source import smoke`
+- [x] Smoke: for each fixture, live MCP import OR local board-config importCircuit → `design_context_ok`
+- [x] Keep existing diagram_json twin_buildable check
+- [x] Commit: `test(import): multi-source import smoke`
 
 **Gate:**
 

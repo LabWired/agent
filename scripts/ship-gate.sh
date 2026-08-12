@@ -127,6 +127,17 @@ else
   bad "import-diagram"; tail -15 "$OUT/import-smoke.txt"
 fi
 
+# 10b multi-source import (live MCP when signed in — product depth Task 6)
+if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
+  if bash "$ROOT/scripts/import-multi-smoke.sh" >"$OUT/import-multi-smoke.txt" 2>&1; then
+    pass "import-multi (bom/text/kicad + diagram)"
+  else
+    bad "import-multi"; tail -20 "$OUT/import-multi-smoke.txt"
+  fi
+else
+  bad "import-multi skipped — not signed in"
+fi
+
 # 11 desk-hw polish
 if bash "$ROOT/scripts/desk-hw-smoke.sh" >"$OUT/desk-hw-smoke.txt" 2>&1; then
   pass "desk-hw polish"

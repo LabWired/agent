@@ -1,0 +1,1 @@
+Wire ADXL345 to ESP32-C3 Super Mini over I2C. Optional SSD1306.
