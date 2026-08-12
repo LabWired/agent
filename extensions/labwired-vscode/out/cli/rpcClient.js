@@ -181,8 +181,11 @@ class RpcClient extends events_1.EventEmitter {
                     const p = this.pending.get(msg.id);
                     this.pending.delete(msg.id);
                     if (p) {
-                        if (msg.error)
-                            p.reject(new Error(msg.error.message));
+                        if (msg.error) {
+                            const err = new Error(msg.error.message);
+                            err.code = msg.error.code;
+                            p.reject(err);
+                        }
                         else
                             p.resolve(msg.result);
                     }
