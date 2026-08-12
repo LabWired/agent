@@ -134,10 +134,10 @@ function* walk(dir) {
 // --- server surface ---
 const serverSrc = readFileSync(serverFile, 'utf8');
 const serverMethods = new Set();
-for (const m of serverSrc.matchAll(/case '([a-z]+\/[a-zA-Z]+)':/g)) serverMethods.add(m[1]);
-for (const m of serverSrc.matchAll(/case '(initialize|ping)':/g)) serverMethods.add(m[1]);
+for (const m of serverSrc.matchAll(/case ['"]([a-z]+\/[a-zA-Z]+)['"]:/g)) serverMethods.add(m[1]);
+for (const m of serverSrc.matchAll(/case ['"](initialize|ping)['"]:/g)) serverMethods.add(m[1]);
 const serverNotifications = new Set();
-for (const m of serverSrc.matchAll(/notify\('([a-z]+\/[a-zA-Z]+)'/g)) serverNotifications.add(m[1]);
+for (const m of serverSrc.matchAll(/notify\(['"]([a-z]+\/[a-zA-Z]+)['"]/g)) serverNotifications.add(m[1]);
 
 // --- client surface ---
 const clientCalls = new Map();   // method -> file
