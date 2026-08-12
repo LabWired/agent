@@ -9,7 +9,7 @@
 | 2 | Knowledge smoke 100% required | **done** | `bash scripts/knowledge-mcp-smoke.sh` exit 0 | required heroes hard-fail |
 | 3 | Seed store until Task 2 green | **done** (prod D1 applied) | part bme280 OK; 5 proven facts; smoke exit 0 | monorepo #1613 + migration 0034 |
 | 4 | bringup tools-before-invent | **done** | grep never invent + part + datasheet | ordered tools-before-invent |
-| 5 | Multi-source import on prod MCP | pending | live labwired_import bom_csv | monorepo deploy |
+| 5 | Multi-source import on prod MCP | **done** | bom_csv/text/pdf_text/kicad_sch/diagram_json design_context_ok | #1612 merged + API deploy |
 | 6 | Agent multi-source import smoke | pending | import-multi-smoke + diagram smoke | |
 | 7 | Catalog aliases for dropped tokens | pending | BOM maps ADXL345/BME280 | |
 | 8 | Second twin chip live-gate | pending | two LABWIRED_GATE1_CHIP green | |
@@ -30,6 +30,7 @@
 | 2026-08-12 | 3 | Applied 0034_part_knowledge_bme280 on prod D1; labwired_part bme280 OK (5 proven); smoke PASS |
 | 2026-08-12 | 2 | knowledge-mcp-smoke exit 0 on prod session (required heroes + canaries) |
 | 2026-08-12 | 4 | bringup/AGENTS tools-before-invent; gate greps green |
+| 2026-08-12 | 5 | #1612 merged (TS fix); API worker deployed; multi-source import green on prod |
 
 ## Blockers
 

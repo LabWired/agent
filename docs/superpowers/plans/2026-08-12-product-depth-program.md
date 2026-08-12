@@ -108,10 +108,12 @@ Expected: every required id `ok`, script exit 0. No session → exit 2 with `nee
 
 ## Task 5 — Confirm multi-source import on production MCP
 
+**Status: done** (prod API after #1612)
+
 **Repo:** monorepo (merge/deploy import PR if not live)
 
-- [ ] Confirm live `labwired_import` accepts: `diagram_json`, `bom_csv`, `text`, `pdf_text`, `kicad_sch`
-- [ ] If production still rejects non-diagram kinds: merge + deploy board-config/api import changes first
+- [x] Confirm live `labwired_import` accepts: `diagram_json`, `bom_csv`, `text`, `pdf_text`, `kicad_sch`
+- [x] If production still rejects non-diagram kinds: merge + deploy board-config/api import changes first
 
 **Gate (session + MCP):**
 
