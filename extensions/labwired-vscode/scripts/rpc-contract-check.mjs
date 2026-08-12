@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 // rpc-contract-check.mjs — fail if the extension calls/subscribes RPC methods
 // the server does not implement. Zero-dep; regex-based by convention.
+// Conventions enforced (literal string args only — template literals / computed
+// names evade this check):
+//   hard-gated:  rpc.request('x/y', ...)          client -> server request
+//                onNotification(rpc, 'x/y', ...)   client subscription
+//   exempt:       tryRpc(rpc, 'x/y', ...)          optional capability; tolerates absence
+// Server surface: case "x/y": in the dispatch switch, notify("x/y", ...) emissions.
+// Note: clientCalls/clientSubs are keyed by method; DRIFT messages report one file per method.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,21 +28,19 @@ function* walk(dir) {
 // --- server surface ---
 const serverSrc = readFileSync(serverFile, 'utf8');
 const serverMethods = new Set();
-for (const m of serverSrc.matchAll(/case ['"]([a-z]+\/[a-zA-Z]+)['"]:/g)) serverMethods.add(m[1]);
+for (const m of serverSrc.matchAll(/case ['"]([\w]+\/[\w]+)['"]:/g)) serverMethods.add(m[1]);
 for (const m of serverSrc.matchAll(/case ['"](initialize|ping)['"]:/g)) serverMethods.add(m[1]);
 const serverNotifications = new Set();
-for (const m of serverSrc.matchAll(/notify\(['"]([a-z]+\/[a-zA-Z]+)['"]/g)) serverNotifications.add(m[1]);
+for (const m of serverSrc.matchAll(/notify\(['"]([\w]+\/[\w]+)['"]/g)) serverNotifications.add(m[1]);
 
 // --- client surface ---
 const clientCalls = new Map();   // method -> file
 const clientSubs = new Map();    // notification -> file
 for (const f of walk(join(extRoot, 'src'))) {
   const src = readFileSync(f, 'utf8');
-  for (const m of src.matchAll(/\.request\(\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
+  for (const m of src.matchAll(/\.request\(\s*['"]([\w]+\/[\w]+)['"]/g))
     clientCalls.set(m[1], f);
-  for (const m of src.matchAll(/tryRpc\(\s*[\w.]+\s*,\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
-    clientCalls.set(m[1], f);
-  for (const m of src.matchAll(/onNotification\(\s*[\w.]+\s*,\s*['"]([a-z]+\/[a-zA-Z]+)['"]/g))
+  for (const m of src.matchAll(/onNotification\(\s*[\w.]+\s*,\s*['"]([\w]+\/[\w]+)['"]/g))
     clientSubs.set(m[1], f);
 }
 
