@@ -14,11 +14,34 @@ source "$ROOT/lib/resolve-catalog.sh"
 source "$ROOT/lib/assert-status.sh"
 
 CHIP="${LABWIRED_GATE1_CHIP:-esp32c3}"
-MARKER="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
 MAX_STEPS="${LABWIRED_GATE1_TWIN_STEPS:-5000000}"
-FW_DIR="$ROOT/fixtures/gate1-live/firmware"
 EV="$ROOT/fixtures/gate1-live/evidence"
 CORE="${LABWIRED_CORE_SRC:-$HOME/Projects/labwired/core}"
+
+# Chip profiles: firmware dir + UART marker for red→green (Task 8 second chip).
+case "$CHIP" in
+  esp32c3)
+    FW_DIR="$ROOT/fixtures/gate1-live/firmware"
+    MARKER="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
+    REBUILD_MAKE=1
+    ;;
+  stm32f103)
+    FW_DIR="$ROOT/fixtures/gate1-live/firmware/stm32f103"
+    MARKER="${LABWIRED_HW_MARKER:-LED ON}"
+    REBUILD_MAKE=0
+    ;;
+  *)
+    # Allow custom: LABWIRED_GATE1_CHIP=<id> with firmwares under firmware/<id>/
+    FW_DIR="$ROOT/fixtures/gate1-live/firmware/${CHIP}"
+    MARKER="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
+    REBUILD_MAKE=0
+    if [[ ! -d "$FW_DIR" ]]; then
+      echo "live-gate1: unknown chip '$CHIP' (have: esp32c3, stm32f103)" >&2
+      echo "  or place gate1-fixed.elf + gate1-broken.elf under $FW_DIR" >&2
+      exit 2
+    fi
+    ;;
+esac
 
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${HOME}/.labwired/bin:${PATH}"
 
@@ -36,16 +59,22 @@ fi
 SYS="$(labwired_catalog_system "$CHIP")" || exit 2
 
 mkdir -p "$EV"
-echo "==> live-gate1  chip=$CHIP  sim=$SIM"
+echo "==> live-gate1  chip=$CHIP  sim=$SIM  marker=$MARKER"
 echo "    system=$SYS"
+echo "    firmware=$FW_DIR"
 
-# Rebuild ELFs if toolchain present; else use committed prebuilts
-if [[ ! -f "$FW_DIR/gate1-fixed.elf" || ! -f "$FW_DIR/gate1-broken.elf" ]] \
-  || [[ "${LABWIRED_GATE1_REBUILD:-0}" == "1" ]]; then
-  echo "==> build gate1 ELFs"
-  make -C "$FW_DIR" all
+# Rebuild ELFs if toolchain present (esp32c3 only); else use committed prebuilts
+if [[ "$REBUILD_MAKE" -eq 1 ]]; then
+  if [[ ! -f "$FW_DIR/gate1-fixed.elf" || ! -f "$FW_DIR/gate1-broken.elf" ]] \
+    || [[ "${LABWIRED_GATE1_REBUILD:-0}" == "1" ]]; then
+    echo "==> build gate1 ELFs"
+    make -C "$FW_DIR" all
+  fi
 fi
-test -f "$FW_DIR/gate1-fixed.elf" && test -f "$FW_DIR/gate1-broken.elf"
+test -f "$FW_DIR/gate1-fixed.elf" && test -f "$FW_DIR/gate1-broken.elf" || {
+  echo "live-gate1: missing ELFs in $FW_DIR" >&2
+  exit 2
+}
 
 run_one() {
   local label="$1" elf="$2" expect_pass="$3" # expect_pass: 1 marker present, 0 absent

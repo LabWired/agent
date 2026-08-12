@@ -35,6 +35,8 @@ installations and data stay in place.
 - [Legal (Privacy & Terms)](docs/LEGAL.md)
 - [Product depth (required)](docs/PRODUCT_DEPTH.md)
 - [Embedder parity](docs/EMBEDDER_PARITY.md)
+- [Security](docs/SECURITY.md)
+- [Self-host / airgap](docs/SELF_HOST.md)
 
 
 ## Skills (domain packs)

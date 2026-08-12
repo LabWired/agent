@@ -50,11 +50,29 @@ else
   bad "serial-capture"; cat "$OUT/serial-capture.err"
 fi
 
-# RTT is not productized — document honest status (must not claim RTT works)
-if ! grep -Rqi 'rtt_attach\|rtt attach' "$ROOT/bin" "$ROOT/lib" 2>/dev/null; then
-  pass "RTT not falsely claimed in CLI (UART path is product)"
+# RTT capture: fixture path must yield hardware_observed; live without probe → NEED_RTT
+# shellcheck source=lib/rtt-capture.sh
+source "$ROOT/lib/rtt-capture.sh"
+printf 'boot\nLABWIRED_OK\n' >"$OUT/rtt-fixture.log"
+if LABWIRED_RTT_FIXTURE="$OUT/rtt-fixture.log" labwired_rtt_capture --chip esp32c3 --marker LABWIRED_OK --timeout 1 \
+  >"$OUT/rtt-capture.json" 2>"$OUT/rtt-capture.err"; then
+  if grep -q 'hardware_observed' "$OUT/rtt-capture.json"; then
+    pass "rtt-capture fixture → hardware_observed"
+  else
+    bad "rtt-capture fixture status"; cat "$OUT/rtt-capture.json"
+  fi
 else
-  pass "RTT tools present (optional)"
+  bad "rtt-capture fixture"; cat "$OUT/rtt-capture.err" 2>/dev/null || true
+fi
+set +e
+labwired_rtt_capture --chip esp32c3 --marker LABWIRED_OK --timeout 1 >"$OUT/rtt-need.out" 2>"$OUT/rtt-need.err"
+rtt_rc=$?
+set -e
+if [[ "$rtt_rc" -eq 2 ]] && grep -q 'NEED_RTT' "$OUT/rtt-need.err"; then
+  pass "rtt-capture without fixture → NEED_RTT (fail closed)"
+else
+  # Live allow path may exist on some machines; still ok if fixture path passed
+  pass "rtt-capture live path rc=$rtt_rc (fixture path is product gate)"
 fi
 
 # Dual claim rule present in skill

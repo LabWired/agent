@@ -62,14 +62,27 @@ ESP32/RP2040 may re-enumerate after reset; re-resolve port. Baud must match firm
 | Dual-claim write-up | `prove` (report section) or `scripts/report-evidence.py` |
 
 
-## C. RTT (product depth — required path)
+## C. UART or RTT for the marker (same claim JSON)
 
-When the probe and firmware support RTT (probe-rs):
+Either path can mint **`hardware_observed`** when a marker is captured:
 
 ```bash
-labwired probe rtt --chip <id>   # status / attach when available
+# UART (product default)
+labwired serial-capture <port> <baud> <marker> <timeout>
+
+# RTT (same claim shape: status, marker, excerpt, matched)
+labwired probe rtt-capture --chip <id> --marker LABWIRED_OK
+# CI / no RTT hardware:
+LABWIRED_RTT_FIXTURE=uart.log labwired probe rtt-capture --chip <id>
+# exit 2 NEED_RTT when probe-rs cannot RTT on this target — not a soft pass
 ```
 
-If RTT is unavailable, fall back to `serial-capture` and say so.  
-`hardware_observed` still requires a **marker in a captured window** (UART or RTT).  
-Never invent RTT data.
+Physical full path (hard fail without probe):
+
+```bash
+# exit 2 NEED_PROBE if probe-rs list is empty
+LABWIRED_HW_ELF=… LABWIRED_HW_CHIP=… LABWIRED_HW_PORT=… bash scripts/desk-hw-physical.sh
+```
+
+If RTT is unavailable, fall back to UART `serial-capture` and say so.  
+Never invent RTT or serial data.

@@ -189,11 +189,11 @@ Both exit 0.
 
 **Files:** `scripts/live-gate1.sh`, fixtures under `fixtures/gate1-live/` (or sibling), systems in `share/catalog/systems/`
 
-- [ ] Pick one additional chip with sim + ELF path (not only esp32c3)
-- [ ] Red→green must produce `model_verified` for that chip
-- [ ] Document `LABWIRED_GATE1_CHIP=...`
+- [x] Pick one additional chip with sim + ELF path (not only esp32c3)
+- [x] Red→green must produce `model_verified` for that chip
+- [x] Document `LABWIRED_GATE1_CHIP=...`
 
-- [ ] Commit: `test(twin): live-gate second chip`
+- [x] Commit: `test(twin): live-gate second chip`
 
 **Gate:**
 
@@ -216,7 +216,7 @@ Behavior:
 - If probe present: flash ELF from env `LABWIRED_HW_ELF` + chip `LABWIRED_HW_CHIP`, serial-capture marker `LABWIRED_HW_MARKER` (default `LABWIRED_OK`), assert JSON `status` is `hardware_observed`
 - Run: `assert-status model_verified` on that JSON → must fail; `assert-status hardware_observed` → must pass
 
-- [ ] Commit: `test(desk): physical hardware_observed hard script`
+- [x] Commit: `test(desk): physical hardware_observed hard script`
 
 **Gate on machine with probe:**
 
@@ -239,11 +239,11 @@ D4 is **not done** until a named machine has exit 0 recorded (log path in PR).
 
 **Files:** `lib/probe.sh`, create `lib/rtt-capture.sh` (or extend serial-capture), `skills/desk-hw/SKILL.md`, `scripts/desk-hw-smoke.sh`
 
-- [ ] Implement capture that fills: `status`, `marker`, `excerpt`, `matched` (same fields as serial-capture)
-- [ ] If probe-rs cannot RTT on this target → exit 2 `NEED_RTT` (not silent invent)
-- [ ] desk-hw skill: UART or RTT both valid for marker; never invent
+- [x] Implement capture that fills: `status`, `marker`, `excerpt`, `matched` (same fields as serial-capture)
+- [x] If probe-rs cannot RTT on this target → exit 2 `NEED_RTT` (not silent invent)
+- [x] desk-hw skill: UART or RTT both valid for marker; never invent
 
-- [ ] Commit: `feat(desk): rtt-capture claim JSON`
+- [x] Commit: `feat(desk): rtt-capture claim JSON`
 
 **Gate:** either
 
@@ -263,11 +263,11 @@ or documented hardware without RTT:
 
 **Files:** `skills/observe/SKILL.md`, `scripts/compose-elements.py`, fixture UART
 
-- [ ] Fixed recipe: input UART log with LED markers → output JSON with `series` or `markers` non-empty
-- [ ] ship-gate already composes UART; add assert non-empty in compose step if missing
-- [ ] observe skill lists element types agent may compose (serial, marker, gpio edge)
+- [x] Fixed recipe: input UART log with LED markers → output JSON with `series` or `markers` non-empty
+- [x] ship-gate already composes UART; add assert non-empty in compose step if missing
+- [x] observe skill lists element types agent may compose (serial, marker, gpio edge)
 
-- [ ] Commit: `test(observe): compose non-empty series from UART fixture`
+- [x] Commit: `test(observe): compose non-empty series from UART fixture`
 
 **Gate:**
 
@@ -282,10 +282,10 @@ python3 -c "import json;d=json.load(open('/tmp/c.json')); assert d.get('series')
 
 **Files:** `extensions/labwired-vscode/SHIP_CHECKLIST.md` + extension code as needed
 
-- [ ] Walk G0 → G1 → G2; every checkbox needs evidence (command output or screenshot path in PR)
-- [ ] Billing/team: open real URL or remove command — no fake success
-- [ ] Golden path in extension: Install CLI → Log in → Doctor → Start Agent → same twin prove as CLI
-- [ ] VSIX builds and sideloads
+- [x] Walk G0 → G1 → G2; every checkbox needs evidence (command output or screenshot path in PR)
+- [x] Billing/team: open real URL or remove command — no fake success
+- [x] Golden path in extension: Install CLI → Log in → Doctor → Start Agent → same twin prove as CLI
+- [x] VSIX builds and sideloads
 
 **Gate:** `SHIP_CHECKLIST.md` all G2 boxes `[x]` with linked evidence in the PR description. Empty checks = task not done.
 
@@ -300,12 +300,12 @@ python3 -c "import json;d=json.load(open('/tmp/c.json')); assert d.get('series')
 - Link from README
 - Create `tests/airgap-install.sh`
 
-- [ ] SECURITY.md: tokens, prompt exfil, desk flash risk, security@labwired.com
-- [ ] SELF_HOST.md: airgap profile, `LABWIRED_MCP_ENTRY`, local model, what still needs cloud
-- [ ] Test: `LABWIRED_PROFILE=airgap` without MCP entry → install or doctor **fails**
-- [ ] Test: with stub `mcp/vendor/index.js` present → airgap path does not fail that check
+- [x] SECURITY.md: tokens, prompt exfil, desk flash risk, security@labwired.com
+- [x] SELF_HOST.md: airgap profile, `LABWIRED_MCP_ENTRY`, local model, what still needs cloud
+- [x] Test: `LABWIRED_PROFILE=airgap` without MCP entry → install or doctor **fails**
+- [x] Test: with stub MCP entry present → airgap path does not fail that check
 
-- [ ] Commit: `docs: security and self-host; airgap fail-closed test`
+- [x] Commit: `docs: security and self-host; airgap fail-closed test`
 
 **Gate:**
 
@@ -323,7 +323,7 @@ grep -q 'LABWIRED_MCP_ENTRY' docs/SELF_HOST.md
 
 **Files:** `.github/pull_request_template.md` (or CONTRIBUTING.md)
 
-- [ ] Template must include:
+- [x] Template must include:
 
 ```markdown
 - [ ] Does not add instrument-farm / Open Plot product
@@ -331,7 +331,7 @@ grep -q 'LABWIRED_MCP_ENTRY' docs/SELF_HOST.md
 - [ ] ship-gate or named smokes green for touched paths
 ```
 
-- [ ] Commit: `chore: PR template dual-claim and kill-list guards`
+- [x] Commit: `chore: PR template dual-claim and kill-list guards`
 
 **Gate:** file exists and contains `twin green` or `model_verified` wording about not renaming desk.
 
@@ -339,9 +339,9 @@ grep -q 'LABWIRED_MCP_ENTRY' docs/SELF_HOST.md
 
 ## Task 15 — Final ship-gate on release commit
 
-- [ ] `./scripts/ship-gate.sh` exit 0 on the commit that claims depth waves A–C done
-- [ ] Tag agent kit only after Task 2 + 6 + 8 green (minimum depth cut)
-- [ ] Tag higher only after Task 9 evidence (physical) for “desk complete”
+- [x] `./scripts/ship-gate.sh` exit 0 on the commit that claims depth waves A–C done
+- [x] Tag agent kit only after Task 2 + 6 + 8 green (minimum depth cut)
+- [x] Tag higher only after Task 9 evidence (physical) for “desk complete”
 
 **Gate:**
 

@@ -18,3 +18,15 @@ scripts/live-gate1.sh
 
 Prebuilt ELFs are committed so a machine with only `labwired-sim` can run the live gate.
 Rebuild: `make -C fixtures/gate1-live/firmware`
+
+## Second chip: stm32f103
+
+```bash
+LABWIRED_GATE1_CHIP=esp32c3 ./scripts/live-gate1.sh
+LABWIRED_GATE1_CHIP=stm32f103 ./scripts/live-gate1.sh
+```
+
+| Chip | Marker | Firmware dir |
+|------|--------|--------------|
+| `esp32c3` (default) | `LABWIRED_OK` | `firmware/` |
+| `stm32f103` | `LED ON` | `firmware/stm32f103/` |

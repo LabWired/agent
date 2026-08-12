@@ -328,16 +328,22 @@ labwired_probe_cmd() {
     reset) labwired_probe_reset "$@" ;;
     doctor|info) labwired_probe_backend_info "$@" ;;
     install-backend|install) labwired_probe_install_backend "$@" ;;
-    rtt)
-      # optional: labwired probe rtt --chip X
-      local chip=""
-      while [[ $# -gt 0 ]]; do
-        case "$1" in
-          --chip) chip="${2:-}"; shift 2 || true ;;
-          *) shift || true ;;
-        esac
-      done
-      labwired_probe_rtt "$chip"
+    rtt|rtt-capture)
+      # labwired probe rtt-capture --chip X [--marker M]  → claim JSON or NEED_RTT
+      # shellcheck source=lib/rtt-capture.sh
+      source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/rtt-capture.sh"
+      if [[ "$sub" == "rtt-capture" ]]; then
+        labwired_rtt_capture "$@"
+      else
+        local chip=""
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --chip) chip="${2:-}"; shift 2 || true ;;
+            *) shift || true ;;
+          esac
+        done
+        labwired_probe_rtt "$chip"
+      fi
       ;;
     *)
       echo "labwired probe: unknown subcommand '$sub'" >&2

@@ -23,20 +23,30 @@ metadata:
 3. A composed plot is **observation**, never `model_verified` or `hardware_observed`.  
 4. Prefer helpers over reinventing parsers.
 
-## Elements (catalog)
+## Elements agent may compose (catalog)
 
-| Element | Source |
-|---------|--------|
-| Serial / UART | `labwired_run`, monitor |
-| Numeric series from UART | `key=value` / CSV lines |
-| GPIO edges | inspect / LA export |
-| Bus samples | peripherals / traces |
-| Registers | `labwired_inspect` |
-| Faults | run diagnosis |
-| Evidence | verify JSON (illustrate only) |
-| Logic capture | CaptureObject / VCD / CSV |
+| Element | Source | Compose helper |
+|---------|--------|----------------|
+| Serial / UART markers | run / monitor / fixture log | `labwired compose uart` |
+| LED digital series | `LED ON`/`OFF` / marker lines | same (derived_from_uart) |
+| Numeric series from UART | `key=value` / CSV lines | same |
+| GPIO edges | inspect / LA export | `labwired compose capture` |
+| Bus samples | peripherals / traces | capture / inspect |
+| Registers | `labwired_inspect` | inspect JSON |
+| Faults | run diagnosis | evidence only |
+| Evidence | verify JSON (illustrate only) | never mint claims |
 
 Catalog: `share/observability/element-catalog.json`
+
+### “Show me X” one path (Task 11)
+
+```bash
+# Fixed recipe: UART log with LED/marker lines → non-empty series or markers
+python3 scripts/compose-elements.py \
+  --uart fixtures/gate1-live/evidence/fixed/uart.log \
+  --out /tmp/composed.json
+# require: series or markers non-empty
+```
 
 ## Agent-callable helpers (prefer CLI)
 
