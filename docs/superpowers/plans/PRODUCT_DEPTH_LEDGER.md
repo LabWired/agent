@@ -8,7 +8,7 @@
 | 1 | Required knowledge heroes file | **done** | `python3 -c assert len(required)==8` | `share/catalog/knowledge-required.json` |
 | 2 | Knowledge smoke 100% required | **done** | `bash scripts/knowledge-mcp-smoke.sh` exit 0 | required heroes hard-fail |
 | 3 | Seed store until Task 2 green | **done** (prod D1 applied) | part bme280 OK; 5 proven facts; smoke exit 0 | monorepo #1613 + migration 0034 |
-| 4 | bringup tools-before-invent | pending | grep skill/AGENTS | |
+| 4 | bringup tools-before-invent | **done** | grep never invent + part + datasheet | ordered tools-before-invent |
 | 5 | Multi-source import on prod MCP | pending | live labwired_import bom_csv | monorepo deploy |
 | 6 | Agent multi-source import smoke | pending | import-multi-smoke + diagram smoke | |
 | 7 | Catalog aliases for dropped tokens | pending | BOM maps ADXL345/BME280 | |
@@ -29,6 +29,7 @@
 | 2026-08-12 | 2 | knowledge-mcp-smoke enforces knowledge-required.json; live run fails only on bme280 part |
 | 2026-08-12 | 3 | Applied 0034_part_knowledge_bme280 on prod D1; labwired_part bme280 OK (5 proven); smoke PASS |
 | 2026-08-12 | 2 | knowledge-mcp-smoke exit 0 on prod session (required heroes + canaries) |
+| 2026-08-12 | 4 | bringup/AGENTS tools-before-invent; gate greps green |
 
 ## Blockers
 

@@ -19,9 +19,10 @@ Full contract: `docs/KNOWLEDGE.md`.
 
 ## Hard rules
 
-1. **Never invent** pins, bus addresses, register values, or datasheet text.  
-2. **One MCP knowledge path** (same questions):  
-   `list` / `describe` → **`labwired_part`** (facts) → **`labwired_datasheet`** when you need grounded prose or the fact is missing.  
+1. **never invent** pins, bus addresses, register values, or datasheet text.  
+2. **Tools before invent (ordered):**  
+   `labwired_list` / `labwired_describe` → **`labwired_part`** → **`labwired_datasheet`**.  
+   If still missing after tools this session → stop and say **missing** (do not invent).  
 3. Knowledge is **not** `model_verified` (use **`prove`** for twin green).  
 4. Scaffold is a **proposal** — compile success is not a pass.  
 5. Do **not** tell the user we are a public full-PDF library — use tools; answer the question.

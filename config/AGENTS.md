@@ -32,7 +32,8 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 1. Prefer MCP `labwired_context` (or an injected `[labwired_context]` block) before assuming board or twin state.
 2. Prefer `labwired_import` with `diagram_json` (P0) over hand-parsing schematics.
 3. If twin is not buildable, continue design from context + `labwired_part` / `labwired_datasheet`. Never invent pins.
-4. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
+4. No pin or register value unless a tool returned it **this session** (`labwired_part` / `labwired_datasheet` / list / describe).
+5. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
 
 
 ## Product shape (simple)

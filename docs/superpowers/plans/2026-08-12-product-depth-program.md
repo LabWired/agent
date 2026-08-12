@@ -93,12 +93,14 @@ Expected: every required id `ok`, script exit 0. No session → exit 2 with `nee
 
 ## Task 4 — bringup skill: tools before invent
 
+**Status: done**
+
 **Files:** `skills/bringup/SKILL.md`, `config/AGENTS.md`
 
-- [ ] bringup must state ordered steps: list/describe → part → datasheet → if miss, stop (no invent)
-- [ ] AGENTS.md: one line — no pin/register not returned by tools this session
+- [x] bringup must state ordered steps: list/describe → part → datasheet → if miss, stop (no invent)
+- [x] AGENTS.md: one line — no pin/register not returned by tools this session
 
-- [ ] Commit: `docs(skills): tools-before-invent enforcement`
+- [x] Commit: `docs(skills): tools-before-invent enforcement`
 
 **Gate:** `grep -q 'never invent' skills/bringup/SKILL.md && grep -q 'labwired_part' skills/bringup/SKILL.md && grep -q 'labwired_datasheet' skills/bringup/SKILL.md`
 
