@@ -33,6 +33,8 @@ installations and data stay in place.
 - [Understand verification results](docs/VERIFY.md)
 - [Develop and test this repository](docs/DEVELOPMENT.md)
 - [Legal (Privacy & Terms)](docs/LEGAL.md)
+- [Product depth (required)](docs/PRODUCT_DEPTH.md)
+- [Embedder parity](docs/EMBEDDER_PARITY.md)
 
 
 ## Skills (domain packs)

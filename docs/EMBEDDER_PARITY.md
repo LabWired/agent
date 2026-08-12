@@ -1,18 +1,27 @@
-# LabWired Agent vs Embedder — user job parity (release 0.3.10)
+# LabWired Agent vs Embedder — full job parity + our wedge
 
-Stance: match Embedder **user jobs** via skills + MCP + twin/desk claims. Do **not** clone instrument farm / Open Plot.
+**Status:** binding — we **will** own every user job below (product depth).  
+**Not a clone:** we refuse instrument-farm / Open Plot product parity (⛔).  
+**Our wedge ★:** deterministic twin oracle + dual claims + CI without flaky HIL.
 
-| User job | Embedder surface | LabWired ship surface | Release gate |
-|----------|------------------|----------------------|--------------|
-| Install → chat | VS Code + CLI | `curl labwired.com/install` → `labwired agent` | ship-gate doctor |
-| Account / hosted brain | Account required | Device login + live doctor probe | hosted-auth-probe |
-| Part / datasheet knowledge | RM citations | `labwired_list` / `part` / `datasheet` | knowledge-mcp-smoke |
-| Schematic → board | Multi-EDA ingest | `import-circuit` + `labwired_import` (diagram_json P0) | import-diagram-smoke + MCP import |
-| Closed loop write→test→fix | Flash silicon + instruments | Twin: `prove` → `labwired_verify` → `model_verified` | live-gate1 |
-| Real board check | HIL instruments | `desk-hw`: probe flash + serial → `hardware_observed` | desk-hw-smoke |
-| Honest claims | Silicon is truth | Twin ≠ desk; never upgrade HW→twin green | assert-status + AGENTS |
-| Plots / LA | Open Plot product | Elements + `observe` / compose | ship-gate compose |
-| Deterministic CI without bench | Not their wedge | Twin / CI | ★ LabWired wedge |
-| 30+ instruments / panel farm | Product | Non-goal | ⛔ |
+See also: [PRODUCT_DEPTH.md](./PRODUCT_DEPTH.md).
 
-Non-goals this release: RTT product, VS Code Marketplace G2, SOC2/on-prem agent, Embedder panel clone.
+| User job | Embedder | LabWired must ship | Status |
+|----------|----------|--------------------|--------|
+| Install → agent | VSIX + CLI | `curl labwired.com/install` → `labwired agent` | ✅ |
+| Account / hosted brain | Account | Device login + live doctor probe | ✅ |
+| Part / datasheet knowledge | RM citations | `labwired_list` / `part` / `datasheet` + coverage | 🔶 |
+| Schematic → board | Multi-EDA | `import-circuit` + `labwired_import` multi-source | 🔶 |
+| Closed loop write→test→fix | Silicon + instruments | Twin prove → twin green | ✅ gate |
+| Real board check | HIL instruments | desk-hw flash+serial (+ RTT) | 🔶 |
+| Honest claims | Silicon truth | Twin ≠ desk | ✅ |
+| Plots / signals | Open Plot | Elements + observe | 🔶 |
+| Deterministic CI | weak | Twin / CI ★ | ✅ |
+| 30+ instruments | product | ⛔ kill | ⛔ |
+| Enterprise trust | SOC2/on-prem | D7 packaging | ⬜ |
+
+## Gates
+
+- Release: `./scripts/ship-gate.sh`  
+- Depth knowledge: knowledge MCP smoke + coverage ratchet  
+- Depth import: multi-source import tests + MCP import  

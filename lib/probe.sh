@@ -20,6 +20,7 @@ labwired probe — attach boards (physical or virtual LabWired)
       --chip <name>
       --target virtual|auto|probe
   labwired probe doctor            Probe backend status
+  labwired probe rtt [--chip <id>] RTT status / attach when probe-rs supports it
 
 Virtual LabWired validation device:
   --target virtual   Uses LABWIRED_CLI simulator (no physical probe)
@@ -327,10 +328,41 @@ labwired_probe_cmd() {
     reset) labwired_probe_reset "$@" ;;
     doctor|info) labwired_probe_backend_info "$@" ;;
     install-backend|install) labwired_probe_install_backend "$@" ;;
+    rtt)
+      # optional: labwired probe rtt --chip X
+      local chip=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --chip) chip="${2:-}"; shift 2 || true ;;
+          *) shift || true ;;
+        esac
+      done
+      labwired_probe_rtt "$chip"
+      ;;
     *)
       echo "labwired probe: unknown subcommand '$sub'" >&2
       labwired_probe_usage >&2
       return 2
       ;;
   esac
+}
+
+
+labwired_probe_rtt() {
+  local chip="${1:-}"
+  local prs
+  if ! prs="$(labwired_resolve_probe_rs 2>/dev/null)"; then
+    echo "probe rtt: probe-rs not installed — ./install.sh --full" >&2
+    return 1
+  fi
+  echo "==> RTT via probe-rs ($prs)"
+  if "$prs" rtt --help >/dev/null 2>&1 || "$prs" attach --help >/dev/null 2>&1; then
+    echo "probe-rs supports RTT/attach. Example:"
+    echo "  $prs attach${chip:+ --chip $chip}"
+    echo "  # then use RTT channel for markers; promote with serial-capture-equivalent"
+    echo "claim: RTT path available — capture marker before hardware_observed"
+    return 0
+  fi
+  echo "probe-rs present but RTT subcommand not detected — use UART serial-capture" >&2
+  return 1
 }

@@ -151,3 +151,8 @@ Same tools + claims; different shell. (See platform `two-agents.md`.)
 | `config/AGENTS.md` | Runtime rules for the engine |
 | `skills/README.md` | Skill catalog |
 | `extensions/labwired-vscode/docs/PRODUCT.md` | Extension pointer |
+
+## Product depth
+
+See [PRODUCT_DEPTH.md](./PRODUCT_DEPTH.md) — full knowledge, import, desk, workbench, enterprise depth is **required product**, not optional.
+
