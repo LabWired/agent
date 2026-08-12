@@ -71,15 +71,17 @@ Design: monorepo `docs/superpowers/specs/2026-08-11-labwired-import-server-tool-
 
 ## Inputs (any of these)
 
-| Source | `source_kind` |
-|--------|----------------|
-| PDF extract text | `pdf_text` |
-| KiCad sch body | `kicad_sch` |
-| Netlist | `netlist` |
-| BOM CSV | `bom_csv` |
-| diagram.json | `diagram_json` |
-| Notes | `text` |
-| Image (later) | `image_ref` |
+| Source | `source_kind` | Twin today |
+|--------|----------------|------------|
+| diagram.json | `diagram_json` | Yes when catalog-mapped |
+| BOM CSV | `bom_csv` | If board + parts resolve |
+| Notes / paste | `text` | Design context + map |
+| PDF extract text | `pdf_text` | Design context + map |
+| KiCad sch body | `kicad_sch` | Design context + map |
+| Netlist | `netlist` | Partial token extract |
+| Image | `image_ref` | Not yet |
+
+**Always** produce design context (mapped + dropped). **Never invent pins** for dropped parts — use `labwired_part` / `labwired_datasheet`.
 
 ## Handoff
 

@@ -60,3 +60,16 @@ ESP32/RP2040 may re-enumerate after reset; re-resolve port. Baud must match firm
 |------|------|
 | Twin green first | `prove` |
 | Dual-claim write-up | `prove` (report section) or `scripts/report-evidence.py` |
+
+
+## C. RTT (product depth — required path)
+
+When the probe and firmware support RTT (probe-rs):
+
+```bash
+labwired probe rtt --chip <id>   # status / attach when available
+```
+
+If RTT is unavailable, fall back to `serial-capture` and say so.  
+`hardware_observed` still requires a **marker in a captured window** (UART or RTT).  
+Never invent RTT data.
