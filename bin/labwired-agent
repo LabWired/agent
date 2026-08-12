@@ -2,13 +2,15 @@
 # LabWired Agent — write firmware, run on a virtual board.
 set -euo pipefail
 
-export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-http://127.0.0.1:11434/v1}"
-export LABWIRED_MODEL_KEY="${LABWIRED_MODEL_KEY:-local}"
+# Optional overrides only — do NOT default to local Ollama.
+# Hosted path uses session from `labwired agent login` (api.labwired.com).
+# Local/BYO: export LABWIRED_MODEL_URL + LABWIRED_MODEL_KEY yourself.
 export LABWIRED_BUILDER_URL="${LABWIRED_BUILDER_URL:-}"
 # Simulator / oracle CLI the MCP shells out to (NOT this launcher).
 # Resolved only when a real binary exists — never invent "labwired-cli".
 
-# Pinned OpenCode version (npm package opencode-ai). Bump deliberately.
+# Official OpenCode pin (npm opencode-ai). Single upgrade knob — keep install.sh in sync.
+# Policy: pin + wrap only; never fork. See docs/UPSTREAM_OPENCODE.md.
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
 
 # Product home resolution (branded LabWired install)
@@ -40,6 +42,7 @@ _labwired_find_root() {
 
 ROOT="$(_labwired_find_root)"
 export LABWIRED_AGENT_HOME="$ROOT"
+
 # shellcheck source=lib/prefix.sh
 source "$ROOT/lib/prefix.sh"
 # shellcheck source=lib/resolve-sim.sh
@@ -52,7 +55,7 @@ source "$ROOT/lib/probe.sh"
 if [[ -f "$ROOT/lib/cloud-session.sh" ]]; then
   source "$ROOT/lib/cloud-session.sh"
 else
-  # Stale install without hosted session support — local OpenCode still works.
+  # Stale install without hosted session support — local agent runtime still works.
   labwired_cloud_hosted_ready() { return 1; }
   labwired_cloud_session_load() { return 1; }
   labwired_cloud_export_runtime() { return 1; }
@@ -65,6 +68,47 @@ fi
 say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 brand() { printf '\033[34m%s\033[0m\n' "$1"; }
 fail() { printf 'labwired: %s\n' "$1" >&2; exit 1; }
+
+# User-visible agent config dir: ~/.config/labwired-agent (not ~/.config/opencode).
+# Engine still requires OPENCODE_CONFIG_DIR; we always export the LabWired path.
+labwired_agent_config_dir() {
+  if [[ -n "${LABWIRED_AGENT_CONFIG_DIR:-}" ]]; then
+    printf '%s\n' "$LABWIRED_AGENT_CONFIG_DIR"
+    return 0
+  fi
+  if [[ -n "${OPENCODE_CONFIG_DIR:-}" ]]; then
+    case "$OPENCODE_CONFIG_DIR" in
+      */.config/opencode|*/.config/opencode/)
+        ;; # legacy default — fall through to product path
+      *)
+        # Explicit override (tests, custom installs).
+        printf '%s\n' "$OPENCODE_CONFIG_DIR"
+        return 0
+        ;;
+    esac
+  fi
+  printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/labwired-agent"
+}
+
+# One-time migrate legacy ~/.config/opencode → ~/.config/labwired-agent.
+labwired_migrate_agent_config_dir() {
+  local new_dir old_dir
+  new_dir="$(labwired_agent_config_dir)"
+  old_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+  mkdir -p "$new_dir"
+  if [[ ! -f "$new_dir/opencode.json" && -f "$old_dir/opencode.json" ]]; then
+    say "migrating agent config → $new_dir"
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a "$old_dir/" "$new_dir/" 2>/dev/null || cp -a "$old_dir/." "$new_dir/" 2>/dev/null || true
+    else
+      cp -a "$old_dir/." "$new_dir/" 2>/dev/null || true
+    fi
+  fi
+  export LABWIRED_AGENT_CONFIG_DIR="$new_dir"
+  export OPENCODE_CONFIG_DIR="$new_dir"
+}
+
+labwired_migrate_agent_config_dir
 
 # Resolve simulator if present; export LABWIRED_CLI only when found.
 # Returns 0 if sim resolved, 1 otherwise.
@@ -94,14 +138,14 @@ cmd_version() {
   echo "LabWired Agent"
   echo "version  ${agent_ver}"
   echo "home     ${ROOT}"
-  echo "pin      opencode-ai@${OPENCODE_PIN}"
+  echo "runtime  pin ${OPENCODE_PIN}"
   if command -v opencode >/dev/null 2>&1; then
     local raw ver
     raw="$(opencode --version 2>&1 || true)"
     ver="$(parse_opencode_version "$raw")"
-    echo "opencode ${ver:-$raw}"
+    echo "runtime  ${ver:-$raw}"
   else
-    echo "opencode (missing — run install.sh)"
+    echo "runtime  (missing — re-run install)"
   fi
 }
 
@@ -114,7 +158,12 @@ cmd_doctor() {
     else
       printf '\033[33mwarn\033[0m project: unset — model gateway needs LABWIRED_PROJECT\n'
     fi
-    say "ok  hosted-tools: api.labwired.com/mcp (shared labwired_*)"
+    if labwired_cloud_probe_hosted 2>/dev/null; then
+      say "ok  hosted-tools: model gateway + MCP authenticated"
+    else
+      printf '\033[31mFAIL\033[0m hosted-tools: token present but API rejects it — run: labwired agent login\n'
+      ok=1
+    fi
   else
     say "ok  cloud-session: not signed in (local tools only — labwired agent login for hosted)"
   fi
@@ -137,22 +186,22 @@ cmd_doctor() {
   fi
 
   if command -v opencode >/dev/null 2>&1; then
-    say "ok  opencode-binary: $(command -v opencode)"
+    say "ok  agent-runtime: present"
     raw="$(opencode --version 2>&1 || true)"
     ver="$(parse_opencode_version "$raw")"
     if [[ "$ver" == "$OPENCODE_PIN" ]]; then
-      say "ok  opencode-pin: $ver matches $OPENCODE_PIN"
+      say "ok  agent-runtime-pin: $ver matches $OPENCODE_PIN"
     else
       # Accept nearby 1.18.x for product UX; pin is preferred
       if [[ "$ver" == 1.18.* ]]; then
-        printf '\033[33mwarn\033[0m opencode-pin: got %s (preferred %s) — OK for product use\n' "${ver:-$raw}" "$OPENCODE_PIN"
+        printf '\033[33mwarn\033[0m agent-runtime-pin: got %s (preferred %s) — OK for product use\n' "${ver:-$raw}" "$OPENCODE_PIN"
       else
-        printf '\033[31mFAIL\033[0m opencode-pin: got %s, need %s.x\n' "${ver:-$raw}" "1.18"
+        printf '\033[31mFAIL\033[0m agent-runtime-pin: got %s, need %s.x\n' "${ver:-$raw}" "1.18"
         ok=1
       fi
     fi
   else
-    printf '\033[31mFAIL\033[0m opencode-binary: not on PATH — run ./install.sh (installs opencode-ai@%s)\n' "$OPENCODE_PIN"
+    printf '\033[31mFAIL\033[0m agent-runtime: not on PATH — re-run install (curl -fsSL https://labwired.com/install | bash)\n'
     ok=1
   fi
 
@@ -180,17 +229,17 @@ cmd_doctor() {
     ok=1
   fi
 
-  local cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  local cfg="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-$HOME/.config/labwired-agent}}"
   if [[ -f "$cfg/opencode.json" ]]; then
-    say "ok  config: $cfg/opencode.json"
+    say "ok  agent-config: present"
     if grep -q 'LabWired Agent' "$cfg/opencode.json" 2>/dev/null \
       || grep -q '"labwired"' "$cfg/opencode.json" 2>/dev/null; then
-      say "ok  brand: LabWired"
+      say "ok  brand: LabWired Agent"
     else
-      printf '\033[33mwarn\033[0m brand: re-run ./install.sh\n'
+      printf '\033[33mwarn\033[0m brand: re-run install to apply LabWired Agent config\n'
     fi
   else
-    printf '\033[31mFAIL\033[0m config: missing %s/opencode.json — run ./install.sh\n' "$cfg"
+    printf '\033[31mFAIL\033[0m agent-config: missing — re-run install\n'
     ok=1
   fi
 
@@ -212,14 +261,14 @@ cmd_doctor() {
     printf '\033[33mwarn\033[0m tui: missing — re-run ./install.sh\n'
   fi
   if [[ -f "$cfg/plugins/labwired-brand.tsx" ]] || [[ -f "$ROOT/plugins/labwired-brand.tsx" ]]; then
-    say "ok  brand-plugin: labwired.brand (replaces OpenCode home logo)"
+    say "ok  brand-plugin: labwired.brand (LabWired Agent home logo)"
   else
-    printf '\033[33mwarn\033[0m brand-plugin: missing — re-run labwired agent or ./install.sh\n'
+    printf '\033[33mwarn\033[0m brand-plugin: missing — re-run labwired agent or install\n'
   fi
 
   # Five primary packs (ship surface). Aliases optional.
   local skill
-  for skill in golden-path bringup prove observe desk-hw; do
+  for skill in golden-path bringup prove observe desk-hw import-circuit; do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     elif [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
@@ -286,7 +335,11 @@ import json, urllib.request
 req = urllib.request.Request(
     "$api/v1/auth/device/code",
     data=b"{}",
-    headers={"Content-Type": "application/json", "Accept": "application/json"},
+    headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "labwired-agent/0.3.9",
+    },
     method="POST",
 )
 with urllib.request.urlopen(req, timeout=30) as r:
@@ -333,7 +386,11 @@ body = json.dumps({
 req = urllib.request.Request(
     f"{api}/v1/auth/device/token",
     data=body,
-    headers={"Content-Type": "application/json", "Accept": "application/json"},
+    headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "labwired-agent/0.3.9",
+    },
     method="POST",
 )
 try:
@@ -397,7 +454,7 @@ PY
 import json, os, urllib.request, urllib.error
 api = os.environ["API"]
 token = os.environ["ACCESS"]
-h = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+h = {"Authorization": f"Bearer {token}", "Accept": "application/json", "User-Agent": "labwired-agent/0.3.9"}
 
 def get(path):
     req = urllib.request.Request(f"{api}{path}", headers=h)
@@ -440,13 +497,41 @@ PY
     echo "labwired: warning — no project id yet; set LABWIRED_PROJECT before chatting" >&2
   fi
   say "session: $path"
-  say "start with: labwired agent"
+  export LABWIRED_ACCESS_TOKEN="$access"
+  export LABWIRED_PROJECT="${project:-}"
   labwired_install_hosted_opencode_config || true
+  say "LabWired Agent ready — start with: labwired agent"
+}
+
+# First start / expired session: sign in with a LabWired account.
+# Product auth is account login only — no engine connect.
+labwired_ensure_account() {
+  # Explicit local / BYO model (user set URL that is not LabWired cloud).
+  if [[ -n "${LABWIRED_MODEL_URL:-}" \
+    && "${LABWIRED_MODEL_URL}" != *api.labwired.com* \
+    && -n "${LABWIRED_MODEL_KEY:-}" \
+    && "${LABWIRED_MODEL_KEY}" != "local" ]]; then
+    return 0
+  fi
+  if [[ "${LABWIRED_SKIP_LOGIN:-0}" == "1" ]]; then
+    return 0
+  fi
+  # Live session or desktop lwd_ token — OK.
+  if labwired_cloud_hosted_ready; then
+    return 0
+  fi
+  brand ""
+  brand "  LabWired Agent"
+  brand "  Sign in with your LabWired account (session missing or expired)."
+  brand ""
+  say "LabWired account login required"
+  cmd_login || fail "sign-in required — run: labwired agent login"
+  labwired_cloud_session_load || fail "sign-in incomplete — run: labwired agent login"
 }
 
 labwired_install_hosted_opencode_config() {
   local cfg_dir src
-  cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  cfg_dir="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-$HOME/.config/labwired-agent}}"
   src="$ROOT/config/opencode.hosted.json"
   if [[ ! -f "$src" ]]; then
     return 1
@@ -465,7 +550,7 @@ labwired_install_hosted_opencode_config() {
     done
     cp -R "$ROOT/skills/." "$cfg_dir/skills/"
   fi
-  say "LabWired config: hosted (api.labwired.com) → $cfg_dir/opencode.json"
+  say "LabWired Agent config: hosted (api.labwired.com) → $cfg_dir"
 }
 
 cmd_logout() {
@@ -497,11 +582,57 @@ except Exception:
 PY
   fi
   labwired_cloud_session_clear
-  say "signed out (local session cleared)"
+  say "signed out (LabWired Agent session cleared)"
+}
+
+# Product auth entrypoints — never fall through to engine /connect (third-party model marketplaces).
+cmd_auth() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    login|connect|"" )
+      cmd_login "$@"
+      ;;
+    logout)
+      cmd_logout "$@"
+      ;;
+    list|ls|status|whoami)
+      cmd_whoami "$@"
+      ;;
+    help|--help|-h)
+      cat <<'AEOF'
+LabWired Agent auth
+
+  labwired agent login     Sign in with your LabWired account (device code)
+  labwired agent logout    Clear LabWired session
+  labwired agent whoami    Show signed-in account / project
+  labwired agent auth      Alias for login
+
+First start runs login automatically. Hosted model + MCP use that
+LabWired session (api.labwired.com).
+AEOF
+      ;;
+    *)
+      fail "unknown auth command '$sub' — try: labwired agent login | logout | whoami"
+      ;;
+  esac
 }
 
 cmd_whoami() {
-  if ! labwired_cloud_session_load && [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
+  # Prefer a loadable hosted session over ambient env pollution.
+  if ! labwired_cloud_session_load; then
+    if [[ -n "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
+      : # token injected by desktop / env
+    elif labwired_cloud_desktop_token >/dev/null 2>&1; then
+      export LABWIRED_ACCESS_TOKEN
+      LABWIRED_ACCESS_TOKEN="$(labwired_cloud_desktop_token)"
+      export LABWIRED_MODEL_KEY="${LABWIRED_ACCESS_TOKEN}"
+    else
+      echo "not signed in — run: labwired agent login"
+      return 1
+    fi
+  fi
+  if [[ -z "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
     echo "not signed in — run: labwired agent login"
     return 1
   fi
@@ -509,15 +640,15 @@ cmd_whoami() {
   echo "email:    ${LABWIRED_EMAIL:-(unknown)}"
   echo "project:  ${LABWIRED_PROJECT:-(none — set LABWIRED_PROJECT)}"
   echo "token:    ${LABWIRED_ACCESS_TOKEN:0:8}…"
-  echo "model:    ${LABWIRED_MODEL_URL:-}/  model=${LABWIRED_MODEL:-labwired-default}"
+  echo "model:    ${LABWIRED_MODEL_URL:-https://api.labwired.com/v1}/  model=${LABWIRED_MODEL:-labwired-default}"
   echo "mcp:      remote https://api.labwired.com/mcp (shared labwired_* tools)"
 }
 
 # Product chrome: LabWired theme, banner, terminal title, and home_logo plugin
-# that replaces the OpenCode wordmark. Engine remains OpenCode under the hood.
+# that replaces the stock engine home logo. Runtime stays under the hood.
 labwired_apply_branding() {
   local cfg_dir
-  cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  cfg_dir="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-$HOME/.config/labwired-agent}}"
   mkdir -p "$cfg_dir/themes" "$cfg_dir/branding" "$cfg_dir/plugins"
 
   # Product theme is always refreshed; user banner assets stay if already present.
@@ -603,15 +734,15 @@ labwired_splash() {
     printf '\033[0m' >&2
   else
     brand "  LabWired Agent"
-    brand "  Write firmware · check on a twin"
+    brand "  The easy way to build hardware"
   fi
 }
 
 labwired_prepare_agent_start() {
-  # Ensure skills + AGENTS.md are discoverable by OpenCode even when the user
-  # only has a partial ~/.config/opencode from an older install.
+  # Ensure skills + AGENTS.md are discoverable by the agent runtime even when the user
+  # only has a partial ~/.config/labwired-agent from an older install.
   local cfg_dir
-  cfg_dir="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  cfg_dir="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-$HOME/.config/labwired-agent}}"
   mkdir -p "$cfg_dir/skills"
   labwired_apply_branding
   if [[ -f "$ROOT/config/AGENTS.md" && ! -f "$cfg_dir/AGENTS.md" ]]; then
@@ -630,29 +761,31 @@ labwired_prepare_agent_start() {
 
   if labwired_cloud_hosted_ready; then
     labwired_cloud_export_runtime || fail "hosted session incomplete — run: labwired agent login"
-    # OpenCode substitutes {env:VAR} from the process environment
+    # Agent runtime substitutes {env:VAR} from the process environment
     export LABWIRED_ACCESS_TOKEN LABWIRED_PROJECT LABWIRED_MODEL_URL LABWIRED_MODEL_KEY LABWIRED_MODEL LABWIRED_API_URL
     if [[ -z "${LABWIRED_PROJECT:-}" ]]; then
       echo "labwired: warning — LABWIRED_PROJECT empty; model gateway will reject chat" >&2
       echo "         fix: labwired agent login  (or export LABWIRED_PROJECT=<id>)" >&2
     fi
-    # Always re-apply hosted OpenCode config so MCP is remote labwired_* tools
+    # Always re-apply hosted agent config so MCP is remote labwired_* tools
     if [[ -f "$ROOT/config/opencode.hosted.json" ]]; then
       labwired_install_hosted_opencode_config || true
     fi
     export LABWIRED_PROFILE=hosted
     export OPENCODE_CONFIG_DIR="$cfg_dir"
-    say "mode: LabWired CLI (hosted · api.labwired.com)"
+    # Session token is exported as env for hosted agent config {env:LABWIRED_ACCESS_TOKEN}.
+    # No engine auth.json seeding — LabWired account login is the product credential.
+    say "mode: LabWired Agent (hosted · api.labwired.com)"
     say "model: ${LABWIRED_MODEL_URL:-}/  id=${LABWIRED_MODEL:-labwired-default}"
   else
     labwired_export_sim || true
     # Local default config if none
     if [[ ! -f "$cfg_dir/opencode.json" && -f "$ROOT/config/opencode.json" ]]; then
       cp "$ROOT/config/opencode.json" "$cfg_dir/opencode.json"
-      say "wrote LabWired config → $cfg_dir/opencode.json"
+      say "wrote LabWired Agent config → $cfg_dir"
     fi
     export OPENCODE_CONFIG_DIR="$cfg_dir"
-    say "mode: LabWired CLI (local tools · npx @labwired/mcp or LABWIRED_CLI)"
+    say "mode: LabWired Agent (local tools · npx @labwired/mcp or LABWIRED_CLI)"
   fi
 }
 
@@ -720,7 +853,7 @@ cmd_help() {
     echo
   fi
   cat <<'EOF'
-LabWired Agent — write firmware, check on a twin
+LabWired Agent — The easy way to build hardware
 
   curl install → labwired agent login → labwired agent doctor → labwired agent
   In chat: "Blink the LED and prove it on the twin."
@@ -728,10 +861,10 @@ LabWired Agent — write firmware, check on a twin
 
 Usage:
   labwired agent                 Start LabWired Agent (golden-path + MCP)
-  labwired agent opencode …      Same start (engine alias)
-  labwired agent login           Device-code sign-in → hosted MCP + model gateway
-  labwired agent logout          Clear cloud session
+  labwired agent login           Sign in with LabWired account (first start does this)
+  labwired agent logout          Clear LabWired session
   labwired agent whoami          Show signed-in identity / project
+  labwired agent auth            Alias for login
   labwired agent doctor [--strict]  Check install (strict = require sim + probe-rs)
   labwired agent update             Self-update Agent kit + config
   labwired agent smoke              Prove install works (claim gate + sim)
@@ -751,7 +884,7 @@ Usage:
 Ship gate (CI / release):
   ./scripts/ship-gate.sh
 
-LabWired CLI. Skills: golden-path · bringup · prove · observe · desk-hw
+LabWired CLI. Skills: golden-path · bringup · prove · observe · desk-hw · import-circuit
 (+ Superpowers process). Knowledge via MCP labwired_part / labwired_datasheet.
 
 Env:
@@ -763,8 +896,14 @@ Env:
   LABWIRED_CLI / LABWIRED_SIM   Simulator binary (prefer labwired-sim)
   LABWIRED_PROBE_RS        probe-rs binary override
   LABWIRED_SERIAL_FIXTURE  Override serial port with a fixture file
-  OPENCODE_PIN             opencode-ai pin (default ${OPENCODE_PIN})
-  OPENCODE_CONFIG_DIR      Config dir (default ~/.config/opencode)
+  LABWIRED_AGENT_CONFIG_DIR  Agent config dir (default ~/.config/labwired-agent)
+  OPENCODE_PIN               Agent runtime pin (default ${OPENCODE_PIN})
+  OPENCODE_CONFIG_DIR        Engine alias for config dir (set automatically)
+
+Legal:
+  Privacy  https://labwired.com/privacy
+  Terms    https://labwired.com/terms
+  docs/LEGAL.md in the Agent kit
 EOF
 }
 
@@ -796,16 +935,16 @@ cmd_smoke() {
 
 labwired_agent_remove_owned_config() {
   local cfg manifest entry path current part
-  cfg="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+  cfg="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-$HOME/.config/labwired-agent}}"
   manifest="$cfg/labwired-agent.manifest"
-  [[ ! -L "$cfg" && ! -L "$manifest" ]] || fail "refusing symlinked OpenCode ownership path"
+  [[ ! -L "$cfg" && ! -L "$manifest" ]] || fail "refusing symlinked agent config ownership path"
   [[ -f "$manifest" ]] || return 0
 
   # Validate all manifest parent directories before changing anything. A file
   # entry may itself be a symlink (removing the link is safe), but cleanup must
   # never descend through one.
   for path in "$cfg/skills" "$cfg/branding"; do
-    [[ ! -L "$path" ]] || fail "refusing symlinked OpenCode ownership ancestor: $path"
+    [[ ! -L "$path" ]] || fail "refusing symlinked agent config ownership ancestor: $path"
   done
   while IFS= read -r entry; do
     [[ -n "$entry" && "$entry" != json:* ]] || continue
@@ -815,7 +954,7 @@ labwired_agent_remove_owned_config() {
     IFS='/' read -r -a _labwired_owned_parts <<<"$entry"
     for part in "${_labwired_owned_parts[@]:0:${#_labwired_owned_parts[@]}-1}"; do
       current="$current/$part"
-      [[ ! -L "$current" ]] || fail "refusing symlinked OpenCode ownership ancestor: $current"
+      [[ ! -L "$current" ]] || fail "refusing symlinked agent config ownership ancestor: $current"
     done
   done <"$manifest"
 
@@ -994,19 +1133,24 @@ case "${1:-}" in
       shift || true
       exec node "$rpc" "$@"
     fi
-    # Optional: forward to opencode serve for HTTP
+    # Optional: forward to agent runtime serve for HTTP
     if [[ "${1:-}" == "--http" ]]; then
       shift
       if command -v opencode >/dev/null 2>&1; then
         exec opencode serve "$@"
       fi
-      fail "opencode not found for --http"
+      fail "LabWired Agent runtime not found for --http — re-run install"
     fi
     exec node "$rpc" "$@"
     ;;
-  login)   shift; cmd_login "$@" ;;
+  login|connect) shift; cmd_login "$@" ;;
   logout)  shift; cmd_logout "$@" ;;
   whoami)  shift; cmd_whoami "$@" ;;
+  auth|providers)
+    # Intercept LabWired Agent runtime engine auth/providers so product never shows third-party model marketplaces.
+    shift
+    cmd_auth "$@"
+    ;;
   doctor)  shift; cmd_doctor "$@" ;;
   install-deps|deps)
     shift
@@ -1047,21 +1191,23 @@ case "${1:-}" in
     labwired_probe_cmd "$@"
     ;;
   agent|opencode)
-    # `opencode` remains a supported alias: same product start, OpenCode engine.
+    # Internal runtime alias — same product start as bare `labwired agent`.
     shift || true
     if [[ -n "${LABWIRED_HOME:-}" && -d "${LABWIRED_HOME}/bin" ]]; then
       export PATH="${LABWIRED_HOME}/bin:${PATH}"
     fi
     if ! command -v opencode >/dev/null 2>&1; then
-      fail "'opencode' not found. Install Node 18+, then re-run: curl -fsSL https://labwired.com/install | bash"
+      fail "LabWired Agent runtime not found. Re-run: curl -fsSL https://labwired.com/install | bash"
     fi
+    # First start: LabWired account login.
+    labwired_ensure_account
     labwired_prepare_agent_start
     if [[ "${LABWIRED_PROFILE:-}" != "hosted" ]]; then
       labwired_export_sim || true
     fi
     labwired_splash
-    echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw" >&2
-    echo "labwired: LabWired CLI · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
+    echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw/import-circuit" >&2
+    echo "labwired: LabWired Agent · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
     exec opencode "$@"
     ;;
   "")
@@ -1070,8 +1216,10 @@ case "${1:-}" in
       export PATH="${LABWIRED_HOME}/bin:${PATH}"
     fi
     if ! command -v opencode >/dev/null 2>&1; then
-      fail "'opencode' not found. Install Node 18+, then re-run: curl -fsSL https://labwired.com/install | bash"
+      fail "LabWired Agent runtime not found. Re-run: curl -fsSL https://labwired.com/install | bash"
     fi
+    # First start: LabWired account login.
+    labwired_ensure_account
     labwired_prepare_agent_start
     if [[ "${LABWIRED_PROFILE:-}" != "hosted" ]]; then
       if labwired_export_sim; then
@@ -1085,13 +1233,20 @@ case "${1:-}" in
     fi
     labwired_splash
     echo "labwired: starting LabWired Agent — skill golden-path (firmware first)" >&2
-    echo "labwired: start-here: login → doctor → labwired agent → “blink and prove it”" >&2
+    echo "labwired: start-here: account login → doctor → labwired agent → “blink and prove it”" >&2
     exec opencode "$@"
     ;;
   *)
-    # Pass through to opencode (e.g. labwired agent mcp list)
+    # Pass through to agent runtime (e.g. labwired agent mcp list)
+    # Never pass auth/connect/providers — those are product-owned (see cmd_auth).
+    case "${1:-}" in
+      auth|providers|connect|login|logout)
+        cmd_auth "${1}" "${@:2}"
+        exit $?
+        ;;
+    esac
     if ! command -v opencode >/dev/null 2>&1; then
-      fail "'opencode' not found on PATH. Run ./install.sh first."
+      fail "LabWired Agent runtime not found on PATH. Re-run install first."
     fi
     if labwired_cloud_hosted_ready 2>/dev/null; then
       labwired_prepare_agent_start || true

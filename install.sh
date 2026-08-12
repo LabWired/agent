@@ -3,9 +3,35 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-CFG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+# Product config path (user-visible). Engine env OPENCODE_CONFIG_DIR is set to this.
+if [[ -z "${LABWIRED_AGENT_CONFIG_DIR:-}" ]]; then
+  if [[ -n "${OPENCODE_CONFIG_DIR:-}" ]]; then
+    case "$OPENCODE_CONFIG_DIR" in
+      */.config/opencode|*/.config/opencode/) LABWIRED_AGENT_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/labwired-agent" ;;
+      *) LABWIRED_AGENT_CONFIG_DIR="$OPENCODE_CONFIG_DIR" ;;
+    esac
+  else
+    LABWIRED_AGENT_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/labwired-agent"
+  fi
+fi
+export LABWIRED_AGENT_CONFIG_DIR
+CFG_DIR="$LABWIRED_AGENT_CONFIG_DIR"
+export OPENCODE_CONFIG_DIR="$CFG_DIR"
 BIN_DIR="${LABWIRED_BIN_DIR:-$HOME/.local/bin}"
+# Official OpenCode pin — keep in sync with bin/labwired-agent. See docs/UPSTREAM_OPENCODE.md.
 OPENCODE_PIN="${OPENCODE_PIN:-1.18.7}"
+# Migrate legacy path once
+_legacy_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+if [[ ! -f "$CFG_DIR/opencode.json" && -f "$_legacy_cfg/opencode.json" ]]; then
+  mkdir -p "$CFG_DIR"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a "$_legacy_cfg/" "$CFG_DIR/" 2>/dev/null || cp -a "$_legacy_cfg/." "$CFG_DIR/" 2>/dev/null || true
+  else
+    cp -a "$_legacy_cfg/." "$CFG_DIR/" 2>/dev/null || true
+  fi
+  echo "==> migrated agent config → $CFG_DIR"
+fi
+mkdir -p "$CFG_DIR"
 
 # shellcheck source=lib/prefix.sh
 source "$SRC/lib/prefix.sh"
@@ -130,26 +156,26 @@ parse_opencode_version() {
 
 # 1. pinned opencode ----------------------------------------------------------
 if [[ "${LABWIRED_TEST_SKIP_OPENCODE:-0}" == "1" ]]; then
-  say "skipping OpenCode setup (test mode)"
+  say "skipping agent runtime setup (test mode)"
 elif command -v opencode >/dev/null 2>&1; then
   raw="$(opencode --version 2>&1 || true)"
   ver="$(parse_opencode_version "$raw")"
   if [[ "$ver" == "$OPENCODE_PIN" ]]; then
-    say "opencode ${ver} already installed ($(command -v opencode))"
+    say "agent runtime ${ver} ready"
   elif command -v npm >/dev/null 2>&1; then
-    warn "opencode ${ver:-unknown} != pin ${OPENCODE_PIN}; installing opencode-ai@${OPENCODE_PIN}"
+    warn "agent runtime ${ver:-unknown} != pin ${OPENCODE_PIN}; installing pin ${OPENCODE_PIN}"
     npm install -g "opencode-ai@${OPENCODE_PIN}"
   else
-    warn "opencode version ${ver:-unknown} does not match pin ${OPENCODE_PIN}"
+    warn "agent runtime ${ver:-unknown} does not match pin ${OPENCODE_PIN}"
     warn "install pin: npm install -g opencode-ai@${OPENCODE_PIN}"
   fi
 elif command -v npm >/dev/null 2>&1; then
-  say "installing opencode-ai@${OPENCODE_PIN}"
+  say "installing LabWired Agent runtime (pin ${OPENCODE_PIN})"
   npm install -g "opencode-ai@${OPENCODE_PIN}"
 else
-  warn "npm not found — install OpenCode pin ${OPENCODE_PIN} yourself:"
+  warn "npm not found — install LabWired Agent runtime pin ${OPENCODE_PIN} yourself:"
   warn "  npm install -g opencode-ai@${OPENCODE_PIN}"
-  warn "  or https://opencode.ai"
+  warn "  then re-run: curl -fsSL https://labwired.com/install | bash"
 fi
 
 # Ensure `opencode` is on a PATH location users actually use (~/.local/bin)
@@ -169,7 +195,7 @@ _labwired_link_opencode() {
   fi
   if [[ -n "$npm_bin" && -e "$npm_bin" ]]; then
     ln -sfn "$npm_bin" "$BIN_DIR/opencode"
-    say "linked opencode → $BIN_DIR/opencode"
+    say "linked agent runtime → $BIN_DIR"
     return 0
   fi
   # Fallback: walk npm root
@@ -178,11 +204,11 @@ _labwired_link_opencode() {
     pkg="$(npm root -g 2>/dev/null)/opencode-ai/bin/opencode.exe"
     if [[ -e "$pkg" ]]; then
       ln -sfn "$pkg" "$BIN_DIR/opencode"
-      say "linked opencode → $BIN_DIR/opencode (from package)"
+      say "linked agent runtime → $BIN_DIR (from package)"
       return 0
     fi
   fi
-  warn "could not place opencode on $BIN_DIR — ensure npm global bin is on PATH"
+  warn "could not place agent runtime on $BIN_DIR — ensure npm global bin is on PATH"
 }
 if [[ "${LABWIRED_TEST_SKIP_OPENCODE:-0}" != "1" ]]; then
   _labwired_link_opencode
@@ -212,18 +238,18 @@ export MCP_JSON
 export CFG_DIR
 say "MCP command: $MCP_JSON (profile=$PROFILE)"
 
-# 4. drop config, AGENTS.md, and skills into OpenCode discovery paths ---------
-say "installing LabWired config into $CFG_DIR"
+# 4. drop config, AGENTS.md, and skills into agent discovery paths ---------
+say "installing LabWired Agent config into $CFG_DIR"
 mkdir -p "$CFG_DIR/skills"
 CONFIG_TEMPLATE="$SRC/config/opencode.json"
 if [[ "$PROFILE" == "airgap" && -f "$SRC/config/opencode.airgap.json" ]]; then
   CONFIG_TEMPLATE="$SRC/config/opencode.airgap.json"
 elif [[ "$PROFILE" == "hosted" && -f "$SRC/config/opencode.hosted.json" ]]; then
   CONFIG_TEMPLATE="$SRC/config/opencode.hosted.json"
-  say "OpenCode provider: LabWired hosted (api.labwired.com) — run labwired login"
+  say "model provider: LabWired hosted (api.labwired.com) — run labwired agent login"
 elif [[ -n "${DEEPINFRA_API_KEY:-}" && -f "$SRC/config/opencode.deepinfra.json" ]]; then
   CONFIG_TEMPLATE="$SRC/config/opencode.deepinfra.json"
-  say "OpenCode provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
+  say "model provider: DeepInfra (Kimi K2.5) — DEEPINFRA_API_KEY set"
 fi
 export CONFIG_TEMPLATE
 JSON_OWNED_TMP="$(mktemp "$CFG_DIR/.labwired-json-owned.XXXXXX")"
@@ -236,29 +262,54 @@ cfg_dir = Path(os.environ["CFG_DIR"])
 dst = cfg_dir / "opencode.json"
 backup = cfg_dir / "opencode.json.labwired-backup"
 template = json.loads(Path(os.environ["CONFIG_TEMPLATE"]).read_text())
+# Fresh install: full product config (MCP + model + agent) from the start.
+# Existing file: merge LabWired-owned keys only — never wipe user prefs.
 if dst.exists():
     if not backup.exists():
         shutil.copy2(dst, backup)
     cfg = json.loads(dst.read_text())
+    if not isinstance(cfg, dict):
+        cfg = {}
 else:
-    cfg = {}
+    cfg = json.loads(json.dumps(template))  # deep copy full kit config
 
-# Only namespaced component keys are owned. Global preferences are defaults,
-# never replacements for a user's existing choices.
 owned = []
-for section, key in (("mcp", "labwired"), ("provider", "labwired")):
+# Product namespaces — always refresh so LabWired MCP is present from install.
+for section, key in (
+    ("mcp", "labwired"),
+    ("provider", "labwired"),
+    ("provider", "labwired-local"),
+):
     if key in template.get(section, {}):
         cfg.setdefault(section, {})[key] = template[section][key]
         owned.append(f"json:{section}.{key}")
+
+# Default model / agent persona if missing (first install or stripped config).
+for top in ("model", "default_agent", "agent", "autoupdate", "share"):
+    if top in template and top not in cfg:
+        cfg[top] = template[top]
+        owned.append(f"json:{top}")
+
 skills = template.get("permission", {}).get("skill", {})
 owned_skills = cfg.setdefault("permission", {}).setdefault("skill", {})
 for name, value in skills.items():
     if name not in owned_skills:
         owned_skills[name] = value
         owned.append(f"json:permission.skill.{name}")
+
+# Local MCP needs a resolved command; remote hosted uses Bearer + url as-is.
 lw = cfg.setdefault("mcp", {}).setdefault("labwired", {})
 if lw.get("type") != "remote":
+    lw["type"] = lw.get("type") or "local"
+    lw["enabled"] = True
     lw["command"] = json.loads(os.environ["MCP_JSON"])
+    owned.append("json:mcp.labwired.command")
+else:
+    # Hosted remote: ensure enabled + no engine OAuth (account login supplies Bearer).
+    lw["enabled"] = True
+    lw["oauth"] = False
+    if "url" not in lw and "url" in template.get("mcp", {}).get("labwired", {}):
+        lw["url"] = template["mcp"]["labwired"]["url"]
 
 fd, name = tempfile.mkstemp(prefix=".opencode.", dir=cfg_dir)
 with os.fdopen(fd, "w") as f:
@@ -307,7 +358,7 @@ for skill_source in "$SRC/skills"/*; do
   fi
 done
 say "skills available: $(ls -1 "$CFG_DIR/skills" | tr '\n' ' ')"
-say "wrote MCP command into $CFG_DIR/opencode.json"
+say "LabWired MCP enabled in agent config (hosted remote or local @labwired/mcp)"
 
 # 5. product kit into portable prefix ----------------------------------------
 AGENT_HOME="$(labwired_prefix_agent)"
@@ -355,7 +406,7 @@ chmod 0755 "$_prefix_dispatcher_tmp"
 mv -f "$_prefix_dispatcher_tmp" "${PREFIX_BIN}/labwired"
 
 # Branding into config (product identity).
-# Force-refresh LabWired theme, brand plugin (replaces OpenCode home logo), and
+# Force-refresh LabWired theme, brand plugin (replaces LabWired Agent runtime home logo), and
 # default tui theme. Flat branding files are owned only when absent.
 mkdir -p "$CFG_DIR/branding" "$CFG_DIR/themes" "$CFG_DIR/plugins"
 if [[ -f "$AGENT_HOME/branding/themes/labwired.json" ]]; then

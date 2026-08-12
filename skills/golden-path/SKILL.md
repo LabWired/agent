@@ -30,6 +30,13 @@ bringup → write/scaffold → prove → optional observe → optional desk-hw
 
 ## Procedure
 
+### 0. Context (always)
+Call MCP **`labwired_context`** (or read `.labwired/import/DESIGN_CONTEXT.md`).
+
+- `mode=design_only` → still design FW; do **not** stall for twin.  
+- `mode=twin_ready` → proceed to bringup + prove.  
+- `mode=empty` → import / new board first (`import-circuit` or catalog board).
+
 ### 1. Bringup
 Load **`bringup`**: part tools → diagram → minimal blink/UART scaffold.
 

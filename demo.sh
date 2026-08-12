@@ -30,7 +30,7 @@ if [[ "${DEMO_LIVE_GATE1:-0}" == "1" ]]; then
   bash scripts/live-gate1.sh
 fi
 
-echo "==> doctor (may warn if OpenCode/sim not installed)"
+echo "==> doctor (may warn if agent runtime / sim not installed)"
 if bin/labwired-agent doctor; then
   echo "doctor: clean"
 else

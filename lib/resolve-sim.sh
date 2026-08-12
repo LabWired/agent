@@ -41,7 +41,7 @@ _labwired_is_agent_launcher() {
   local p="$1"
   [[ -z "$p" || ! -e "$p" ]] && return 1
   # Wrapper installed by install.sh
-  if head -n 20 "$p" 2>/dev/null | grep -q 'LABWIRED_AGENT_HOME\|Firmware Agent\|opencode-ai\|OpenCode shell'; then
+  if head -n 20 "$p" 2>/dev/null | grep -q 'LABWIRED_AGENT_HOME\|Firmware Agent\|opencode-ai\|LabWired Agent\|OpenCode shell'; then
     return 0
   fi
   # Real agent bin under product home

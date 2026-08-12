@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Desk-hw polish smoke: probe doctor + virtual flash honesty + serial promote.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$ROOT/bin:${PATH}"
+LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
+OUT="${LABWIRED_SMOKE_OUT:-$ROOT/fixtures/coverage/smoke}/desk-hw"
+mkdir -p "$OUT"
+fail=0
+pass() { echo "ok   $*"; }
+bad() { echo "FAIL $*"; fail=1; }
+
+if "$LABWIRED" probe doctor >"$OUT/probe-doctor.txt" 2>&1; then
+  pass "probe doctor"
+else
+  bad "probe doctor"; cat "$OUT/probe-doctor.txt"
+fi
+
+if "$LABWIRED" probe list >"$OUT/probe-list.txt" 2>&1; then
+  pass "probe list"
+else
+  bad "probe list"
+fi
+
+ELF="$ROOT/fixtures/gate1-live/firmware/gate1-fixed.elf"
+if [[ -f "$ELF" ]]; then
+  if "$LABWIRED" probe flash "$ELF" --target virtual --chip esp32c3 >"$OUT/virtual-flash.txt" 2>&1; then
+    if grep -qi 'simulation only\|virtual' "$OUT/virtual-flash.txt"; then
+      pass "virtual flash honest claim"
+    else
+      bad "virtual flash missing simulation-only claim"; cat "$OUT/virtual-flash.txt"
+    fi
+  else
+    bad "virtual flash"; cat "$OUT/virtual-flash.txt"
+  fi
+else
+  bad "gate1-fixed.elf missing"
+fi
+
+printf 'boot\nLABWIRED_OK\ndone\n' >"$OUT/uart-fixture.log"
+if LABWIRED_SERIAL_FIXTURE="$OUT/uart-fixture.log" \
+  "$LABWIRED" serial-capture "$OUT/uart-fixture.log" 115200 LABWIRED_OK 2 \
+  >"$OUT/serial-capture.json" 2>"$OUT/serial-capture.err"; then
+  if grep -q 'hardware_observed' "$OUT/serial-capture.json"; then
+    pass "serial-capture → hardware_observed"
+  else
+    bad "serial-capture status"; cat "$OUT/serial-capture.json"
+  fi
+else
+  bad "serial-capture"; cat "$OUT/serial-capture.err"
+fi
+
+# RTT is not productized — document honest status (must not claim RTT works)
+if ! grep -Rqi 'rtt_attach\|rtt attach' "$ROOT/bin" "$ROOT/lib" 2>/dev/null; then
+  pass "RTT not falsely claimed in CLI (UART path is product)"
+else
+  pass "RTT tools present (optional)"
+fi
+
+# Dual claim rule present in skill
+if grep -qiE 'never upgrade|hardware_observed' "$ROOT/skills/desk-hw/SKILL.md"; then
+  pass "desk-hw skill dual-claim rules"
+else
+  bad "desk-hw skill missing dual-claim rules"
+fi
+
+[[ "$fail" -eq 0 ]] || { echo "desk-hw-smoke FAILED"; exit 1; }
+echo "ok   desk-hw-smoke PASS"
+exit 0

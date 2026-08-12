@@ -1,7 +1,7 @@
 ---
 name: using-superpowers
 description: >-
-  Process skill router for OpenCode. Use when starting work: pick Superpowers
+  Process skill router for LabWired Agent. Use when starting work: pick Superpowers
   process skills (TDD, plans, debug method) AND LabWired domain packs. LabWired
   claim rules and MCP tools always win over generic process advice.
 license: MIT
@@ -62,9 +62,9 @@ Superpowers (TDD, plans, …) are **secondary** on firmware work.
 | Parallel workstreams | `dispatching-parallel-agents` / `subagent-driven-development` |
 | Creating new skills | `writing-skills` |
 
-## OpenCode note
+## LabWired Agent note
 
-Skills are folders under the OpenCode skills dir (refreshed by `labwired` prepare).  
+Skills are folders under the agent skills dir (refreshed by `labwired agent` prepare).  
 Invoke the skill that matches the task; do not skip LabWired packs for firmware work.
 
 See `skills/README.md`.

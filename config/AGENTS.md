@@ -35,20 +35,14 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 4. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
 
 
-## Plots = elements (not ready-made views)
+## Product shape (simple)
 
-When the user wants a **plot, chart, scope, overlay, or “show X over time”**:
+Full definition: **`docs/PRODUCT.md`**.
 
-- **Assemble** a view from observability **elements** (UART/serial, GPIO edges,
-  bus samples, registers, faults, evidence) via tools.
-- **Do not** invent a fixed plot type or pretend a ready-made dashboard exists.
-- **Do not** invent waveform data — pull from `labwired_run` / `labwired_inspect` /
-  evidence / plot series, or say the element is unavailable.
-- A composed plot is **observation**, never `model_verified` (use **`prove`**).
-- Prefer existing surfaces (plot series, capture/export, thin Plot glass) over
-  building a new plot product.
-
-Use skill pack **`observe`**.
+- **Same twin tools as cloud agent** — shared `labwired_*` (catalog, twin, prove). No private dialect.  
+- **Physical boards = local only** — serial/probe/flash / `hardware_observed` (**desk-hw**); cloud has no real board.  
+- **Chrome** = Cursor-like Agent. **Entry** = `labwired agent` (product name is LabWired Agent).  
+- **Work** = skills. **Suite** = Agent + board glass (see twin running) + VS Code **DAP** — integrated.
 
 ## Status words (use exactly)
 
@@ -137,7 +131,7 @@ Do not lead with Superpowers (TDD/plans) alone — domain packs own the loop.
 
 ```text
 golden-path
-  → bringup   (knowledge MCP: list/describe/part/datasheet)
+  → bringup / import-circuit   (knowledge MCP: list/describe/part/datasheet)
   → prove     (labwired_verify → model_verified; repair ≤3)
   → observe   (optional; labwired compose …)
   → desk-hw   (optional; hardware_observed only)
@@ -157,6 +151,7 @@ See `skills/README.md` · `docs/KNOWLEDGE.md`.
 | **`bringup`** | Knowledge + diagram + scaffold |
 | **`prove`** | Twin verify, repair ≤3, evidence report |
 | **`observe`** | Plots from **elements** (not ready-made) |
+| **`import-circuit`** | Schematic/diagram → twin pack (catalog-honest) |
 | **`desk-hw`** | Flash + `hardware_observed` only |
 
 Old micro-skill names (verify-firmware, part-knowledge, …) are **removed**.
@@ -197,7 +192,7 @@ tool, and whenever a description points at it. That pointer is not optional.
 
 | Command | Role |
 |---------|------|
-| `labwired` | Start OpenCode agent |
+| `labwired` | Start LabWired Agent |
 | `labwired doctor` | Install health |
 | `labwired probe list\|chips\|flash\|reset\|doctor` | Physical + virtual attach |
 | `labwired assert-status <expected> [file]` | Hard claim gate |

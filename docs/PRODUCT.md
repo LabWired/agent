@@ -1,148 +1,153 @@
-# LabWired Firmware Agent — product packaging
+# LabWired Agent product (simple)
 
-**Tagline:** The easiest way to write firmware.
-
-Package the agent like a **product people install and pay for**, not an internal harness dump.
-
-> **This package is the desk / Cursor-clone agent** (OpenCode harness + skills + MCP).  
-> It is **not** the in-browser Playground **Architect** (`/v1/agent`).  
-> Platform binding: [two-agents.md](https://github.com/LabWired/labwired/blob/main/docs/strategy/two-agents.md)  
-> (in monorepo: `labwired/docs/strategy/two-agents.md`).
+**Status:** binding  
+**Date:** 2026-08-11
 
 ---
 
-## How competitors package (steal the shape, not the stack)
+## One sentence
 
-| | **BootLoop** | **Embedder** | **Cursor / Claude Code** | **Us (target)** |
-|--|--------------|--------------|--------------------------|-----------------|
-| **Hero** | Firmware in minutes, on real HW | Cursor for embedded | Ship code from terminal | Write firmware, check on a virtual board |
-| **Install** | Single-command / pilot (high-touch) | `npm i -g` + web app + free credits | `curl \| bash` or `npm i -g` | **`curl \| sh` + optional npm** |
-| **Product suite** | Agent · Test · Sentinel (3 SKUs) | One agent platform | One CLI product | **Agent (free) · Pro · Enterprise** |
-| **Proof** | Demo / pilot on customer HW | Free trial credits | Interactive demo | Gate 1 red→green + Playground |
-| **Trust** | ITAR, aerospace pedigree | Enterprise / instruments | Brand + models | Open MIT + twin check (not self-grade) |
-| **GTM** | Forward-deployed pilots | Self-serve + sales | PLG | **PLG free agent → Pro workbench → Enterprise vault** |
-
-**Do not** copy BootLoop’s three-product triad as homepage architecture until the free agent install is the obvious front door.
-
-**Do** copy:
-
-1. **One command to install**  
-2. **Outcome-first headline** (not “MCP harness”)  
-3. **Clear free vs paid**  
-4. **Something that runs in under 5 minutes**  
-5. **GitHub that looks like a product** (description, homepage, topics, releases)
+**Same twin tools as cloud agent · local suite (+ real boards) · Cursor-shaped Agent · `labwired agent` engine · VS Code DAP · prove only via oracle.**
 
 ---
 
-## Our product surfaces
+## What this product is
 
-```
-labwired.com
-  ├─ Home #mcp          → dual path (Agent | Claude/Codex)
-  ├─ /pro.html          → paid workbench + agent install
-  └─ (soon) /agent      → dedicated product page (optional)
+| | |
+|--|--|
+| **Tools** | **Ideally identical `labwired_*` MCP toolset** as cloud Architect / hosted agent — one dialect, one schemas |
+| **Form** | **Local dev suite** — CLI + VS Code/Cursor on your machine |
+| **Targets** | **Digital twin** and **physical boards** (USB serial, probe, flash) |
+| **Chrome** | Cursor-shaped **Agent** chat (home) |
+| **Engine** | `labwired agent` / `labwired-agent` (skills + MCP + model) |
+| **Board glass** | **Integrated**: show twin board + running state (topology / display / serial) when you run or debug — not a separate product |
+| **Debug** | **VS Code DAP** in the **same suite** (F5 / `type: labwired`) — agent and debugger are one local suite |
 
-github.com/LabWired/agent   → OSS product home
-  ├─ curl install / npm
-  ├─ skills + demo
-  └─ releases
-
-app.labwired.com            → Playground (see it run)
+```text
+  Cloud agent / Architect     Local dev suite (this product)
+  ───────────────────────     ─────────────────────────────
+  browser / hosted loop       Agent chrome
+                              + board glass (see twin running)
+                              + VS Code DAP (step firmware)
+  labwired_* MCP              labwired_* MCP  ← same twin tools
+  twin (hosted)               twin (local and/or hosted)
+  —                           + physical boards on the desk
 ```
 
-### Tiers (packaging, not feature soup)
+**Integrated suite (important):** Agent is the home chrome; **board display** and **DAP** are first-class **in the same package**.  
+**Story:** whatever you can debug on a **real board**, you can debug on a **virtual twin** — same F5 / `type: labwired` / `labwired-dap`.  
+Not “agent here, separate debugger extension there.”
 
-| SKU | What they get | Price posture |
-|-----|----------------|---------------|
-| **Firmware Agent (OSS)** | CLI agent, skills, local/BYO model, twin check via MCP | Free, MIT |
-| **Pro** | Private projects, priority builds, editor workbench, support | Stripe / seat |
-| **Enterprise** | Air-gap, on-prem model, vault, HIL in CI, SSO | Sales |
+**Tool parity rule:** local and cloud agents share the **same `labwired_*` names and shapes** for twin/catalog/import/prove (`list`, `describe`, `context`, `import`, `validate`, `run`, `verify`, `inspect`, `part`, `datasheet`, …).  
+Transport may differ (hosted HTTPS MCP vs local stdio); **semantics and claims do not.**  
 
-Same **check** everywhere: virtual board (and later real HW) — agent never self-grades a pass.
+**Exception — physical boards:** desk-only (serial, probe, flash, `hardware_observed`). Cloud Architect does not get real-board access; do not pretend it does. Local suite adds those tools; twin tools stay shared.
+
+Architect stays the **browser** product. This package is the **desk** product.  
+Same tools + claims; different shell. (See platform `two-agents.md`.)
 
 ---
 
-## Install story (product-critical)
+## Product entry (simple)
 
-**Primary (share everywhere):**
+**LabWired Agent is the product.** Users never need to name the underlying chat runtime.
 
-```bash
-curl -fsSL https://labwired.com/agent-install.sh | sh
-labwired doctor
-labwired
+| Layer | Owner | What |
+|-------|--------|------|
+| **LabWired Agent kit** | Us | `labwired agent` launcher, prepare, skills, `AGENTS.md`, branding, agent configs, MCP wiring |
+| **`labwired_*` tools** | Us (shared with Architect) | Twin, catalog, prove, import — product truth |
+| **Model gateway** | Us (hosted) / BYO local | `labwired-default` etc. via api.labwired.com or local URL |
+| **VS Code extension** | Us | Cursor-shaped chrome; starts **`labwired agent`**, not a raw runtime binary |
+| **Pinned chat runtime** | Upstream (internal) | Terminal UI loop — replaceable plumbing |
+
+```text
+  User → Cursor-like chrome / terminal
+            │
+            ▼
+  labwired agent   ← product entry (prepare + config + skills + login)
+            │
+     ┌──────┴──────┐
+     ▼             ▼
+  labwired_*     model
+  (MCP twin)     (gateway / local)
 ```
 
-**Secondary:**
+**Rules**
 
-```bash
-npm i -g @labwired/agent && labwired
-# or
-git clone https://github.com/LabWired/agent && cd agent && ./install.sh
-```
-
-**BYO agent:**
-
-```bash
-claude mcp add labwired --transport http https://api.labwired.com/mcp
-```
-
-Install must land:
-
-1. `labwired` on PATH  
-2. OpenCode pin + skills + config  
-3. Clear next steps if simulator missing  
+1. Users and marketing say **LabWired Agent** only.  
+2. Extension / CLI always enter via **`labwired agent`** (prepare path).  
+3. Pin the chat runtime deliberately (`OPENCODE_PIN`); upgrade as a kit release decision.  
+4. Skills + MCP + claims are **our** product; the chat runtime is replaceable plumbing.  
+5. Architect does **not** run this desk agent in the browser — different shell, same tools.  
+6. **Stay on official OpenCode releases** — pin + wrap only; never fork. See [UPSTREAM_OPENCODE.md](./UPSTREAM_OPENCODE.md).
 
 ---
 
-## Packaging backlog
+## Three layers
 
-### P0 — feels like a product this week
-
-- [x] Plain tagline + README product voice  
-- [x] Six skills + Gate 1 demo artifacts  
-- [ ] **One-command curl install** (`agent-install.sh` bootstrap)  
-- [ ] **GitHub**: homepage, description, topics  
-- [ ] **VERSION + CHANGELOG** + optional npm `@labwired/agent`  
-- [ ] Landing install one-liner matches curl (not only git clone)  
-- [ ] Landing PR #188 merged  
-
-### P1 — looks like a product
-
-- [x] Dedicated `/agent` page (hero, install, looping demo, Pro upsell)  
-- [x] ~30s looping demo: describe → fail → fix → green (`assets/agent-demo.js`)  
-- [x] GitHub Release `v0.1.0` with notes  
-- [ ] `labwired update` (pull agent home + reinstall skills)  
-- [ ] Social OG image for agent  
-
-### P2 — sells like a product
-
-- [x] Free cloud path: hosted MCP + model gateway without local sim (`labwired login` + `config/opencode.hosted.json`)  
-- [ ] Pro: agent session in editor (VS Code / Studio) as default paid story  
-- [ ] Enterprise one-pager: air-gap install + on-prem model  
-- [ ] Pilot motion for regulated teams (BootLoop-style FDE optional)  
+| Layer | What | Not |
+|-------|------|-----|
+| **1. Chrome** | Agent chat: model · @ · mic · Enter | Embedder panel farm |
+| **2. Engine** | `labwired agent` → skills + MCP + model | Second in-panel brain |
+| **3. Work** | Skills + tools | Invented pins / fake green |
 
 ---
 
-## Messaging rules
+## Hard rules
 
-**Use**
-
-- The easiest way to write firmware  
-- Checks on a virtual board before you flash  
-- Free install · Pro workbench · Enterprise vault  
-
-**Avoid on marketing surfaces**
-
-- oracle / fail-closed / harness / Gate 1 / model_verified soup  
-- “distribution layer” / “no fork” nerd footnotes  
-
-Keep strict status rules in `AGENTS.md` and CI — not on the homepage.
+1. **Same twin tools as cloud agent** — shared `labwired_*` for catalog, twin, import, prove. No private dialect.  
+2. **Physical boards = local only** — serial, probe, flash, `hardware_observed` on the desk; cloud Architect is not expected to have real boards.  
+3. **Local suite** — twin first; real boards when plugged in. Hosted MCP/model optional after login.  
+4. **UI stays simple** — Agent only as home.  
+5. **Jobs = skills** — import, diagram, prove, observe, desk-hw: skills, not new sidebars.  
+6. **Debug = DAP in this package** — same F5 path for **virtual twin** and **physical board** (`labwired-dap` + `target: twin|hardware|auto`).  
+7. **Board glass on run** — run/debug opens/shows twin board + live signals/display when available.  
+8. **Physical ≠ twin** — never rename twin results as hardware.  
+9. **Claims**  
+   - `model_verified` ← only `labwired_verify` (**prove**) on the **twin**  
+   - `hardware_observed` ← only **physical board** path (**desk-hw**)  
+   - run / plot = observation only  
 
 ---
 
-## Success metrics
+## Domain skills (few)
 
-1. Stranger runs **one command**, gets `labwired doctor` mostly green  
-2. GitHub repo reads as a **product**, not a script dump  
-3. Home + Pro push the same install line  
-4. Time-to-first-green (demo or live twin) documented and under 15 minutes with sim  
+| Skill | Job |
+|-------|-----|
+| **golden-path** | Entry loop |
+| **bringup** | Knowledge + diagram + scaffold |
+| **import-circuit** | External circuit → twin pack |
+| **prove** | Twin verify → `model_verified` |
+| **observe** | Plots from elements |
+| **desk-hw** | **Physical boards**: flash, serial/RTT → `hardware_observed` |
+
+---
+
+## Non-goals
+
+- Rewrite Architect as the desk agent runtime in the browser  
+- Pixel clone Cursor / Embedder  
+- Extension panel suite instead of skills  
+- Green without oracle  
+
+---
+
+## Success
+
+1. Local agent exposes the **same `labwired_*` tools** as cloud agent/Architect (parity goal).  
+2. Open local Agent → Cursor-simple chrome → `labwired agent` engine.  
+3. Twin loop works locally; **physical boards** on the desk (**desk-hw**).  
+4. Run twin → **board glass shows** diagram + running/serial/display when available.  
+5. Debug → **DAP starts** in VS Code (same suite).  
+6. Twin green = `model_verified` only; desk green = `hardware_observed` only.  
+
+---
+
+## Doc map
+
+| Doc | Role |
+|------|------|
+| **This file** | Binding product definition |
+| `config/AGENTS.md` | Runtime rules for the engine |
+| `skills/README.md` | Skill catalog |
+| `extensions/labwired-vscode/docs/PRODUCT.md` | Extension pointer |

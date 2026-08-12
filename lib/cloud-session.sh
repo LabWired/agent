@@ -137,8 +137,15 @@ if refresh and (exp <= now + 120):
         except OSError:
             pass
     except Exception:
-        # Keep existing token; caller may still get 401 and need labwired login
+        # If still expired after a failed refresh, force re-login (do not export a dead token).
+        if exp <= now:
+            sys.exit(1)
+        # Else token still has a few minutes — keep it.
         pass
+
+# Expired with no usable refresh outcome → re-login required.
+if exp and exp <= now:
+    sys.exit(1)
 
 def sh(s):
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
@@ -172,19 +179,91 @@ labwired_cloud_desktop_token() {
   echo "$key"
 }
 
-# True when we should run the hosted opencode profile (shared remote MCP tools).
+
+# Live check: token can list models AND initialize hosted MCP.
+# Returns 0 only when both succeed (401/403 → re-login required).
+labwired_cloud_probe_hosted() {
+  local token="${LABWIRED_ACCESS_TOKEN:-}"
+  local api proj
+  api="$(labwired_cloud_api_base)"
+  proj="${LABWIRED_PROJECT:-}"
+  if [[ -z "$token" ]]; then
+    labwired_cloud_session_load || return 1
+    token="${LABWIRED_ACCESS_TOKEN:-}"
+    proj="${LABWIRED_PROJECT:-$proj}"
+  fi
+  [[ -n "$token" ]] || return 1
+  TOKEN="$token" API="$api" PROJ="$proj" python3 - <<'PROBE_PY' 2>/dev/null
+import json, os, urllib.request
+api = os.environ["API"].rstrip("/")
+token = os.environ["TOKEN"]
+proj = os.environ.get("PROJ") or ""
+ua = "labwired-agent/0.3.9"
+h = {
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
+    "User-Agent": ua,
+}
+if proj:
+    h["X-LabWired-Project"] = proj
+
+def get(path):
+    req = urllib.request.Request(f"{api}{path}", headers=h)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.status
+
+def post(path, body, extra=None):
+    hh = dict(h)
+    if extra:
+        hh.update(extra)
+    req = urllib.request.Request(
+        f"{api}{path}",
+        data=json.dumps(body).encode(),
+        headers={**hh, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.status
+
+try:
+    if get("/v1/models") != 200:
+        raise SystemExit(1)
+    st = post(
+        "/mcp",
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "labwired-doctor", "version": "0.3.9"},
+            },
+        },
+        {"Accept": "application/json, text/event-stream"},
+    )
+    if st != 200:
+        raise SystemExit(1)
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0)
+PROBE_PY
+}
+
+# True when we have a *usable* hosted credential (not merely a stale session file).
 labwired_cloud_hosted_ready() {
-  if [[ "${LABWIRED_PROFILE:-}" == "hosted" ]]; then
-    return 0
-  fi
-  if [[ -n "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
-    return 0
-  fi
+  # Desktop lwd_ token is accepted without network (editor path).
   if labwired_cloud_desktop_token >/dev/null; then
+    export LABWIRED_ACCESS_TOKEN="$(labwired_cloud_desktop_token)"
+    if labwired_cloud_probe_hosted 2>/dev/null; then
+      return 0
+    fi
+    # Offline / network blip with desktop token — allow start.
     return 0
   fi
-  if [[ -f "$(labwired_cloud_session_path)" ]]; then
-    return 0
+  if [[ -n "${LABWIRED_ACCESS_TOKEN:-}" ]] || labwired_cloud_session_load; then
+    labwired_cloud_probe_hosted && return 0
+    return 1
   fi
   return 1
 }

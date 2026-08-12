@@ -32,6 +32,7 @@ Engineers ask the same things (“I²C addr?”, “which pin?”, “reset valu
 
 | Step | Tool | Use |
 |------|------|-----|
+| 0 | **`labwired_context`** | Session SoT: design_context_ok · twin_buildable · next[] |
 | 1 | `labwired_list` | Find part/board id |
 | 2 | `labwired_describe` | Pins/buses overview |
 | 3 | **`labwired_part`** | **Preferred** structured fact |

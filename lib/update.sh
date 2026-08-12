@@ -2,7 +2,7 @@
 # update.sh — self-update LabWired Agent (Cursor: `agent update`)
 # shellcheck shell=bash
 #
-# Updates the Agent kit and Agent-owned OpenCode integration only.
+# Updates the Agent kit and Agent-owned LabWired Agent runtime integration only.
 #
 # Env:
 #   LABWIRED_AGENT_REPO   default https://github.com/LabWired/agent.git

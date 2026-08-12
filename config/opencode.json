@@ -36,20 +36,23 @@
       "using-superpowers": "allow",
       "verification-before-completion": "allow",
       "writing-plans": "allow",
-      "writing-skills": "allow"
+      "writing-skills": "allow",
+      "customize-labwired-agent": "allow",
+      "customize-opencode": "deny",
+      "import-circuit": "allow"
     }
   },
   "provider": {
     "labwired-local": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "LabWired",
+      "name": "Local",
       "options": {
         "baseURL": "{env:LABWIRED_MODEL_URL}",
         "apiKey": "{env:LABWIRED_MODEL_KEY}"
       },
       "models": {
         "qwen2.5-coder": {
-          "name": "LabWired \u00b7 Qwen2.5-Coder"
+          "name": "Qwen2.5-Coder"
         }
       }
     }
@@ -58,12 +61,11 @@
   "autoupdate": false,
   "share": "disabled",
   "agent": {
-    "labwired": {
-      "name": "LabWired Agent",
-      "description": "START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
+    "build": {
+      "description": "LabWired Agent \u2014 START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
       "mode": "primary",
       "color": "#0056b3"
     }
   },
-  "default_agent": "labwired"
+  "default_agent": "build"
 }

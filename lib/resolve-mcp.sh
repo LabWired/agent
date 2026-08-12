@@ -2,7 +2,7 @@
 # resolve-mcp.sh — resolve LabWired MCP server command argv as JSON.
 # shellcheck shell=bash
 #
-# Prints JSON array of command strings for OpenCode local MCP, e.g.
+# Prints JSON array of command strings for LabWired Agent runtime local MCP, e.g.
 # ["node","/abs/path/index.js"] or ["npx","-y","@labwired/mcp"]
 #
 # Priority:

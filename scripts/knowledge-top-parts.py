@@ -35,7 +35,7 @@ def mcp_call(session: dict, name: str, arguments: dict, req_id: int = 1):
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
+        "Accept": "application/json",
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -125,6 +125,8 @@ def local_lookup(hero_id: str, facts: dict, systems: set[str]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--local-only", action="store_true")
+    ap.add_argument("--require-mcp", action="store_true",
+                    help="Fail if session missing or MCP list+part hits are zero")
     ap.add_argument(
         "--heroes",
         default=str(ROOT / "share/catalog/kit-heroes.json"),
@@ -201,10 +203,9 @@ def main() -> int:
                 # datasheet — try common arg shapes
                 ds = None
                 for args_try in (
-                    {"query": hid},
-                    {"q": hid},
                     {"part": hid},
-                    {"search": hid},
+                    {"part": hid, "search": hid},
+                    {"part": hid.split("-")[0]},
                 ):
                     try:
                         ds = extract_payload(
@@ -267,6 +268,17 @@ def main() -> int:
     if summary["useful_count"] < max(1, n // 2):
         print("FAIL knowledge usefulness below 50%", file=sys.stderr)
         return 1
+    if args.require_mcp:
+        if not session:
+            print("FAIL --require-mcp but no cloud session — run labwired agent login", file=sys.stderr)
+            return 1
+        if list_hits < 1 and part_hits < 1:
+            print(
+                f"FAIL --require-mcp needs list or part hits (list={list_hits} part={part_hits} datasheet={ds_hits})",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"ok   knowledge MCP required gate list={list_hits} part={part_hits} datasheet={ds_hits}")
     return 0
 
 
