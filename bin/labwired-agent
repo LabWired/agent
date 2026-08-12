@@ -863,16 +863,14 @@ cmd_compose() {
       ;;
     help|--help|-h|"")
       cat <<'CEOF'
-labwired agent compose — assemble observability elements (not ready-made plots)
+labwired agent compose — tools for the agent to build views from real data
+  (not a ready-made plot product; agent decides when to call these)
 
-  # Preferred (skill job): user need → recipe → composed.json
   labwired agent compose job --ask "plot LED vs UART" --uart <log> [--out composed.json]
-  labwired agent compose job --ask "plot LED vs UART" --from last-run [--out composed.json]
+  labwired agent compose job --ask "…" --from last-run [--out composed.json]
   labwired agent compose job --ask "show logic capture" --capture <json> [--out composed.json]
-
-  # Low-level
   labwired agent compose uart --file <uart.log> [--out composed.json]
-  labwired agent compose capture --capture <capture.json> [--uart log] [--out out.json]
+  labwired agent compose capture --capture <json> [--uart log] [--out out.json]
 
 Never invent waveforms. Observation only — not model_verified / hardware_observed.
 CEOF

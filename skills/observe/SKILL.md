@@ -12,38 +12,42 @@ metadata:
   pack: "observe"
 ---
 
-# Observe — compose a view from user need
+# Observe — tools for views (agent does the work)
 
-**Product rule:** We do **not** ship ready-made Open Plot products. We **do** build the graph the user asked for from **elements** in real logs/captures.
+**Product stance (keep simple):** LabWired ships **tools**. The agent decides when to call them and how to explain results. We do **not** ship a ready-made Open Plot product or invent waveforms.
 
-**One command (prefer this):**
+**Tools (that is all):**
 
 ```bash
-labwired agent compose job --ask "<user words>" --uart <path> --out composed.json
-# or after a twin run that left uart.log under evidence:
+# Need → composed JSON (preferred)
+labwired agent compose job --ask "<user words>" --uart <log> --out composed.json
 labwired agent compose job --ask "plot LED vs UART" --from last-run --out composed.json
+labwired agent compose job --ask "show logic capture" --capture <json> --out composed.json
+
+# Low-level
+labwired agent compose uart --file <uart.log> [--out composed.json]
+labwired agent compose capture --capture <json> [--uart log] [--out out.json]
 ```
+
+Workbench (optional viewer): **LabWired: Open Composed Plot JSON…**
 
 ## When to load
 
-User says show / plot / graph / overlay / “what did the bus/LED do” / “LED vs UART”.
+User says show / plot / graph / overlay / LED vs UART / pin edges.
 
 ## Hard rules
 
-1. **Never invent** series, edges, or sample points.  
-2. A composed view is **observation only** — not `model_verified`, not `hardware_observed`.  
-3. If source missing or empty match → say **missing** / empty; stop.  
-4. Prefer **`compose job`** over freeform Plotly/HTML/React generation.
+1. **Never invent** series or edges — only tool output.  
+2. Composed view = **observation** — not `model_verified` / `hardware_observed`.  
+3. Tool exit non-zero or empty → tell the user **missing**; stop.  
+4. Do **not** freestyle Plotly/HTML/React charts when these tools exist.
 
-## Ordered job (do this every time)
+## Agent loop (you do this)
 
-| Step | Action |
-|------|--------|
-| 1 | Restate the need in one line (LED vs UART, logic edges, temp series, …). |
-| 2 | Resolve source: user path, or last twin `uart.log`, or capture JSON. |
-| 3 | Run `labwired agent compose job --ask "…" --uart …` (or `--capture …`). |
-| 4 | If exit ≠ 0 or empty series/markers → report cannot compose (no invent). |
-| 5 | Present: path to `composed.json` + short narrative of `series` / `markers` ids. In VS Code: **LabWired: Open Composed Plot JSON…** and pick that file (observation glass only). |
+1. Pick source (path user gave, last-run uart, or capture).  
+2. Call **`compose job`** with their ask.  
+3. Summarize `series` / `markers` from the JSON (or report fail).  
+4. Optionally open the JSON in Plot glass — still just viewing tool output.
 
 ## Recipes (catalog)
 
