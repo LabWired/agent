@@ -91,7 +91,7 @@ if (!devCycle.includes('scripts/profiles/esp32c3-serial.sh'))
   fail('scripts/dev-cycle.sh', 0, 'public profile reference is missing');
 
 const requiredSkills = [
-  'golden-path', 'bringup', 'prove', 'observe', 'desk-hw',
+  'golden-path', 'bringup', 'prove', 'observe', 'desk-hw', 'import-circuit',
   'using-superpowers', 'brainstorming', 'writing-plans',
   'test-driven-development', 'systematic-debugging',
   'verification-before-completion', 'dispatching-parallel-agents',

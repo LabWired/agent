@@ -151,17 +151,19 @@ cmd_version() {
 
 cmd_doctor() {
   local ok=0
+  # Session file alone is not enough — probe model gateway + MCP before claiming signed-in.
   if labwired_cloud_session_load 2>/dev/null || [[ -n "${LABWIRED_ACCESS_TOKEN:-}" ]]; then
-    say "ok  cloud-session: signed in (${LABWIRED_EMAIL:-token present})"
-    if [[ -n "${LABWIRED_PROJECT:-}" ]]; then
-      say "ok  project: $LABWIRED_PROJECT"
-    else
-      printf '\033[33mwarn\033[0m project: unset — model gateway needs LABWIRED_PROJECT\n'
-    fi
     if labwired_cloud_probe_hosted 2>/dev/null; then
+      say "ok  cloud-session: signed in (${LABWIRED_EMAIL:-token present})"
+      if [[ -n "${LABWIRED_PROJECT:-}" ]]; then
+        say "ok  project: $LABWIRED_PROJECT"
+      else
+        printf '\033[33mwarn\033[0m project: unset — model gateway needs LABWIRED_PROJECT\n'
+      fi
       say "ok  hosted-tools: model gateway + MCP authenticated"
     else
-      printf '\033[31mFAIL\033[0m hosted-tools: token present but API rejects it — run: labwired agent login\n'
+      printf '\033[31mFAIL\033[0m cloud-session: token present but API rejects it — run: labwired agent login\n'
+      printf '\033[31mFAIL\033[0m hosted-tools: not authenticated (re-login required for hosted model/MCP)\n'
       ok=1
     fi
   else

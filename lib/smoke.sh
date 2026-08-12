@@ -67,7 +67,7 @@ labwired_smoke() {
   if [[ -d "$root/skills" ]]; then
     n="$(find "$root/skills" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
   fi
-  if [[ "${n:-0}" -ge 5 ]]; then
+  if [[ "${n:-0}" -ge 21 ]]; then
     printf '\033[32mok \033[0m skills (%s)\n' "$n"
   else
     printf '\033[31mFAIL\033[0m skills incomplete (%s)\n' "${n:-0}"
