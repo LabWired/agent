@@ -837,6 +837,7 @@ In `/Users/andrii/projects/labwired-cursor/docs/superpowers/plans/2026-07-31-gap
 4. **Version skew:** extension `package.json` says 0.6.3 while VSIXes up to 0.9.0/0.10.0 are installed — bump `version` and `compatibleCliVersion` in a separate release task, not here.
 5. **Windows:** `serial/*` and live UART are macOS/Linux-only server-side; the extension already degrades via empty port lists.
 6. **`out/` is stale** (contains 0.9.0-era files with no `src/` counterpart). `npm run compile` overwrites it; never trust `out/` as a source of truth.
+7. **Known leftovers (post-Task-3 review, not in scope):** `PlotViewProvider.pushSample` and `OverviewViewProvider.pushSample` are now dead (their `plot/data` call sites were removed); the client does not subscribe to server `serial/error` or `plot/clear`. Candidates for a later cleanup pass, not this plan.
 
 ## Definition of Done (Part 6)
 
