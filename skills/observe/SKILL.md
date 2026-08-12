@@ -43,7 +43,7 @@ User says show / plot / graph / overlay / “what did the bus/LED do” / “LED
 | 2 | Resolve source: user path, or last twin `uart.log`, or capture JSON. |
 | 3 | Run `labwired agent compose job --ask "…" --uart …` (or `--capture …`). |
 | 4 | If exit ≠ 0 or empty series/markers → report cannot compose (no invent). |
-| 5 | Present: path to `composed.json` + short narrative of `series` / `markers` ids. Offer workbench Plot glass only as a **viewer** of that JSON. |
+| 5 | Present: path to `composed.json` + short narrative of `series` / `markers` ids. In VS Code: **LabWired: Open Composed Plot JSON…** and pick that file (observation glass only). |
 
 ## Recipes (catalog)
 

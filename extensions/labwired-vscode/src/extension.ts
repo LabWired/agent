@@ -448,6 +448,18 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.commands.executeCommand("labwired.plot.focus");
       },
     ],
+    [
+      "labwired.openComposedPlot",
+      async () => {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: { JSON: ["json"] },
+          title: "Open composed.json from labwired compose job",
+        });
+        if (!picked?.[0]) return;
+        await plot.loadComposedFile(picked[0]);
+      },
+    ],
     ["labwired.openEvidence", async () => focus("labwired.evidence")],
     ["labwired.openPlan", async () => focus("labwired.plan")],
     [

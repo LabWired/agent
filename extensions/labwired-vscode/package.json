@@ -152,6 +152,7 @@
       { "command": "labwired.openSerialInEditor", "title": "Open Monitor in Editor", "category": "LabWired" },
       { "command": "labwired.toggleSerial", "title": "Toggle Monitor", "category": "LabWired" },
       { "command": "labwired.openPlot", "title": "Open Plot", "category": "LabWired" },
+      { "command": "labwired.openComposedPlot", "title": "Open Composed Plot JSON…", "category": "LabWired" },
       { "command": "labwired.openEvidence", "title": "Open Evidence", "category": "LabWired" },
       { "command": "labwired.openPlan", "title": "Open Plan Panel", "category": "LabWired" },
       { "command": "labwired.loadEvidence", "title": "Load Verify JSON…", "category": "LabWired" },
