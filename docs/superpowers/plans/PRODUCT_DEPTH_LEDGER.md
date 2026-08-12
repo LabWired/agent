@@ -6,8 +6,8 @@
 | Task | Title | Status | Gate evidence | Notes |
 |------|-------|--------|---------------|-------|
 | 1 | Required knowledge heroes file | **done** | `python3 -c assert len(required)==8` | `share/catalog/knowledge-required.json` |
-| 2 | Knowledge smoke 100% required | **code done** — gate blocked on Task 3 | smoke exit 1: `FAIL required part bme280 NOT_FOUND`; all other required + canaries ok | hard-fail smoke landed |
-| 3 | Seed store until Task 2 green | pending | Task 2 exit 0 on prod | monorepo part-knowledge |
+| 2 | Knowledge smoke 100% required | **done** | `bash scripts/knowledge-mcp-smoke.sh` exit 0 | required heroes hard-fail |
+| 3 | Seed store until Task 2 green | **done** (prod D1 applied) | part bme280 OK; 5 proven facts; smoke exit 0 | monorepo #1613 + migration 0034 |
 | 4 | bringup tools-before-invent | pending | grep skill/AGENTS | |
 | 5 | Multi-source import on prod MCP | pending | live labwired_import bom_csv | monorepo deploy |
 | 6 | Agent multi-source import smoke | pending | import-multi-smoke + diagram smoke | |
@@ -27,9 +27,11 @@
 |------------|------|--------|
 | 2026-08-12 | 1 | Created knowledge-required.json (8 heroes); ledger opened |
 | 2026-08-12 | 2 | knowledge-mcp-smoke enforces knowledge-required.json; live run fails only on bme280 part |
+| 2026-08-12 | 3 | Applied 0034_part_knowledge_bme280 on prod D1; labwired_part bme280 OK (5 proven); smoke PASS |
+| 2026-08-12 | 2 | knowledge-mcp-smoke exit 0 on prod session (required heroes + canaries) |
 
 ## Blockers
 
 | Task | Blocker | Since |
 |------|---------|-------|
-| 2–3 | Hosted `labwired_part` bme280 → NOT_FOUND (list ok; datasheet ok) | 2026-08-12 |
+| — | — | — |

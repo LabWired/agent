@@ -52,17 +52,19 @@
 
 ## Task 2 — Knowledge smoke enforces 100% required
 
+**Status: done** (ledger)
+
 **Files:** Modify `scripts/knowledge-mcp-smoke.sh`
 
-- [ ] Load `share/catalog/knowledge-required.json`
-- [ ] For each required id, call hosted MCP (Accept: `application/json` only):
+- [x] Load `share/catalog/knowledge-required.json`
+- [x] For each required id, call hosted MCP (Accept: `application/json` only):
   - if `need` contains `part` → `labwired_part` query=id → outcome must be `OK` (not `NOT_FOUND`)
   - if `need` contains `list` → `labwired_list` with filter=id → non-empty boards/components/items
   - if `need` contains `datasheet` → `labwired_datasheet` part=id → outcome `OK`
-- [ ] Exit 1 if any required fails
-- [ ] Keep ADXL345 part+datasheet POWER_CTL as extra canary (existing)
+- [x] Exit 1 if any required fails
+- [x] Keep ADXL345 part+datasheet POWER_CTL as extra canary (existing)
 
-- [ ] Commit: `test(knowledge): required heroes hard fail in knowledge-mcp-smoke`
+- [x] Commit: `test(knowledge): required heroes hard fail in knowledge-mcp-smoke`
 
 **Gate (signed-in session):**
 
@@ -76,12 +78,14 @@ Expected: every required id `ok`, script exit 0. No session → exit 2 with `nee
 
 ## Task 3 — Seed / fix store until Task 2 is green
 
+**Status: done** (prod D1 0034 applied; PR #1613)
+
 **Files:** monorepo `packages/api/src/part-knowledge/*` (seed/catalog as used in prod)
 
-- [ ] Run Task 2; collect FAIL ids
-- [ ] For each FAIL: add curated part fact and/or datasheet so tool returns OK (no invented pins)
-- [ ] Deploy API / seed per monorepo process
-- [ ] Re-run Task 2 until green
+- [x] Run Task 2; collect FAIL ids
+- [x] For each FAIL: add curated part fact and/or datasheet so tool returns OK (no invented pins)
+- [x] Deploy API / seed per monorepo process
+- [x] Re-run Task 2 until green
 
 **Gate:** Task 2 exit 0 on production API with a real session.
 
