@@ -22,9 +22,11 @@
 
 ## Task 1 — Required knowledge heroes file
 
+**Status: done** (ledger)
+
 **Files:** Create `share/catalog/knowledge-required.json`
 
-- [ ] Write file with exactly these required ids (edit only if a hero is retired and replaced 1:1):
+- [x] Write file with exactly these required ids (edit only if a hero is retired and replaced 1:1):
 
 ```json
 {

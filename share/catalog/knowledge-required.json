@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "Required knowledge heroes for product depth Task 1–3. Every id must pass knowledge-mcp-smoke when a cloud session is present. Edit only by 1:1 replacement of a retired hero.",
+  "required": [
+    { "id": "adxl345", "need": ["part"] },
+    { "id": "bme280", "need": ["part", "list"] },
+    { "id": "ssd1306", "need": ["list"] },
+    { "id": "esp32-c3-supermini", "need": ["list"] },
+    { "id": "nucleo-l476rg", "need": ["list"] },
+    { "id": "nrf52840", "need": ["list"] },
+    { "id": "rp2040", "need": ["list"] },
+    { "id": "stm32l476", "need": ["list"] }
+  ]
+}
