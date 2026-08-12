@@ -16,6 +16,8 @@ jobs:
           bash tests/hosted-config.sh
           bash tests/agents-tool-search.sh
           bash tests/desktop-session.sh
+          bash tests/skills-verify-all.sh
+          bash tests/hosted-auth-probe.sh
       - name: dispatcher and public package
         run: |
           bash tests/dispatcher.sh

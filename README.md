@@ -42,11 +42,11 @@ installations and data stay in place.
 | **golden-path** | Stranger → twin green entry loop |
 | **bringup** | Board + part knowledge (`labwired_part` / `labwired_datasheet`) |
 | **import-circuit** | Schematic/diagram → twin pack (catalog-honest) |
-| **prove** | Twin verify → `model_verified` only |
+| **prove** | Twin verify → green only via the twin check |
 | **observe** | Plots from run elements |
-| **desk-hw** | Flash + serial marker → `hardware_observed` only |
+| **desk-hw** | Flash + serial marker → desk green only |
 
-Twin green and desk green are **separate claims**. Never upgrade hardware observe to `model_verified`.
+Twin green and desk green are **separate claims**. Never treat a desk check as twin green. Exact status names: [docs/VERIFY.md](docs/VERIFY.md).
 
 ## Privacy & Terms
 

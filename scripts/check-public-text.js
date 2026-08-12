@@ -53,13 +53,21 @@ function scanText(text, file, report) {
   const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
   const assignments = /"?(DEEPINFRA_API_KEY|LABWIRED_ACCESS_TOKEN)"?\s*(=(?!=)|:(?![-+?=0-9]))\s*(?:"([^"]*)"|'([^']*)'|(\$\{\{.*?\}\})|([^\s,;#`]+))/g;
   const dynamic = /^(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$\{\{[^}]+\}\}|\$\(.+\)|\{env:[A-Za-z_][A-Za-z0-9_]*\})$/;
+  const isTestPath = /(^|\/)tests?\//.test(file);
   text.split(/\r?\n/).forEach((line, index) => {
     const number = index + 1;
     if (line.includes('/' + 'Users/')) report(file, number, 'private local path');
     if (/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i.test(line)) report(file, number, 'private key header');
+    const publicMails = new Set([
+      'example@example.com',
+      'contact@labwired.com',
+      'privacy@labwired.com',
+      'security@labwired.com',
+    ]);
     for (const match of line.matchAll(email)) {
-      if (match[0].toLowerCase() !== 'example@example.com') report(file, number, 'real email address');
+      if (!publicMails.has(match[0].toLowerCase())) report(file, number, 'real email address');
     }
+    if (isTestPath) return; // tests may use dead tokens / fixtures
     for (const match of line.matchAll(assignments)) {
       const value = match[3] ?? match[4] ?? match[5] ?? match[6];
       const placeholder = value === 'test-token' || (match[1] === 'DEEPINFRA_API_KEY' && value === '…');

@@ -39,3 +39,4 @@ fixtures/**/evidence/
 fixtures/coverage/smoke/
 workspaces/**/.pio/
 workspaces/**/evidence/
+share/smoke/.dead-token

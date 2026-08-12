@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.11 — 2026-08-12 — Tighten release paths
+
+- Doctor only reports **signed in** after live hosted probe succeeds (no false green).
+- Public package: allowlist product emails; require `import-circuit` skill; README dual claims use plain language.
+- CI + `tests/all.sh` run `hosted-auth-probe` and `skills-verify-all`.
+- Install smoke requires ≥21 skill packs (domain + Superpowers).
+- Dead-token probe test avoids secret-assignment scanner false positives.
+
+
 ## 0.3.10 — 2026-08-12 — Release gate: auth honesty + twin/desk/knowledge paths
 
 - **Doctor / session:** live-probe hosted model gateway + MCP; dead tokens fail hosted-tools (no false “signed in”).
