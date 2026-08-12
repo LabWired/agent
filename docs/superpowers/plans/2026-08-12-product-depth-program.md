@@ -173,11 +173,13 @@ Both exit 0.
 
 ## Task 7 — Catalog aliases for top dropped import tokens
 
+**Status: done** (#1615)
+
 **Files:** monorepo catalog / `board-config` `getCatalogPart` / aliases used by `import-circuit.ts`
 
-- [ ] Run multi-import on fixtures; list `status: dropped` values
-- [ ] Add aliases or part types for the top dropped names that should map (only real catalog parts)
-- [ ] Re-run Task 6 until mapped count for ADXL345/BME280/ESP32 board paths is non-zero where catalog has them
+- [x] Run multi-import on fixtures; list `status: dropped` values
+- [x] Add aliases or part types for the top dropped names that should map (only real catalog parts)
+- [x] Re-run Task 6 until mapped count for ADXL345/BME280/ESP32 board paths is non-zero where catalog has them
 
 **Gate:** BOM import with board_hint maps at least one of ADXL345/BME280 (mapped status), not all dropped.
 

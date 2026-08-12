@@ -11,7 +11,7 @@
 | 4 | bringup tools-before-invent | **done** | grep never invent + part + datasheet | ordered tools-before-invent |
 | 5 | Multi-source import on prod MCP | **done** | bom_csv/text/pdf_text/kicad_sch/diagram_json design_context_ok | #1612 merged + API deploy |
 | 6 | Agent multi-source import smoke | **done** | both smokes exit 0; ship-gate wired | fixtures/import + import-multi-smoke.sh |
-| 7 | Catalog aliases for dropped tokens | **in progress** | local tests map ADXL345/BME280; PR #1615 | no admin merge — wait CI |
+| 7 | Catalog aliases for dropped tokens | **done** | BOM maps adxl345+bme280 on prod | #1615 auto-merged (CI green, no admin) |
 | 8 | Second twin chip live-gate | pending | two LABWIRED_GATE1_CHIP green | |
 | 9 | Physical desk E2E | pending | desk-hw-physical exit 0 w/ probe | exit 2 if NEED_PROBE |
 | 10 | RTT capture claim JSON | pending | rtt-capture or NEED_RTT + Task 9 | |
@@ -32,6 +32,7 @@
 | 2026-08-12 | 4 | bringup/AGENTS tools-before-invent; gate greps green |
 | 2026-08-12 | 5 | #1612 merged (TS fix); API worker deployed; multi-source import green on prod |
 | 2026-08-12 | 6 | import-multi-smoke + fixtures; ship-gate 10b; both gates exit 0 |
+| 2026-08-12 | 7 | #1615 case-insensitive aliases; CI green + auto-merge; prod BOM maps both heroes |
 
 ## Blockers
 
