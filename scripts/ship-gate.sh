@@ -14,6 +14,31 @@ fail=0
 pass() { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fail=1; }
 
+show_diagnostics() {
+  local lines="$1" file
+  local existing=()
+  shift
+  for file in "$@"; do
+    if [[ -f "$file" ]]; then
+      existing[${#existing[@]}]="$file"
+    else
+      echo "warn diagnostic missing: $file"
+    fi
+  done
+  [[ "${#existing[@]}" -gt 0 ]] || return 0
+  if [[ "$lines" == "all" ]]; then
+    for file in "${existing[@]}"; do
+      cat "$file" || true
+    done
+  else
+    {
+      for file in "${existing[@]}"; do
+        cat "$file" || true
+      done
+    } | tail -"$lines" || true
+  fi
+}
+
 run_stage() {
   local name="$1" log="$2" timeout_override timeout status
   shift 2
@@ -24,7 +49,7 @@ run_stage() {
   status=$?
   set -e
   if [[ "$status" -eq 124 ]]; then
-    printf "ship-gate: stage '%s' timeout after %ss\n" "$name" "$timeout" >>"$log"
+    printf "ship-gate: stage '%s' timeout after %ss\n" "$name" "$timeout" >>"$log" || true
     bad "$name timeout after ${timeout}s"
   fi
   return "$status"
@@ -52,7 +77,19 @@ if [[ -n "${LABWIRED_SHIP_FIXTURE_DIR:-}" ]]; then
     stage="${fixture##*/}"
     stage="${stage%.sh}"
     if run_stage "$stage" "$OUT/$stage.txt" bash "$fixture"; then
-      pass "$stage fixture"
+      artifact_contract="$fixture.artifact"
+      if [[ -f "$artifact_contract" ]]; then
+        expected_artifact=""
+        IFS= read -r expected_artifact <"$artifact_contract" || true
+        if [[ -z "$expected_artifact" || ! -f "$expected_artifact" ]]; then
+          bad "$stage fixture missing artifact: ${expected_artifact:-not specified}"
+          show_diagnostics all "${expected_artifact:-$artifact_contract}"
+        else
+          pass "$stage fixture"
+        fi
+      else
+        pass "$stage fixture"
+      fi
     else
       status=$?
       if [[ "$status" -ne 124 ]]; then
@@ -76,13 +113,13 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "hosted-auth-probe"
   fi
-  tail -20 "$OUT/hosted-auth-probe.txt"
+  show_diagnostics 20 "$OUT/hosted-auth-probe.txt"
 fi
 
 # 1 doctor
 if run_stage "doctor" "$OUT/doctor.txt" "$LABWIRED" doctor; then
   if grep -qiE '(^|[^a-z])not ready' "$OUT/doctor.txt"; then
-    bad "doctor not ready"; tail -8 "$OUT/doctor.txt"
+    bad "doctor not ready"; show_diagnostics 8 "$OUT/doctor.txt"
   else
     pass "doctor exit 0"
   fi
@@ -91,7 +128,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "doctor exit non-zero"
   fi
-  tail -8 "$OUT/doctor.txt"
+  show_diagnostics 8 "$OUT/doctor.txt"
 fi
 
 # 2 whoami / session (optional but recorded)
@@ -135,7 +172,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "live-gate1"
   fi
-  tail -12 "$OUT/live-gate1.txt"
+  show_diagnostics 12 "$OUT/live-gate1.txt"
 fi
 
 # 5 compose CLI (agent-callable surface) + job path (need → recipe → view)
@@ -147,7 +184,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "labwired compose"
   fi
-  cat "$OUT/compose.txt"
+  show_diagnostics all "$OUT/compose.txt"
 fi
 if run_stage "compose-job" "$OUT/compose-job.txt" "$LABWIRED" compose job \
   --ask "plot LED vs UART" \
@@ -161,14 +198,14 @@ if run_stage "compose-job" "$OUT/compose-job.txt" "$LABWIRED" compose job \
     if [[ "$status" -ne 124 ]]; then
       bad "compose job empty json"
     fi
-    cat "$OUT/compose-job.json"
+    show_diagnostics all "$OUT/compose-job.json"
   fi
 else
   status=$?
   if [[ "$status" -ne 124 ]]; then
     bad "compose job"
   fi
-  cat "$OUT/compose-job.txt"
+  show_diagnostics all "$OUT/compose-job.txt"
 fi
 
 # 6 knowledge heroes
@@ -186,7 +223,7 @@ else
     if [[ "$knowledge_status" -ne 124 && "$local_status" -ne 124 ]]; then
       bad "knowledge-top-parts"
     fi
-    cat "$OUT/knowledge.txt" "$OUT/knowledge-local.txt" 2>/dev/null | tail -20
+    show_diagnostics 20 "$OUT/knowledge.txt" "$OUT/knowledge-local.txt"
   fi
 fi
 
@@ -237,7 +274,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "skills-verify-all"
   fi
-  tail -10 "$OUT/skills-verify.txt"
+  show_diagnostics 10 "$OUT/skills-verify.txt"
 fi
 
 # 10 import diagram (catalog-honest twin_buildable)
@@ -249,7 +286,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "import-diagram"
   fi
-  tail -15 "$OUT/import-smoke.txt"
+  show_diagnostics 15 "$OUT/import-smoke.txt"
 fi
 
 # 10b multi-source import (live MCP when signed in — product depth Task 6)
@@ -262,7 +299,7 @@ if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
     if [[ "$status" -ne 124 ]]; then
       bad "import-multi"
     fi
-    tail -20 "$OUT/import-multi-smoke.txt"
+    show_diagnostics 20 "$OUT/import-multi-smoke.txt"
   fi
 else
   bad "import-multi skipped — not signed in"
@@ -276,7 +313,7 @@ else
   if [[ "$status" -ne 124 ]]; then
     bad "desk-hw polish"
   fi
-  tail -20 "$OUT/desk-hw-smoke.txt"
+  show_diagnostics 20 "$OUT/desk-hw-smoke.txt"
 fi
 
 # 12 hosted knowledge (required when session file exists; skip only if unsigned)
@@ -289,7 +326,7 @@ if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
     if [[ "$status" -ne 124 ]]; then
       bad "knowledge MCP"
     fi
-    tail -30 "$OUT/knowledge-mcp.txt"
+    show_diagnostics 30 "$OUT/knowledge-mcp.txt"
   fi
 else
   bad "knowledge MCP skipped — not signed in (golden path requires login)"
