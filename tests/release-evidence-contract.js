@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const childProcess = require('child_process');
 const root = path.resolve(__dirname, '..');
 let failed = false;
 
@@ -95,6 +96,15 @@ const testingDocs = read('docs/TESTING.md');
 requireText(testingDocs, 'Source-install evidence', 'docs/TESTING.md');
 requireText(testingDocs, 'Deployed-endpoint evidence', 'docs/TESTING.md');
 requireText(testingDocs, 'platform.txt', 'docs/TESTING.md');
+
+const hostedContract = childProcess.spawnSync(
+  process.execPath,
+  [path.join(root, 'tests/hosted-release-contract.js')],
+  { encoding: 'utf8' },
+);
+if (hostedContract.stdout) process.stdout.write(hostedContract.stdout);
+if (hostedContract.stderr) process.stderr.write(hostedContract.stderr);
+if (hostedContract.status !== 0) fail('hosted release contract failed');
 
 if (failed) process.exit(1);
 process.stdout.write('ok   release-evidence-contract PASS\n');

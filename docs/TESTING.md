@@ -61,3 +61,43 @@ URLs, checks the requested published version, and uploads:
 
 Source evidence cannot prove that the public endpoints were updated. Deployed
 evidence cannot replace same-commit source tests. A public release needs both.
+
+## Credentialed hosted release readiness
+
+Ordinary pull request hosted lanes may report `not run` when live-service
+credentials are unavailable. The manually dispatched `release-readiness`
+workflow is mandatory for release readiness: all three platform jobs must pass
+before publishing a candidate.
+
+Dispatch the workflow from the candidate commit or tag. Supply the exact
+`candidate_version`, the stable `previous_version`, and an HTTPS archive URL
+plus SHA256 for the previous Ubuntu, macOS, and Windows release. The workflow
+rejects empty or malformed release inputs before checkout. Configure these
+GitHub Actions secrets:
+
+- `LABWIRED_RELEASE_ACCESS_TOKEN`: a release-verification hosted bearer.
+- `LABWIRED_RELEASE_PROJECT`: the project used for hosted verification.
+
+Missing credentials fail the release jobs; they never turn the checks into an
+optional skip. Credentials exist only in the validation and hosted-check step
+processes. The jobs do not append them to the Actions environment, and they
+remove the temporary hosted session before uploading evidence.
+
+Ubuntu, macOS, and Windows each install the checked-out candidate, require
+`labwired agent doctor` to report authenticated hosted tools, make a real MCP
+`tools/list` request, and then exercise the pinned previous-to-candidate
+upgrade. Windows runs native readiness and upgrade evidence under Windows
+PowerShell 5.1 and PowerShell Core, records both engine versions, and uses the
+installed cross-platform Agent launcher for the authenticated hosted-doctor
+probe. The uploaded artifacts are:
+
+- `labwired-agent-release-readiness-ubuntu`
+- `labwired-agent-release-readiness-macos`
+- `labwired-agent-release-readiness-windows`
+
+Each artifact is initialized with `result.txt` set to `FAIL`, so aborted jobs
+retain negative evidence. Artifacts include sanitized `hosted-status.txt` and
+`mcp-result.txt`, `platform.txt`, `capabilities.txt`, `result.txt`, and the
+platform upgrade evidence directory. They exclude raw logs, configuration,
+session, environment, token, and HTTP-header files. A release reviewer must
+confirm top-level and upgrade `result.txt` files are `PASS` for every platform.

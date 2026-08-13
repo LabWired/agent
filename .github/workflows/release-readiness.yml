@@ -1,0 +1,458 @@
+name: release-readiness
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: Candidate LabWired Agent version, without a v prefix
+        required: true
+        type: string
+      previous_version:
+        description: Previous stable LabWired Agent version, without a v prefix
+        required: true
+        type: string
+      previous_ubuntu_archive_url:
+        description: HTTPS URL for the pinned previous Ubuntu source archive
+        required: true
+        type: string
+      previous_ubuntu_archive_sha256:
+        description: SHA256 for the pinned previous Ubuntu source archive
+        required: true
+        type: string
+      previous_macos_archive_url:
+        description: HTTPS URL for the pinned previous macOS source archive
+        required: true
+        type: string
+      previous_macos_archive_sha256:
+        description: SHA256 for the pinned previous macOS source archive
+        required: true
+        type: string
+      previous_windows_archive_url:
+        description: HTTPS URL for the pinned previous Windows source archive
+        required: true
+        type: string
+      previous_windows_archive_sha256:
+        description: SHA256 for the pinned previous Windows source archive
+        required: true
+        type: string
+
+jobs:
+  hosted-release-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required release inputs and credentials
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          PREVIOUS_VERSION: ${{ inputs.previous_version }}
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_ubuntu_archive_url }}
+          PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_ubuntu_archive_sha256 }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/upgrade"
+          for file in hosted-status.txt mcp-result.txt platform.txt capabilities.txt; do
+            printf 'not-run\n' >"$EVIDENCE_DIR/$file"
+          done
+          printf 'FAIL\n' >"$EVIDENCE_DIR/result.txt"
+          for file in platform.txt previous-version.txt current-version.txt upgrade-install.txt doctor.txt lifecycle.txt capabilities.txt; do
+            printf 'not-run\n' >"$EVIDENCE_DIR/upgrade/$file"
+          done
+          printf 'FAIL\n' >"$EVIDENCE_DIR/upgrade/result.txt"
+          [[ -n "$RELEASE_ACCESS_TOKEN" ]] || { echo 'LABWIRED_RELEASE_ACCESS_TOKEN is required' >&2; exit 1; }
+          [[ -n "$RELEASE_PROJECT" ]] || { echo 'LABWIRED_RELEASE_PROJECT is required' >&2; exit 1; }
+          [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'candidate_version must be stable X.Y.Z' >&2; exit 1; }
+          [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
+          [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous Ubuntu archive URL must use HTTPS' >&2; exit 1; }
+          [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous Ubuntu archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - name: Install candidate and prove hosted access
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu
+        run: |
+          set -euo pipefail
+          session_root="$(mktemp -d)"
+          trap 'rm -rf "$session_root"' EXIT
+          export HOME="$session_root/home"
+          export LABWIRED_HOME="$session_root/prefix"
+          export LABWIRED_BIN_DIR="$session_root/bin"
+          export OPENCODE_CONFIG_DIR="$session_root/config"
+          export LABWIRED_AGENT_CONFIG_DIR="$session_root/config"
+          export LABWIRED_ACCESS_TOKEN="$RELEASE_ACCESS_TOKEN"
+          export LABWIRED_PROJECT="$RELEASE_PROJECT"
+          mkdir -p "$HOME"
+          [[ "$(tr -d '[:space:]' < VERSION)" == "$CANDIDATE_VERSION" ]] || { echo 'candidate_version does not match checked-out VERSION' >&2; exit 1; }
+          bash install.sh --agent-only >"$session_root/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$session_root/version.txt" 2>&1
+          grep -qx "version  $CANDIDATE_VERSION" "$session_root/version.txt"
+          set +e
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$session_root/doctor.raw" 2>&1
+          doctor_status=$?
+          set -e
+          python3 - "$session_root/doctor.raw" "$EVIDENCE_DIR/hosted-status.txt" <<'PY'
+          import os
+          import sys
+          raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for name in ("RELEASE_ACCESS_TOKEN", "RELEASE_PROJECT"):
+              value = os.environ.get(name, "")
+              if value:
+                  raw = raw.replace(value, "[REDACTED]")
+          open(sys.argv[2], "w", encoding="utf-8").write(raw)
+          PY
+          [[ "$doctor_status" -eq 0 ]] || { echo 'authenticated doctor failed' >&2; exit 1; }
+          grep -q 'hosted-tools: model gateway + MCP authenticated' "$EVIDENCE_DIR/hosted-status.txt"
+          mkdir -p "$HOME/.labwired/session"
+          python3 - "$HOME/.labwired/session/cloud.json" <<'PY'
+          import json
+          import os
+          import sys
+          with open(sys.argv[1], "w", encoding="utf-8") as handle:
+              json.dump({"access_token": os.environ["RELEASE_ACCESS_TOKEN"], "project_id": os.environ["RELEASE_PROJECT"]}, handle)
+          PY
+          set +e
+          python3 scripts/hosted-mcp-probe.py >"$session_root/mcp.raw" 2>&1
+          mcp_status=$?
+          set -e
+          rm -f "$HOME/.labwired/session/cloud.json"
+          python3 - "$session_root/mcp.raw" "$EVIDENCE_DIR/mcp-result.txt" <<'PY'
+          import os
+          import sys
+          raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for name in ("RELEASE_ACCESS_TOKEN", "RELEASE_PROJECT"):
+              value = os.environ.get(name, "")
+              if value:
+                  raw = raw.replace(value, "[REDACTED]")
+          open(sys.argv[2], "w", encoding="utf-8").write(raw)
+          PY
+          [[ "$mcp_status" -eq 0 ]] || { echo 'hosted MCP probe failed' >&2; exit 1; }
+          grep -q 'hosted-mcp-probe PASS' "$EVIDENCE_DIR/mcp-result.txt"
+          { uname -a; printf 'architecture=%s\n' "$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          printf '%s\n' 'candidate_install=source' 'hosted_doctor=authenticated' 'hosted_mcp=tools-list' 'upgrade=pinned-archive' >"$EVIDENCE_DIR/capabilities.txt"
+      - name: Prove pinned previous-release upgrade
+        env:
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_ubuntu_archive_url }}
+          LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
+          LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_ubuntu_archive_sha256 }}
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu/upgrade
+        run: |
+          set -euo pipefail
+          archive="$(mktemp "$RUNNER_TEMP/labwired-previous-ubuntu.XXXXXX")"
+          trap 'rm -f "$archive"' EXIT
+          curl -fsSL "$PREVIOUS_ARCHIVE_URL" -o "$archive"
+          export LABWIRED_PREVIOUS_AGENT_ARCHIVE="$archive"
+          bash tests/upgrade-smoke.sh
+          grep -qx PASS "$LABWIRED_EVIDENCE_DIR/result.txt"
+      - name: Mark Ubuntu release evidence complete
+        run: echo PASS > evidence/release-readiness/ubuntu/result.txt
+      - name: Upload Ubuntu release readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-release-readiness-ubuntu
+          path: |
+            evidence/release-readiness/ubuntu/hosted-status.txt
+            evidence/release-readiness/ubuntu/mcp-result.txt
+            evidence/release-readiness/ubuntu/upgrade
+            evidence/release-readiness/ubuntu/platform.txt
+            evidence/release-readiness/ubuntu/capabilities.txt
+            evidence/release-readiness/ubuntu/result.txt
+          if-no-files-found: error
+
+  hosted-release-macos:
+    runs-on: macos-14
+    steps:
+      - name: Validate required release inputs and credentials
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          PREVIOUS_VERSION: ${{ inputs.previous_version }}
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_macos_archive_url }}
+          PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_macos_archive_sha256 }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/upgrade"
+          for file in hosted-status.txt mcp-result.txt platform.txt capabilities.txt; do
+            printf 'not-run\n' >"$EVIDENCE_DIR/$file"
+          done
+          printf 'FAIL\n' >"$EVIDENCE_DIR/result.txt"
+          for file in platform.txt previous-version.txt current-version.txt upgrade-install.txt doctor.txt lifecycle.txt capabilities.txt; do
+            printf 'not-run\n' >"$EVIDENCE_DIR/upgrade/$file"
+          done
+          printf 'FAIL\n' >"$EVIDENCE_DIR/upgrade/result.txt"
+          [[ -n "$RELEASE_ACCESS_TOKEN" ]] || { echo 'LABWIRED_RELEASE_ACCESS_TOKEN is required' >&2; exit 1; }
+          [[ -n "$RELEASE_PROJECT" ]] || { echo 'LABWIRED_RELEASE_PROJECT is required' >&2; exit 1; }
+          [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'candidate_version must be stable X.Y.Z' >&2; exit 1; }
+          [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
+          [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous macOS archive URL must use HTTPS' >&2; exit 1; }
+          [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous macOS archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - name: Install candidate and prove hosted access
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos
+        run: |
+          set -euo pipefail
+          session_root="$(mktemp -d)"
+          trap 'rm -rf "$session_root"' EXIT
+          export HOME="$session_root/home"
+          export LABWIRED_HOME="$session_root/prefix"
+          export LABWIRED_BIN_DIR="$session_root/bin"
+          export OPENCODE_CONFIG_DIR="$session_root/config"
+          export LABWIRED_AGENT_CONFIG_DIR="$session_root/config"
+          export LABWIRED_ACCESS_TOKEN="$RELEASE_ACCESS_TOKEN"
+          export LABWIRED_PROJECT="$RELEASE_PROJECT"
+          mkdir -p "$HOME"
+          [[ "$(tr -d '[:space:]' < VERSION)" == "$CANDIDATE_VERSION" ]] || { echo 'candidate_version does not match checked-out VERSION' >&2; exit 1; }
+          bash install.sh --agent-only >"$session_root/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$session_root/version.txt" 2>&1
+          grep -qx "version  $CANDIDATE_VERSION" "$session_root/version.txt"
+          set +e
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$session_root/doctor.raw" 2>&1
+          doctor_status=$?
+          set -e
+          python3 - "$session_root/doctor.raw" "$EVIDENCE_DIR/hosted-status.txt" <<'PY'
+          import os
+          import sys
+          raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for name in ("RELEASE_ACCESS_TOKEN", "RELEASE_PROJECT"):
+              value = os.environ.get(name, "")
+              if value:
+                  raw = raw.replace(value, "[REDACTED]")
+          open(sys.argv[2], "w", encoding="utf-8").write(raw)
+          PY
+          [[ "$doctor_status" -eq 0 ]] || { echo 'authenticated doctor failed' >&2; exit 1; }
+          grep -q 'hosted-tools: model gateway + MCP authenticated' "$EVIDENCE_DIR/hosted-status.txt"
+          mkdir -p "$HOME/.labwired/session"
+          python3 - "$HOME/.labwired/session/cloud.json" <<'PY'
+          import json
+          import os
+          import sys
+          with open(sys.argv[1], "w", encoding="utf-8") as handle:
+              json.dump({"access_token": os.environ["RELEASE_ACCESS_TOKEN"], "project_id": os.environ["RELEASE_PROJECT"]}, handle)
+          PY
+          set +e
+          python3 scripts/hosted-mcp-probe.py >"$session_root/mcp.raw" 2>&1
+          mcp_status=$?
+          set -e
+          rm -f "$HOME/.labwired/session/cloud.json"
+          python3 - "$session_root/mcp.raw" "$EVIDENCE_DIR/mcp-result.txt" <<'PY'
+          import os
+          import sys
+          raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          for name in ("RELEASE_ACCESS_TOKEN", "RELEASE_PROJECT"):
+              value = os.environ.get(name, "")
+              if value:
+                  raw = raw.replace(value, "[REDACTED]")
+          open(sys.argv[2], "w", encoding="utf-8").write(raw)
+          PY
+          [[ "$mcp_status" -eq 0 ]] || { echo 'hosted MCP probe failed' >&2; exit 1; }
+          grep -q 'hosted-mcp-probe PASS' "$EVIDENCE_DIR/mcp-result.txt"
+          { uname -a; printf 'architecture=%s\n' "$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          printf '%s\n' 'candidate_install=source' 'hosted_doctor=authenticated' 'hosted_mcp=tools-list' 'upgrade=pinned-archive' >"$EVIDENCE_DIR/capabilities.txt"
+      - name: Prove pinned previous-release upgrade
+        env:
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_macos_archive_url }}
+          LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
+          LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_macos_archive_sha256 }}
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos/upgrade
+        run: |
+          set -euo pipefail
+          archive="$(mktemp "$RUNNER_TEMP/labwired-previous-macos.XXXXXX")"
+          trap 'rm -f "$archive"' EXIT
+          curl -fsSL "$PREVIOUS_ARCHIVE_URL" -o "$archive"
+          export LABWIRED_PREVIOUS_AGENT_ARCHIVE="$archive"
+          bash tests/upgrade-smoke.sh
+          grep -qx PASS "$LABWIRED_EVIDENCE_DIR/result.txt"
+      - name: Mark macOS release evidence complete
+        run: echo PASS > evidence/release-readiness/macos/result.txt
+      - name: Upload macOS release readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-release-readiness-macos
+          path: |
+            evidence/release-readiness/macos/hosted-status.txt
+            evidence/release-readiness/macos/mcp-result.txt
+            evidence/release-readiness/macos/upgrade
+            evidence/release-readiness/macos/platform.txt
+            evidence/release-readiness/macos/capabilities.txt
+            evidence/release-readiness/macos/result.txt
+          if-no-files-found: error
+
+  hosted-release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Validate required release inputs and credentials
+        shell: powershell
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          PREVIOUS_VERSION: ${{ inputs.previous_version }}
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_windows_archive_url }}
+          PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_windows_archive_sha256 }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path $env:EVIDENCE_DIR -Force | Out-Null
+          foreach ($engine in @('powershell', 'pwsh')) {
+            $upgrade = Join-Path $env:EVIDENCE_DIR ("upgrade\" + $engine)
+            New-Item -ItemType Directory -Path $upgrade -Force | Out-Null
+            foreach ($file in @('platform.txt', 'previous-version.txt', 'current-version.txt', 'upgrade-install.txt', 'doctor.txt', 'lifecycle.txt', 'capabilities.txt')) {
+              Set-Content -LiteralPath (Join-Path $upgrade $file) -Value 'not-run' -Encoding ASCII
+            }
+            Set-Content -LiteralPath (Join-Path $upgrade 'result.txt') -Value 'FAIL' -Encoding ASCII
+          }
+          foreach ($file in @('hosted-status.txt', 'mcp-result.txt', 'platform.txt', 'capabilities.txt')) {
+            Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR $file) -Value 'not-run' -Encoding ASCII
+          }
+          Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR 'result.txt') -Value 'FAIL' -Encoding ASCII
+          if (-not $env:RELEASE_ACCESS_TOKEN) { throw 'LABWIRED_RELEASE_ACCESS_TOKEN is required' }
+          if (-not $env:RELEASE_PROJECT) { throw 'LABWIRED_RELEASE_PROJECT is required' }
+          if ($env:CANDIDATE_VERSION -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'candidate_version must be stable X.Y.Z' }
+          if ($env:PREVIOUS_VERSION -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'previous_version must be stable X.Y.Z' }
+          if ($env:PREVIOUS_ARCHIVE_URL -notmatch '^https://') { throw 'previous Windows archive URL must use HTTPS' }
+          if ($env:PREVIOUS_ARCHIVE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'previous Windows archive SHA256 must be 64 hexadecimal characters' }
+      - uses: actions/checkout@v4
+      - name: Install candidate and prove hosted access with both PowerShell engines
+        shell: powershell
+        env:
+          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sessionRoot = Join-Path $env:RUNNER_TEMP ('labwired-release-hosted-' + [guid]::NewGuid().ToString('n'))
+          $env:USERPROFILE = Join-Path $sessionRoot 'home'
+          $env:HOME = $env:USERPROFILE
+          $env:LABWIRED_HOME = Join-Path $sessionRoot 'prefix'
+          $env:LABWIRED_BIN_DIR = Join-Path $sessionRoot 'bin'
+          $env:OPENCODE_CONFIG_DIR = Join-Path $sessionRoot 'config'
+          $env:LABWIRED_AGENT_CONFIG_DIR = $env:OPENCODE_CONFIG_DIR
+          $env:LABWIRED_ACCESS_TOKEN = $env:RELEASE_ACCESS_TOKEN
+          $env:LABWIRED_PROJECT = $env:RELEASE_PROJECT
+          $powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $pwshExe = (Get-Command pwsh.exe).Source
+          $bashExe = (Get-Command bash.exe).Source
+          function Write-Sanitized([string[]]$Lines, [string]$Path) {
+            $text = ($Lines -join [Environment]::NewLine)
+            foreach ($secret in @($env:RELEASE_ACCESS_TOKEN, $env:RELEASE_PROJECT)) {
+              if ($secret) { $text = $text.Replace($secret, '[REDACTED]') }
+            }
+            Set-Content -LiteralPath $Path -Value $text -Encoding UTF8
+          }
+          New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
+          try {
+            if ((Get-Content -LiteralPath VERSION -Raw).Trim() -cne $env:CANDIDATE_VERSION) {
+              throw 'candidate_version does not match checked-out VERSION'
+            }
+            $installLog = Join-Path $sessionRoot 'install.txt'
+            & .\scripts\install.ps1 -Prefix $env:LABWIRED_HOME -UserBin $env:LABWIRED_BIN_DIR -AgentOnly -SkipPathUpdate *>&1 |
+              Out-File -LiteralPath $installLog -Encoding UTF8
+            $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
+            $versionOutput = @(& $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version 2>&1 | ForEach-Object { $_.ToString() })
+            if ($LASTEXITCODE -ne 0 -or $versionOutput -notcontains "version  $($env:CANDIDATE_VERSION)") { throw 'candidate version check failed' }
+            $compatBin = Join-Path $sessionRoot 'compat-bin'
+            New-Item -ItemType Directory -Path $compatBin -Force | Out-Null
+            $python3Shim = "#!/usr/bin/env bash`nexec python `"`$@`"`n"
+            [IO.File]::WriteAllText((Join-Path $compatBin 'python3'), $python3Shim, [Text.UTF8Encoding]::new($false))
+            $windowsDoctor = @(& $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor 2>&1 | ForEach-Object { $_.ToString() })
+            $windowsDoctorStatus = $LASTEXITCODE
+            $pwshDoctor = @(& $pwshExe -NoProfile -File $dispatcher agent doctor 2>&1 | ForEach-Object { $_.ToString() })
+            $pwshDoctorStatus = $LASTEXITCODE
+            $env:LABWIRED_HOME_WINDOWS = $env:LABWIRED_HOME
+            $env:LABWIRED_BIN_DIR_WINDOWS = $env:LABWIRED_BIN_DIR
+            $env:LABWIRED_CONFIG_DIR_WINDOWS = $env:LABWIRED_AGENT_CONFIG_DIR
+            $env:LABWIRED_COMPAT_BIN_WINDOWS = $compatBin
+            $hostedDoctorScript = @'
+          set -euo pipefail
+          export HOME="$(cygpath -u "$USERPROFILE")"
+          export LABWIRED_HOME="$(cygpath -u "$LABWIRED_HOME_WINDOWS")"
+          export LABWIRED_BIN_DIR="$(cygpath -u "$LABWIRED_BIN_DIR_WINDOWS")"
+          export LABWIRED_AGENT_CONFIG_DIR="$(cygpath -u "$LABWIRED_CONFIG_DIR_WINDOWS")"
+          export OPENCODE_CONFIG_DIR="$LABWIRED_AGENT_CONFIG_DIR"
+          export PATH="$(cygpath -u "$LABWIRED_COMPAT_BIN_WINDOWS"):$PATH"
+          "$LABWIRED_HOME/agent/bin/labwired-agent" doctor
+          '@
+            $hostedDoctor = @(& $bashExe -lc $hostedDoctorScript 2>&1 | ForEach-Object { $_.ToString() })
+            $hostedDoctorStatus = $LASTEXITCODE
+            Write-Sanitized (@('[Windows PowerShell 5.1 native doctor]') + $windowsDoctor + @('', '[PowerShell Core native doctor]') + $pwshDoctor + @('', '[Authenticated hosted labwired agent doctor]') + $hostedDoctor) (Join-Path $env:EVIDENCE_DIR 'hosted-status.txt')
+            if ($windowsDoctorStatus -ne 0 -or $pwshDoctorStatus -ne 0) { throw 'native doctor failed in one or more PowerShell engines' }
+            if ($hostedDoctorStatus -ne 0) { throw 'authenticated hosted labwired agent doctor failed' }
+            if (@($hostedDoctor | Where-Object { $_.Contains('hosted-tools: model gateway + MCP authenticated') }).Count -eq 0) { throw 'labwired agent doctor did not authenticate hosted tools' }
+            $sessionDir = Join-Path $env:USERPROFILE '.labwired\session'
+            New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
+            $sessionJson = @{ access_token = $env:RELEASE_ACCESS_TOKEN; project_id = $env:RELEASE_PROJECT } | ConvertTo-Json -Compress
+            [IO.File]::WriteAllText((Join-Path $sessionDir 'cloud.json'), $sessionJson, [Text.UTF8Encoding]::new($false))
+            $mcpOutput = @(python scripts/hosted-mcp-probe.py 2>&1 | ForEach-Object { $_.ToString() })
+            $mcpStatus = $LASTEXITCODE
+            Remove-Item -LiteralPath (Join-Path $sessionDir 'cloud.json') -Force
+            Write-Sanitized $mcpOutput (Join-Path $env:EVIDENCE_DIR 'mcp-result.txt')
+            if ($mcpStatus -ne 0 -or @($mcpOutput | Where-Object { $_ -match 'hosted-mcp-probe PASS' }).Count -eq 0) { throw 'hosted MCP probe failed' }
+            @(
+              "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+              "os_architecture=$([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+              "process_architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
+            ) | Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR 'platform.txt') -Encoding ASCII
+            @(
+              'candidate_install=source'
+              'hosted_doctor=authenticated'
+              'hosted_mcp=tools-list'
+              'upgrade=pinned-archive'
+              "windows-powershell=$(& $powershellExe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')"
+              "powershell-core=$(& $pwshExe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')"
+            ) | Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR 'capabilities.txt') -Encoding ASCII
+          } finally {
+            if (Test-Path -LiteralPath $sessionRoot) { Remove-Item -LiteralPath $sessionRoot -Recurse -Force }
+          }
+      - name: Prove pinned previous-release upgrade with both PowerShell engines
+        shell: powershell
+        env:
+          PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_windows_archive_url }}
+          LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
+          LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_windows_archive_sha256 }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP ('labwired-previous-windows-' + [guid]::NewGuid().ToString('n') + '.zip')
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri $env:PREVIOUS_ARCHIVE_URL -OutFile $archive
+            $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $archive
+            $engines = @(
+              @{ Name = 'powershell'; Executable = (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') },
+              @{ Name = 'pwsh'; Executable = (Get-Command pwsh.exe).Source }
+            )
+            $failed = $false
+            foreach ($engine in $engines) {
+              $env:LABWIRED_EVIDENCE_DIR = Join-Path $env:EVIDENCE_DIR ("upgrade\" + $engine.Name)
+              & $engine.Executable -NoProfile -ExecutionPolicy Bypass -File ./tests/windows-upgrade-smoke.ps1
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            }
+            if ($failed) { throw 'previous-release upgrade failed in one or more PowerShell engines' }
+          } finally {
+            if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+          }
+      - name: Mark Windows release evidence complete
+        shell: powershell
+        run: Set-Content -LiteralPath evidence\release-readiness\windows\result.txt -Value PASS -Encoding ASCII
+      - name: Upload Windows release readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-release-readiness-windows
+          path: |
+            evidence/release-readiness/windows/hosted-status.txt
+            evidence/release-readiness/windows/mcp-result.txt
+            evidence/release-readiness/windows/upgrade
+            evidence/release-readiness/windows/platform.txt
+            evidence/release-readiness/windows/capabilities.txt
+            evidence/release-readiness/windows/result.txt
+          if-no-files-found: error
