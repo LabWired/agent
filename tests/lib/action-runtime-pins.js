@@ -9,13 +9,45 @@ function indentation(line) {
   return line.match(/^ */)[0].length;
 }
 
-function yamlScalar(value) {
-  const trimmed = value.trim();
-  if ((trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-      (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
-    return trimmed.slice(1, -1);
+function stripYamlComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (quote === "'") {
+      if (character === "'" && value[index + 1] === "'") {
+        index++;
+      } else if (character === "'") {
+        quote = null;
+      }
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '\\') index++;
+      else if (character === '"') quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+    } else if (character === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index);
+    }
   }
-  return trimmed.replace(/\s+#.*$/, '').trim();
+  return value;
+}
+
+function yamlScalar(value) {
+  const trimmed = stripYamlComment(value).trim();
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch (_) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
 }
 
 function workflowStepUses(source) {
@@ -85,9 +117,13 @@ function workflowStepUses(source) {
 function validateActionRuntimePins(source, relative) {
   const violations = [];
   for (const reference of workflowStepUses(source)) {
+    const separator = reference.lastIndexOf('@');
+    if (separator < 0) continue;
+    const actionIdentifier = reference.slice(0, separator).toLowerCase();
+    const actionRef = reference.slice(separator + 1);
     for (const [action, expectedRef] of REQUIRED_ACTION_REFS) {
-      if (reference === `${action}@${expectedRef}`) break;
-      if (reference.startsWith(`${action}@`)) {
+      if (actionIdentifier === action && actionRef === expectedRef) break;
+      if (actionIdentifier === action) {
         violations.push(`${relative} uses ${reference}; expected ${action}@${expectedRef}`);
         break;
       }
