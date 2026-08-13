@@ -144,6 +144,8 @@
     "test": "bash tests/all.sh",
     "test:unit": "bash tests/harness.sh && bash tests/skills-inventory.sh && bash tests/public-install.sh && bash tests/prefix-unit.sh && bash tests/rpc-agent-resolution.sh",
     "test:develop": "bash tests/develop-skill.sh",
+    "test:develop:acceptance": "bash tests/develop-acceptance-smoke.sh",
+    "test:develop:release": "LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE=1 bash tests/develop-acceptance-smoke.sh",
     "test:dispatcher": "bash tests/dispatcher.sh",
     "test:agent-lifecycle": "bash tests/agent-lifecycle.sh",
     "test:public-install-safety": "bash tests/public-install-safety.sh",

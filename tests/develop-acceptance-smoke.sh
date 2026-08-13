@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Develop prompt mechanics acceptance.
+# Default: bash tests/develop-acceptance-smoke.sh
+# Strict release gate: LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE=1 bash tests/develop-acceptance-smoke.sh
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/fixtures/develop-acceptance"
@@ -224,4 +227,12 @@ fi
 
 printf '\nSUMMARY CHECKS_PASS=%d SKIP=%d FAIL=%d REQUIRED_COMPLETE=%s\n' \
   "$pass" "$skip" "$fail" "$([[ "$skip" -eq 0 && "$fail" -eq 0 ]] && echo true || echo false)"
-[[ "$skip" -eq 0 && "$fail" -eq 0 ]]
+if [[ "$fail" -ne 0 ]]; then
+  echo "acceptance failed: one or more mechanics checks failed"
+  exit 1
+fi
+if [[ "$skip" -ne 0 ]]; then
+  echo "acceptance incomplete: one or more required scenarios were skipped"
+  [[ "${LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE:-0}" != "1" ]] || exit 1
+fi
+exit 0
