@@ -44,6 +44,13 @@ compile_pio() {
   pio run -d "$1" >"$2" 2>&1
 }
 
+hash_file() {
+  python3 - "$1" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PY
+}
+
 scaffold_esp32c3() {
   python3 - "$1" <<'PY'
 from pathlib import Path
@@ -96,8 +103,8 @@ PY
 }
 
 SIM=""
-if [[ -x "$HOME/.labwired/tools/sim/labwired-sim" ]]; then
-  SIM="$HOME/.labwired/tools/sim/labwired-sim"
+if [[ -n "${HOME:-}" && -x "${HOME}/.labwired/tools/sim/labwired-sim" ]]; then
+  SIM="${HOME}/.labwired/tools/sim/labwired-sim"
 elif command -v labwired-sim >/dev/null 2>&1; then
   SIM="$(command -v labwired-sim)"
 fi
@@ -129,8 +136,8 @@ else
   : "$PROMPT_EXISTING_STM32F103"
   cp -R "$FIX/stm32f103" "$WORK/stm32"
   before_paths="$(cd "$WORK/stm32" && find . -type f ! -path './.pio/*' | sort)"
-  before_config="$(shasum "$WORK/stm32/platformio.ini" | awk '{print $1}')"
-  before_source="$(shasum "$WORK/stm32/src/main.cpp" | awk '{print $1}')"
+  before_config="$(hash_file "$WORK/stm32/platformio.ini")"
+  before_source="$(hash_file "$WORK/stm32/src/main.cpp")"
   python3 - "$WORK/stm32/src/main.cpp" <<'PY'
 from pathlib import Path
 import sys
@@ -141,8 +148,8 @@ assert old.count(needle) == 1
 p.write_text(old.replace(needle, "  digitalWrite(PC13, !digitalRead(PC13));\n  delay(1000);"))
 PY
   after_paths="$(cd "$WORK/stm32" && find . -type f ! -path './.pio/*' | sort)"
-  after_config="$(shasum "$WORK/stm32/platformio.ini" | awk '{print $1}')"
-  after_source="$(shasum "$WORK/stm32/src/main.cpp" | awk '{print $1}')"
+  after_config="$(hash_file "$WORK/stm32/platformio.ini")"
+  after_source="$(hash_file "$WORK/stm32/src/main.cpp")"
   if compile_pio "$WORK/stm32" "$WORK/stm32.log" \
     && [[ "$before_paths" == "$after_paths" ]] \
     && [[ "$before_config" == "$after_config" ]] \
