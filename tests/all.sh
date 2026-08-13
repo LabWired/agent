@@ -21,6 +21,7 @@ run() {
 }
 
 run "harness"           "$ROOT/tests/harness.sh"
+run "run-bounded"       "$ROOT/tests/run-bounded.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "skills-verify-all" "$ROOT/tests/skills-verify-all.sh"
 run "hosted-config"     "$ROOT/tests/hosted-config.sh"
