@@ -458,10 +458,12 @@ else
 fi
 
 # Repair budget lives in prove pack (legacy firmware-repair-loop was folded in).
-if grep -qiE 'max 3|repairs_used < 3|repair ≤3|repair <= 3' "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
-  record "FW-FIX-02" pass "repair budget skill"
+if grep -qiE 'three total|3 total' "$ROOT/skills/prove/SKILL.md" 2>/dev/null \
+  && grep -qiE '(at most|maximum|max).*two.*(repair|patch)|(repair|patch).*(at most|maximum|max).*two' "$ROOT/skills/prove/SKILL.md" 2>/dev/null \
+  && ! grep -qiE '(max 3|repairs_used < 3|repair ≤3|repair <= 3|three repairs|3 repairs)' "$ROOT/skills/prove/SKILL.md" 2>/dev/null; then
+  record "FW-FIX-02" pass "three total attempts; at most two repairs"
 else
-  record "FW-FIX-02" fail "repair loop skill"
+  record "FW-FIX-02" fail "repair budget must include initial attempt and reject three repairs"
 fi
 
 record "FW-CORE-03b" pass "same-oracle gate1 fixed reuses oracle.json (offline)"
