@@ -89,6 +89,7 @@ try {
     "agent package uninstall --yes",
     "phase=uninstall",
     "phase=reinstall",
+    "post-install-user-tui",
     "failed_phase=",
     'Write-Result "FAIL"',
     "Complete-LifecyclePhase",
@@ -120,6 +121,7 @@ try {
   Assert-True ($installerText.Contains('labwired-agent.manifest')) "Windows installer records Agent config ownership"
   Assert-True ($installerText.Contains('json:')) "Windows installer records merged JSON ownership"
   Assert-True ($installerText.Contains('json-array:')) "Windows installer records granular TUI array ownership"
+  Assert-True (-not $installerText.Contains('Add-OwnedEntry (Get-ConfigRelativePath $tuiDst)')) "fresh Windows TUI config uses granular ownership"
   $harnessText = Get-Content -LiteralPath $Harness -Raw
   Assert-True ($harnessText.Contains('windows\powershell') -and $harnessText.Contains('windows\pwsh')) "Windows engines write independent evidence directories"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null

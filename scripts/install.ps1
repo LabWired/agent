@@ -790,7 +790,12 @@ function Install-OpenCodeConfig {
     Protect-Mutation $tuiDst
     if (-not (Test-Path $tuiDst)) {
       Copy-Safe $tuiSrc $tuiDst
-      Add-OwnedEntry (Get-ConfigRelativePath $tuiDst)
+      $product = Get-Content -Raw $tuiSrc | ConvertFrom-Json
+      if (Test-JsonProperty $product "theme") { Add-OwnedEntry "json-file:tui.json:theme" }
+      if (Test-JsonProperty $product '$schema') { Add-OwnedEntry 'json-file:tui.json:$schema' }
+      if (@($product.plugin) -contains "./plugins/labwired-brand.tsx") {
+        Add-OwnedEntry "json-array:tui.json:plugin"
+      }
     } else {
       # Merge product theme + brand plugin into existing tui.json.
       try {

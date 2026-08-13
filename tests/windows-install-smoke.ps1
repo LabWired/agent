@@ -129,7 +129,7 @@ function Assert-OwnedConfigRemoved([string]$ConfigRoot, [string]$ManifestPath) {
   }
 }
 
-function Assert-UserStatePreserved {
+function Assert-UserConfigPreserved {
   $prefixSentinel = Join-Path $Prefix "user-data\lifecycle-sentinel.txt"
   $configSentinel = Join-Path $ConfigDir "lifecycle-sentinel.txt"
   if ((Get-Content -LiteralPath $prefixSentinel -Raw).Trim() -ne "keep-prefix-data") {
@@ -142,6 +142,10 @@ function Assert-UserStatePreserved {
   if ($config.user_lifecycle.sentinel -ne "keep-user-config" -or $config.user_setting -ne "unrelated-value") {
     throw "unrelated user config was not preserved"
   }
+}
+
+function Assert-UserStatePreserved {
+  Assert-UserConfigPreserved
   $tui = Get-Content -LiteralPath (Join-Path $ConfigDir "tui.json") -Raw | ConvertFrom-Json
   if ($tui.user_tui -ne "unrelated-value" -or @($tui.plugin) -notcontains "./plugins/user-plugin.tsx") {
     throw "unrelated user TUI config was not preserved"
@@ -198,12 +202,6 @@ try {
     '{"user_lifecycle":{"sentinel":"keep-user-config"},"user_setting":"unrelated-value"}',
     (New-Object Text.UTF8Encoding($false))
   )
-  [IO.File]::WriteAllText(
-    (Join-Path $ConfigDir "tui.json"),
-    '{"theme":"system","plugin":["./plugins/user-plugin.tsx"],"user_tui":"unrelated-value"}',
-    (New-Object Text.UTF8Encoding($false))
-  )
-
   $installer = Join-Path $Root "scripts\install.ps1"
   $installArgs = @("-Prefix", $Prefix, "-UserBin", $UserBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
   Start-LifecyclePhase "initial-install"
@@ -220,7 +218,7 @@ try {
     throw "Agent dispatchers were not installed"
   }
   Assert-AgentConfigPresent
-  Assert-UserStatePreserved
+  Assert-UserConfigPreserved
   Complete-LifecyclePhase "initial-install"
 
   Start-LifecyclePhase "initial-version"
@@ -244,6 +242,16 @@ try {
     throw "initial Agent doctor output is incomplete"
   }
   Complete-LifecyclePhase "initial-doctor"
+
+  Start-LifecyclePhase "post-install-user-tui"
+  $tuiPath = Join-Path $ConfigDir "tui.json"
+  $tui = Get-Content -LiteralPath $tuiPath -Raw | ConvertFrom-Json
+  $tui | Add-Member -NotePropertyName user_tui -NotePropertyValue "unrelated-value" -Force
+  $plugins = @($tui.plugin) + "./plugins/user-plugin.tsx"
+  $tui | Add-Member -NotePropertyName plugin -NotePropertyValue $plugins -Force
+  $tui | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $tuiPath -Encoding UTF8
+  Assert-UserStatePreserved
+  Complete-LifecyclePhase "post-install-user-tui"
 
   Start-LifecyclePhase "initial-cmd-dispatch"
   $cmdOutput = & cmd.exe /d /c "`"$cmd`" agent version" 2>&1

@@ -380,7 +380,11 @@ function Remove-AgentOwnedConfig {
         else { $tui | Add-Member -NotePropertyName plugin -NotePropertyValue $plugins -Force }
       }
     }
-    $tui | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $tuiPath -Encoding UTF8
+    if (@($tui.PSObject.Properties).Count -eq 0) {
+      Remove-Item -LiteralPath $tuiPath -Force
+    } else {
+      $tui | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $tuiPath -Encoding UTF8
+    }
   }
 
   foreach ($path in $fileEntries) {
