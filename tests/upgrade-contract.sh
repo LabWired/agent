@@ -25,6 +25,8 @@ assert_evidence_complete() {
 
 POSIX_SCRIPT="$ROOT/tests/upgrade-smoke.sh"
 WINDOWS_SCRIPT="$ROOT/tests/windows-upgrade-smoke.ps1"
+WINDOWS_CONTRACT="$ROOT/tests/windows-contract.ps1"
+HARNESS_WORKFLOW="$ROOT/.github/workflows/harness.yml"
 for script in "$POSIX_SCRIPT" "$WINDOWS_SCRIPT"; do
   test -f "$script" || fail "missing ${script#"$ROOT"/}"
   require_text "$script" "LABWIRED_PREVIOUS_AGENT_ARCHIVE"
@@ -34,6 +36,95 @@ for script in "$POSIX_SCRIPT" "$WINDOWS_SCRIPT"; do
     require_text "$script" "$evidence"
   done
 done
+
+python3 - "$HARNESS_WORKFLOW" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+def step(name):
+    match = re.search(
+        rf"(?ms)^\s+- name: {re.escape(name)}\n(?P<body>.*?)(?=^\s+- name:|\Z)",
+        text,
+    )
+    if not match:
+        raise SystemExit(f"missing workflow step: {name}")
+    return match.group("body")
+
+for name, shell in (
+    ("Previous-release upgrade evidence (Windows PowerShell)", "powershell"),
+    ("Previous-release upgrade evidence (PowerShell Core)", "pwsh"),
+):
+    body = step(name)
+    required = (
+        f"shell: {shell}",
+        "vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL",
+        "vars.LABWIRED_PREVIOUS_AGENT_VERSION",
+        "vars.LABWIRED_PREVIOUS_AGENT_SHA256",
+        "LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL:",
+        "LABWIRED_PREVIOUS_AGENT_VERSION:",
+        "LABWIRED_PREVIOUS_AGENT_SHA256:",
+        "LABWIRED_EVIDENCE_DIR:",
+        "Invoke-WebRequest",
+        "$env:LABWIRED_PREVIOUS_AGENT_ARCHIVE",
+        "windows-upgrade-smoke.ps1",
+        "archive download failed before install",
+    )
+    required += (
+        "platform.txt",
+        "previous-version.txt",
+        "current-version.txt",
+        "upgrade-install.txt",
+        "doctor.txt",
+        "lifecycle.txt",
+        "capabilities.txt",
+        "result.txt",
+    )
+    for marker in required:
+        if marker not in body:
+            raise SystemExit(f"workflow step {name!r} is missing {marker!r}")
+
+validation = step("Validate previous-release upgrade configuration")
+for marker in (
+    "shell: pwsh",
+    "vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL",
+    "vars.LABWIRED_PREVIOUS_AGENT_VERSION",
+    "vars.LABWIRED_PREVIOUS_AGENT_SHA256",
+    "throw",
+    "windows\\upgrade\\powershell",
+    "windows\\upgrade\\pwsh",
+    "platform.txt",
+    "result.txt",
+):
+    if marker not in validation:
+        raise SystemExit(f"upgrade configuration validation is missing {marker!r}")
+
+for name, shell in (
+    ("Previous-release upgrade not configured (Windows PowerShell)", "powershell"),
+    ("Previous-release upgrade not configured (PowerShell Core)", "pwsh"),
+):
+    body = step(name)
+    for marker in (
+        f"shell: {shell}",
+        "vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL",
+        "vars.LABWIRED_PREVIOUS_AGENT_VERSION",
+        "vars.LABWIRED_PREVIOUS_AGENT_SHA256",
+        "LABWIRED_EVIDENCE_DIR:",
+        "windows-upgrade-smoke.ps1",
+    ):
+        if marker not in body:
+            raise SystemExit(f"workflow step {name!r} is missing {marker!r}")
+    condition = body.split("shell:", 1)[0]
+    if condition.count("== ''") != 3 or "||" in condition:
+        raise SystemExit(f"workflow step {name!r} must run only when all baseline variables are absent")
+PY
+
+require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "traversal"'
+require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "reparse"'
+require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "symlink"'
+require_text "$WINDOWS_CONTRACT" 'windows-upgrade-smoke.ps1'
 
 require_text "$WINDOWS_SCRIPT" 'Get-FileHash'
 require_text "$WINDOWS_SCRIPT" 'ZipArchive'
@@ -113,6 +204,41 @@ expect_partial_failure LABWIRED_PREVIOUS_AGENT_ARCHIVE="$PARTIAL_ARCHIVE" \
   LABWIRED_PREVIOUS_AGENT_SHA256="$PARTIAL_SHA256"
 expect_partial_failure LABWIRED_PREVIOUS_AGENT_VERSION=0.3.10 \
   LABWIRED_PREVIOUS_AGENT_SHA256="$PARTIAL_SHA256"
+
+silent_archive="$TMP/silent-installer.tar"
+python3 - "$silent_archive" <<'PY'
+import io
+import tarfile
+import sys
+
+with tarfile.open(sys.argv[1], "w") as archive:
+    for name, payload, mode in (
+        ("silent-previous/VERSION", b"0.3.9\n", 0o644),
+        ("silent-previous/install.sh", b"#!/usr/bin/env bash\nexit 47\n", 0o755),
+    ):
+        entry = tarfile.TarInfo(name)
+        entry.size = len(payload)
+        entry.mode = mode
+        archive.addfile(entry, io.BytesIO(payload))
+PY
+SILENT_SHA256="$(python3 - "$silent_archive" <<'PY'
+import hashlib
+import sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PY
+)"
+silent_evidence="$TMP/silent-evidence"
+mkdir -p "$silent_evidence"
+if LABWIRED_EVIDENCE_DIR="$silent_evidence" \
+  LABWIRED_PREVIOUS_AGENT_ARCHIVE="$silent_archive" \
+  LABWIRED_PREVIOUS_AGENT_VERSION=0.3.9 \
+  LABWIRED_PREVIOUS_AGENT_SHA256="$SILENT_SHA256" \
+  bash "$POSIX_SCRIPT" >"$TMP/silent.out" 2>"$TMP/silent.err"; then
+  fail "silent failing previous installer was accepted"
+fi
+assert_evidence_complete "$silent_evidence" "silent previous-installer failure"
+grep -qx 'FAIL' "$silent_evidence/result.txt" \
+  || fail "silent previous-installer failure did not leave result FAIL"
 
 # The fixture is generated solely from a known local tag. No network or release
 # discovery is part of this contract.
@@ -211,6 +337,37 @@ grep -qi 'unsafe archive' "$TMP/link.err" || fail "symlink archive was not diagn
 assert_evidence_complete "$link_evidence" "symlink archive"
 grep -qx 'not-run' "$link_evidence/previous-version.txt" \
   || fail "symlink archive reached the previous install"
+
+hardlink_archive="$TMP/hardlink.tar"
+python3 - "$hardlink_archive" <<'PY'
+import tarfile
+import sys
+
+with tarfile.open(sys.argv[1], "w") as archive:
+    entry = tarfile.TarInfo("labwired-agent-previous/unsafe-hardlink")
+    entry.type = tarfile.LNKTYPE
+    entry.linkname = "../outside.txt"
+    archive.addfile(entry)
+PY
+HARDLINK_SHA256="$(python3 - "$hardlink_archive" <<'PY'
+import hashlib
+import sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PY
+)"
+hardlink_evidence="$TMP/hardlink-evidence"
+mkdir -p "$hardlink_evidence"
+if LABWIRED_EVIDENCE_DIR="$hardlink_evidence" \
+  LABWIRED_PREVIOUS_AGENT_ARCHIVE="$hardlink_archive" \
+  LABWIRED_PREVIOUS_AGENT_VERSION="$PREVIOUS_VERSION" \
+  LABWIRED_PREVIOUS_AGENT_SHA256="$HARDLINK_SHA256" \
+  bash "$POSIX_SCRIPT" >"$TMP/hardlink.out" 2>"$TMP/hardlink.err"; then
+  fail "hardlink archive was accepted"
+fi
+grep -qi 'unsafe archive' "$TMP/hardlink.err" || fail "hardlink archive was not diagnosed"
+assert_evidence_complete "$hardlink_evidence" "hardlink archive"
+grep -qx 'not-run' "$hardlink_evidence/previous-version.txt" \
+  || fail "hardlink archive reached the previous install"
 
 fixture_evidence="$TMP/fixture-evidence"
 mkdir -p "$fixture_evidence"

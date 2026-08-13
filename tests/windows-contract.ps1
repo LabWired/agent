@@ -16,6 +16,7 @@ $Installer = Join-Path $Root "scripts\install.ps1"
 $Harness = Join-Path $Root ".github\workflows\harness.yml"
 $OriginalPath = $env:Path
 $InstallSmoke = Join-Path $Root "tests\windows-install-smoke.ps1"
+$UpgradeSmoke = Join-Path $Root "tests\windows-upgrade-smoke.ps1"
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
   Join-Path $PSHOME "pwsh.exe"
 } else {
@@ -73,8 +74,56 @@ function Invoke-Installer([string[]]$Arguments) {
   return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Installer) + @($Arguments)))
 }
 
+function Assert-UnsafeUpgradeZip([string]$Kind) {
+  $zipPath = Join-Path $TempRoot ("unsafe-upgrade-" + $Kind + ".zip")
+  $evidenceDir = Join-Path $TempRoot ("unsafe-upgrade-evidence-" + $Kind)
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+  try {
+    $entry = if ($Kind -eq "traversal") {
+      $zip.CreateEntry("../outside.txt")
+    } elseif ($Kind -eq "reparse") {
+      $created = $zip.CreateEntry("previous/unsafe-link")
+      $created.ExternalAttributes = [int][IO.FileAttributes]::ReparsePoint
+      $created
+    } else {
+      $created = $zip.CreateEntry("previous/unsafe-link")
+      $created.ExternalAttributes = [BitConverter]::ToInt32([byte[]](0x00, 0x00, 0xFF, 0xA1), 0)
+      $created
+    }
+    $writer = New-Object IO.StreamWriter($entry.Open())
+    try { $writer.Write("unsafe") } finally { $writer.Dispose() }
+  } finally {
+    $zip.Dispose()
+  }
+  New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+  $env:LABWIRED_EVIDENCE_DIR = $evidenceDir
+  $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $zipPath
+  $env:LABWIRED_PREVIOUS_AGENT_VERSION = "0.3.10"
+  $env:LABWIRED_PREVIOUS_AGENT_SHA256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+  try {
+    $result = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $UpgradeSmoke)
+  } finally {
+    Remove-Item Env:LABWIRED_EVIDENCE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_ARCHIVE -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_VERSION -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_SHA256 -ErrorAction SilentlyContinue
+  }
+  Assert-True ($result.Status -ne 0 -and $result.Output -match "unsafe archive") "upgrade rejects $Kind ZIP before install"
+  foreach ($name in @(
+    "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+    "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+  )) {
+    $path = Join-Path $evidenceDir $name
+    Assert-True ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -gt 0) "$Kind ZIP failure retains $name"
+  }
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "result.txt") -Raw).Trim() -eq "FAIL") "$Kind ZIP failure records FAIL"
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "previous-version.txt") -Raw).Trim() -eq "not-run") "$Kind ZIP is rejected before previous install"
+}
+
 try {
   Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
+  Assert-True (Test-Path -LiteralPath $UpgradeSmoke -PathType Leaf) "Windows upgrade evidence script exists"
   $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
   foreach ($marker in @(
     "LABWIRED_EVIDENCE_DIR",
@@ -133,6 +182,9 @@ try {
   Assert-True (-not $installerText.Contains('Add-OwnedEntry (Get-ConfigRelativePath $tuiDst)')) "fresh Windows TUI config uses granular ownership"
   $harnessText = Get-Content -LiteralPath $Harness -Raw
   Assert-True ($harnessText.Contains('windows\powershell') -and $harnessText.Contains('windows\pwsh')) "Windows engines write independent evidence directories"
+  Assert-UnsafeUpgradeZip "traversal"
+  Assert-UnsafeUpgradeZip "reparse"
+  Assert-UnsafeUpgradeZip "symlink"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)

@@ -63,7 +63,7 @@ function Complete-LifecyclePhase([string]$Name) {
 }
 
 function Invoke-Captured {
-  param([scriptblock]$Command, [string]$OutputPath, [switch]$Append)
+  param([scriptblock]$Command, [string]$OutputPath, [string]$FailureLabel, [switch]$Append)
   $oldPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
@@ -75,8 +75,20 @@ function Invoke-Captured {
     $ErrorActionPreference = $oldPreference
   }
   $lines = @($raw | ForEach-Object { $_.ToString() })
-  if ($Append) { $lines | Add-Content -LiteralPath $OutputPath -Encoding UTF8 }
-  else { $lines | Set-Content -LiteralPath $OutputPath -Encoding UTF8 }
+  if ($lines.Count -eq 0) { $lines = @("$FailureLabel produced no output (exit $status)") }
+  $temporaryPath = Join-Path (Split-Path -Parent $OutputPath) (".upgrade-evidence-" + [guid]::NewGuid().ToString("n") + ".tmp")
+  $content = @()
+  if ($Append -and (Test-Path -LiteralPath $OutputPath -PathType Leaf) -and (Get-Item -LiteralPath $OutputPath).Length -gt 0) {
+    $content += @(Get-Content -LiteralPath $OutputPath)
+    $content += @("", "== $FailureLabel ==")
+  }
+  $content += $lines
+  $content | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+  if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
+    [IO.File]::Replace($temporaryPath, $OutputPath, $null)
+  } else {
+    Move-Item -LiteralPath $temporaryPath -Destination $OutputPath
+  }
   return [int]$status
 }
 
@@ -309,8 +321,7 @@ try {
   $installArgs = @("-Prefix", $Prefix, "-UserBin", $UserBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
 
   Start-LifecyclePhase "previous-install"
-  Set-Evidence "upgrade-install.txt" ""
-  $previousInstallStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "upgrade-install.txt") -Command {
+  $previousInstallStatus = Invoke-Captured -FailureLabel "previous Agent install" -OutputPath (Join-Path $EvidenceDir "upgrade-install.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $previousSource "scripts\install.ps1") @installArgs
   }
   if ($previousInstallStatus -ne 0) { throw "previous Agent install failed with code $previousInstallStatus" }
@@ -318,7 +329,7 @@ try {
 
   $dispatcher = Join-Path $Prefix "bin\labwired.ps1"
   Start-LifecyclePhase "previous-version"
-  $previousVersionStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "previous-version.txt") -Command {
+  $previousVersionStatus = Invoke-Captured -FailureLabel "previous Agent version" -OutputPath (Join-Path $EvidenceDir "previous-version.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version
   }
   if ($previousVersionStatus -ne 0) { throw "previous Agent version failed with code $previousVersionStatus" }
@@ -341,7 +352,7 @@ try {
     throw "current Agent version must differ from pinned previous version"
   }
   Start-LifecyclePhase "current-upgrade-install"
-  $currentInstallStatus = Invoke-Captured -Append -OutputPath (Join-Path $EvidenceDir "upgrade-install.txt") -Command {
+  $currentInstallStatus = Invoke-Captured -Append -FailureLabel "current Agent install" -OutputPath (Join-Path $EvidenceDir "upgrade-install.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\install.ps1") @installArgs
   }
   if ($currentInstallStatus -ne 0) { throw "current Agent install failed with code $currentInstallStatus" }
@@ -351,7 +362,7 @@ try {
   Complete-LifecyclePhase "current-upgrade-install"
 
   Start-LifecyclePhase "current-version"
-  $currentVersionStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "current-version.txt") -Command {
+  $currentVersionStatus = Invoke-Captured -FailureLabel "current Agent version" -OutputPath (Join-Path $EvidenceDir "current-version.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version
   }
   if ($currentVersionStatus -ne 0) { throw "current Agent version failed with code $currentVersionStatus" }
@@ -359,7 +370,7 @@ try {
   Complete-LifecyclePhase "current-version"
 
   Start-LifecyclePhase "current-doctor"
-  $doctorStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "doctor.txt") -Command {
+  $doctorStatus = Invoke-Captured -FailureLabel "current Agent doctor" -OutputPath (Join-Path $EvidenceDir "doctor.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor
   }
   if ($doctorStatus -ne 0) { throw "current Agent doctor failed with code $doctorStatus" }
@@ -388,7 +399,7 @@ try {
   # Run agent package uninstall --yes in the same engine family as this test.
   Start-LifecyclePhase "uninstall-current"
   $uninstallOutput = Join-Path $SessionRoot "uninstall.txt"
-  $uninstallStatus = Invoke-Captured -OutputPath $uninstallOutput -Command {
+  $uninstallStatus = Invoke-Captured -FailureLabel "current Agent uninstall" -OutputPath $uninstallOutput -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent package uninstall --yes
   }
   Get-Content -LiteralPath $uninstallOutput | Add-Content -LiteralPath $LifecycleFile -Encoding UTF8

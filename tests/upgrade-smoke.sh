@@ -54,6 +54,29 @@ die() {
   exit 1
 }
 
+run_captured() {
+  local mode="$1" label="$2" output_path="$3"
+  shift 3
+  local command_output combined_output rc
+  command_output="$(mktemp "$EVIDENCE_DIR/.upgrade-command.XXXXXX")"
+  combined_output="$(mktemp "$EVIDENCE_DIR/.upgrade-evidence.XXXXXX")"
+  set +e
+  "$@" >"$command_output" 2>&1
+  rc=$?
+  set -e
+  if [[ ! -s "$command_output" ]]; then
+    printf '%s produced no output (exit %s)\n' "$label" "$rc" >"$command_output"
+  fi
+  if [[ "$mode" == append && -s "$output_path" ]]; then
+    cat "$output_path" >"$combined_output"
+    printf '\n== %s ==\n' "$label" >>"$combined_output"
+  fi
+  cat "$command_output" >>"$combined_output"
+  mv -f "$combined_output" "$output_path"
+  rm -f "$command_output"
+  return "$rc"
+}
+
 assert_exact_version() {
   local evidence_file="$1" expected="$2"
   grep -qx 'LabWired Agent' "$evidence_file" \
@@ -309,15 +332,16 @@ export PATH="$USER_BIN:$SESSION_ROOT/test-bin:$ORIGINAL_PATH"
 unset LABWIRED_CLI LABWIRED_SIM LABWIRED_PROBE_RS LABWIRED_ACCESS_TOKEN LABWIRED_PROJECT
 
 lifecycle_begin previous-install
-: >"$EVIDENCE_DIR/upgrade-install.txt"
-if ! bash "$PREVIOUS_SOURCE/install.sh" --agent-only >>"$EVIDENCE_DIR/upgrade-install.txt" 2>&1; then
+if ! run_captured replace "previous Agent install" "$EVIDENCE_DIR/upgrade-install.txt" \
+  bash "$PREVIOUS_SOURCE/install.sh" --agent-only; then
   die "previous Agent install failed"
 fi
 test -x "$USER_BIN/labwired" || die "previous Agent dispatcher was not installed"
 lifecycle_pass previous-install
 
 lifecycle_begin previous-version
-"$USER_BIN/labwired" agent version >"$EVIDENCE_DIR/previous-version.txt" 2>&1 \
+run_captured replace "previous Agent version" "$EVIDENCE_DIR/previous-version.txt" \
+  "$USER_BIN/labwired" agent version \
   || die "previous Agent version command failed"
 assert_exact_version "$EVIDENCE_DIR/previous-version.txt" "$PREVIOUS_VERSION"
 lifecycle_pass previous-version
@@ -346,7 +370,8 @@ CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
   || die "current Agent version must differ from pinned previous version"
 
 lifecycle_begin current-upgrade-install
-if ! bash "$ROOT/install.sh" --agent-only >>"$EVIDENCE_DIR/upgrade-install.txt" 2>&1; then
+if ! run_captured append "current Agent install" "$EVIDENCE_DIR/upgrade-install.txt" \
+  bash "$ROOT/install.sh" --agent-only; then
   die "current Agent upgrade install failed"
 fi
 test -x "$USER_BIN/labwired" || die "current Agent dispatcher was not installed"
@@ -355,13 +380,15 @@ assert_user_sentinels
 lifecycle_pass current-upgrade-install
 
 lifecycle_begin current-version
-"$USER_BIN/labwired" agent version >"$EVIDENCE_DIR/current-version.txt" 2>&1 \
+run_captured replace "current Agent version" "$EVIDENCE_DIR/current-version.txt" \
+  "$USER_BIN/labwired" agent version \
   || die "current Agent version command failed"
 assert_exact_version "$EVIDENCE_DIR/current-version.txt" "$CURRENT_VERSION"
 lifecycle_pass current-version
 
 lifecycle_begin current-doctor
-if ! "$USER_BIN/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1; then
+if ! run_captured replace "current Agent doctor" "$EVIDENCE_DIR/doctor.txt" \
+  "$USER_BIN/labwired" agent doctor; then
   die "current Agent doctor failed"
 fi
 grep -q 'agent-runtime' "$EVIDENCE_DIR/doctor.txt" || die "doctor omitted agent-runtime"
