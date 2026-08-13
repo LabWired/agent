@@ -112,15 +112,19 @@ try {
   $agentLauncherText = Get-Content -LiteralPath (Join-Path $Root "bin\labwired-agent.ps1") -Raw
   Assert-True ($agentLauncherText.Contains('(Get-Command npm -ErrorAction SilentlyContinue) -or (Get-Command npx -ErrorAction SilentlyContinue)')) "Windows doctor groups command availability checks"
   Assert-True ($agentLauncherText.Contains('Remove-AgentOwnedConfig')) "Windows uninstall removes only recorded Agent config ownership"
-  Assert-True ($agentLauncherText.Contains('Remove-AgentKit')) "Windows uninstall removes the Agent kit through a safe lifecycle helper"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentTombstones')) "Windows uninstall removes isolated Agent trees through a safe lifecycle helper"
   Assert-True ($agentLauncherText.Contains('Assert-NoReparseTree')) "Windows uninstall rejects descendant reparse points before recursive deletion"
   Assert-True ($agentLauncherText.Contains('Assert-AgentUninstallSafe')) "Windows uninstall validates every target before mutation"
+  Assert-True ($agentLauncherText.Contains('Move-AgentTreeToTombstone')) "Windows uninstall atomically isolates recursive delete roots"
+  Assert-True ($agentLauncherText.Contains('Remove-NoFollowTree')) "Windows uninstall removes tombstones without following reparse entries"
+  Assert-True ($agentLauncherText.Contains('LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET')) "Windows uninstall exposes an adversarial post-preflight test hook"
   Assert-True ($agentLauncherText.Contains('Join-Path $env:USERPROFILE ".config\opencode"')) "Windows install and uninstall share the default config path"
   Assert-True ($agentLauncherText.Contains('json-array:')) "Windows uninstall supports granular array ownership"
   $installerText = Get-Content -LiteralPath $Installer -Raw
   Assert-True ($installerText.Contains('labwired-agent.manifest')) "Windows installer records Agent config ownership"
   Assert-True ($installerText.Contains('json:')) "Windows installer records merged JSON ownership"
   Assert-True ($installerText.Contains('json-array:')) "Windows installer records granular TUI array ownership"
+  Assert-True ($installerText.Contains('$owned.Remove("tui.json")')) "Windows installer migrates legacy whole-file TUI ownership"
   Assert-True (-not $installerText.Contains('Add-OwnedEntry (Get-ConfigRelativePath $tuiDst)')) "fresh Windows TUI config uses granular ownership"
   $harnessText = Get-Content -LiteralPath $Harness -Raw
   Assert-True ($harnessText.Contains('windows\powershell') -and $harnessText.Contains('windows\pwsh')) "Windows engines write independent evidence directories"
@@ -367,6 +371,18 @@ public static class NativeArgvEcho {
   $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
   Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects descendant junction before recursive removal"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "descendant junction rejection preserves external sentinel"
+
+  if (Test-Path $descendantJunction) { $null = & cmd.exe /d /c rmdir $descendantJunction }
+  $descendantJunction = $null
+  Remove-Item -LiteralPath (Join-Path $uninstallPrefix "agent") -Recurse -Force
+  New-Item -ItemType Directory -Path (Join-Path $uninstallPrefix "agent\nested") -Force | Out-Null
+  Set-Content (Join-Path $uninstallPrefix "agent\nested\owned.txt") "owned" -Encoding ASCII
+  $env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET = $outside
+  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
+  Remove-Item Env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET -ErrorAction SilentlyContinue
+  Assert-True ($LASTEXITCODE -eq 0) "post-preflight junction is isolated and removed without following"
+  Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "post-preflight junction cleanup preserves external sentinel"
+  Assert-True (-not (Test-Path (Join-Path $uninstallPrefix "agent"))) "atomically isolated Agent root is absent"
   Write-Host "ok   windows-contract PASS"
 } finally {
   Remove-Item Env:LABWIRED_AGENT_BIN -ErrorAction SilentlyContinue
@@ -375,6 +391,7 @@ public static class NativeArgvEcho {
   Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:LABWIRED_WINDOWS_TEST_MODE -ErrorAction SilentlyContinue
   Remove-Item Env:LABWIRED_TEST_CORE_CMD -ErrorAction SilentlyContinue
+  Remove-Item Env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET -ErrorAction SilentlyContinue
   $env:Path = $OriginalPath
   if ($agentJunction -and (Test-Path $agentJunction)) { $null = & cmd.exe /d /c rmdir $agentJunction }
   if ($descendantJunction -and (Test-Path $descendantJunction)) { $null = & cmd.exe /d /c rmdir $descendantJunction }

@@ -787,6 +787,7 @@ function Install-OpenCodeConfig {
   $tuiSrc = Join-Path $agent "config\tui.json"
   $tuiDst = Join-Path $cfg "tui.json"
   if (Test-Path $tuiSrc) {
+    $legacyTuiOwned = $owned.ContainsKey("tui.json")
     Protect-Mutation $tuiDst
     if (-not (Test-Path $tuiDst)) {
       Copy-Safe $tuiSrc $tuiDst
@@ -801,7 +802,9 @@ function Install-OpenCodeConfig {
       try {
         $cfgObj = Get-Content -Raw $tuiDst | ConvertFrom-Json
         $product = Get-Content -Raw $tuiSrc | ConvertFrom-Json
-        if (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
+        if ($legacyTuiOwned) {
+          if ($cfgObj.theme -eq $product.theme) { Add-OwnedEntry "json-file:tui.json:theme" }
+        } elseif (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
           $cfgObj | Add-Member -NotePropertyName theme -NotePropertyValue $product.theme -Force
           Add-OwnedEntry "json-file:tui.json:theme"
         }
@@ -813,11 +816,15 @@ function Install-OpenCodeConfig {
           $s = if ($p -is [string]) { $p } else { '' }
           if ($s -eq $wanted -or $s.EndsWith('labwired-brand.tsx')) { $has = $true; break }
         }
-        if (-not $has) {
+        if ($legacyTuiOwned) {
+          if ($has) { Add-OwnedEntry "json-array:tui.json:plugin" }
+        } elseif (-not $has) {
           $cfgObj | Add-Member -NotePropertyName plugin -NotePropertyValue (@($wanted) + $plugins) -Force
           Add-OwnedEntry "json-array:tui.json:plugin"
         }
-        if (-not (Test-JsonProperty $cfgObj '$schema')) {
+        if ($legacyTuiOwned) {
+          if ($cfgObj.'$schema' -eq $product.'$schema') { Add-OwnedEntry 'json-file:tui.json:$schema' }
+        } elseif (-not (Test-JsonProperty $cfgObj '$schema')) {
           $cfgObj | Add-Member -NotePropertyName '$schema' -NotePropertyValue $product.'$schema' -Force
           Add-OwnedEntry 'json-file:tui.json:$schema'
         }
@@ -826,6 +833,11 @@ function Install-OpenCodeConfig {
         throw "could not merge existing TUI config: $_"
       }
     }
+    # Commit 05cfc2a recorded a freshly created tui.json as a wholly owned file.
+    # A successfully parsed legacy file is no longer safe to own wholesale.
+    # Current product values received granular markers above; changed or
+    # removed values become user-owned during migration.
+    $null = $owned.Remove("tui.json")
   }
   @($owned.Keys | Sort-Object) | Set-Content -LiteralPath $ownershipManifest -Encoding ASCII
   Ok "LabWired config -> $cfg"

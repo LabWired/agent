@@ -150,9 +150,12 @@ function Assert-UserStatePreserved {
   if ($tui.user_tui -ne "unrelated-value" -or @($tui.plugin) -notcontains "./plugins/user-plugin.tsx") {
     throw "unrelated user TUI config was not preserved"
   }
+  if ($tui.theme -ne "user-custom-theme" -or $tui.pre_migration_user -ne "preserved") {
+    throw "pre-migration user TUI changes were not preserved"
+  }
 }
 
-function Assert-AgentConfigPresent {
+function Assert-AgentConfigPresent([string]$ExpectedTheme = "labwired") {
   $config = Get-Content -LiteralPath (Join-Path $ConfigDir "opencode.json") -Raw | ConvertFrom-Json
   if (-not (Test-JsonProperty $config "model")) { throw "Agent model config is missing" }
   if (-not (Test-JsonProperty $config "default_agent")) { throw "Agent default_agent config is missing" }
@@ -164,7 +167,7 @@ function Assert-AgentConfigPresent {
     throw "Agent provider config is missing"
   }
   $tui = Get-Content -LiteralPath (Join-Path $ConfigDir "tui.json") -Raw | ConvertFrom-Json
-  if ($tui.theme -ne "labwired" -or @($tui.plugin) -notcontains "./plugins/labwired-brand.tsx") {
+  if ($tui.theme -ne $ExpectedTheme -or @($tui.plugin) -notcontains "./plugins/labwired-brand.tsx") {
     throw "Agent TUI config is missing"
   }
 }
@@ -243,6 +246,35 @@ try {
   }
   Complete-LifecyclePhase "initial-doctor"
 
+  Start-LifecyclePhase "legacy-tui-ownership-migration"
+  $manifestPath = Join-Path $ConfigDir "labwired-agent.manifest"
+  $legacyManifest = @(
+    Get-Content -LiteralPath $manifestPath | Where-Object {
+      -not $_.StartsWith("json-file:tui.json:") -and $_ -ne "json-array:tui.json:plugin"
+    }
+  ) + "tui.json"
+  $legacyManifest | Set-Content -LiteralPath $manifestPath -Encoding ASCII
+  $legacyTuiPath = Join-Path $ConfigDir "tui.json"
+  $legacyTui = Get-Content -LiteralPath $legacyTuiPath -Raw | ConvertFrom-Json
+  $legacyTui | Add-Member -NotePropertyName theme -NotePropertyValue "user-custom-theme" -Force
+  $legacyTui | Add-Member -NotePropertyName pre_migration_user -NotePropertyValue "preserved" -Force
+  if (Test-JsonProperty $legacyTui '$schema') { $legacyTui.PSObject.Properties.Remove('$schema') }
+  $legacyTui | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $legacyTuiPath -Encoding UTF8
+  $migrationOutputPath = Join-Path $SessionRoot "migration-install.txt"
+  $migrationStatus = Invoke-Captured -OutputPath $migrationOutputPath -Command {
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer @installArgs
+  }
+  if ($migrationStatus -ne 0) { throw "legacy TUI ownership migration install failed with code $migrationStatus" }
+  $migratedOwnership = @(Get-Content -LiteralPath $manifestPath)
+  if ($migratedOwnership -contains "tui.json") { throw "legacy whole-file TUI ownership was not removed" }
+  foreach ($marker in @('json-array:tui.json:plugin')) {
+    if ($migratedOwnership -notcontains $marker) { throw "missing migrated granular TUI ownership: $marker" }
+  }
+  foreach ($marker in @('json-file:tui.json:theme', 'json-file:tui.json:$schema')) {
+    if ($migratedOwnership -contains $marker) { throw "user-modified TUI field remained Agent-owned: $marker" }
+  }
+  Complete-LifecyclePhase "legacy-tui-ownership-migration"
+
   Start-LifecyclePhase "post-install-user-tui"
   $tuiPath = Join-Path $ConfigDir "tui.json"
   $tui = Get-Content -LiteralPath $tuiPath -Raw | ConvertFrom-Json
@@ -312,7 +344,7 @@ try {
     throw "Agent dispatchers did not return after reinstall"
   }
   if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Agent ownership manifest did not return" }
-  Assert-AgentConfigPresent
+  Assert-AgentConfigPresent "user-custom-theme"
   Assert-UserStatePreserved
   Complete-LifecyclePhase "reinstall"
 
@@ -347,7 +379,7 @@ try {
   if ($combined -match "Failed to change directory" -or $combined -match "(?im)(^|[^a-z])not ready([^a-z]|$)") {
     throw "installed Windows command dispatch or doctor output is not ready"
   }
-  Assert-AgentConfigPresent
+  Assert-AgentConfigPresent "user-custom-theme"
   Assert-UserStatePreserved
   Complete-LifecyclePhase "reinstalled-doctor"
 

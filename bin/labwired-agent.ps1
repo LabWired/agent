@@ -393,9 +393,73 @@ function Remove-AgentOwnedConfig {
   Remove-Item -LiteralPath $manifest -Force
 }
 
-function Remove-AgentKit {
-  $agent = Join-Path $HomeDir "agent"
-  $stateAgent = Join-Path $HomeDir "state\agent"
+function Remove-NoFollowTree([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  $item = Get-Item -LiteralPath $Path -Force
+  if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    Remove-Item -LiteralPath $Path -Force
+    return
+  }
+  if (-not $item.PSIsContainer) {
+    Remove-Item -LiteralPath $Path -Force
+    return
+  }
+  foreach ($child in @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)) {
+    Remove-NoFollowTree $child.FullName
+  }
+  Remove-Item -LiteralPath $Path -Force
+}
+
+function Move-AgentTreeToTombstone([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { return $null }
+  # The full tree was checked during uninstall preflight. Re-check only the
+  # rename boundary here: descendants may race in, but the atomic same-parent
+  # move isolates them before no-follow cleanup.
+  Assert-SafePath $Path
+  $parent = Split-Path -Parent $Path
+  Assert-SafePath $parent
+  $tombstone = Join-Path $parent (".labwired-agent-delete-" + [guid]::NewGuid().ToString("n"))
+  Assert-SafePath $tombstone
+  Move-Item -LiteralPath $Path -Destination $tombstone
+  $isolated = Get-Item -LiteralPath $tombstone -Force
+  if ($isolated.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    Move-Item -LiteralPath $tombstone -Destination $Path
+    Fail "refusing reparse-point Agent tombstone: $tombstone"
+  }
+  return @{ Original = $Path; Tombstone = $tombstone }
+}
+
+function Move-AgentTreesToTombstones {
+  $moved = @()
+  try {
+    foreach ($path in @((Join-Path $HomeDir "agent"), (Join-Path $HomeDir "state\agent"))) {
+      $entry = Move-AgentTreeToTombstone $path
+      if ($entry) { $moved += @($entry) }
+    }
+    return $moved
+  } catch {
+    for ($index = $moved.Count - 1; $index -ge 0; $index--) {
+      if (Test-Path -LiteralPath $moved[$index].Tombstone) {
+        Move-Item -LiteralPath $moved[$index].Tombstone -Destination $moved[$index].Original -ErrorAction SilentlyContinue
+      }
+    }
+    throw
+  }
+}
+
+function Restore-AgentTombstones([object[]]$Moved) {
+  for ($index = $Moved.Count - 1; $index -ge 0; $index--) {
+    if (Test-Path -LiteralPath $Moved[$index].Tombstone) {
+      Move-Item -LiteralPath $Moved[$index].Tombstone -Destination $Moved[$index].Original
+    }
+  }
+}
+
+function Remove-AgentTombstones([object[]]$Moved) {
+  foreach ($entry in $Moved) { Remove-NoFollowTree $entry.Tombstone }
+}
+
+function Remove-AgentLaunchers {
   $prefixBin = Join-Path $HomeDir "bin"
   $prefixCmd = Join-Path $prefixBin "labwired.cmd"
   $prefixPs1 = Join-Path $prefixBin "labwired.ps1"
@@ -407,7 +471,7 @@ function Remove-AgentKit {
     (Test-Path -LiteralPath (Join-Path $HomeDir "components\editor") -PathType Container)
   )
 
-  foreach ($path in @($agent, $stateAgent, $agentPs1)) { Assert-SafePath $path }
+  Assert-SafePath $agentPs1
   if (-not $hasSharedComponent) {
     foreach ($path in @($prefixCmd, $prefixPs1, $userCmd)) { Assert-SafePath $path }
     if ((Test-Path -LiteralPath $userCmd -PathType Leaf) -and (Test-Path -LiteralPath $prefixCmd -PathType Leaf)) {
@@ -420,8 +484,6 @@ function Remove-AgentKit {
     }
   }
   if (Test-Path -LiteralPath $agentPs1) { Remove-Item -LiteralPath $agentPs1 -Force }
-  if (Test-Path -LiteralPath $stateAgent) { Remove-Item -LiteralPath $stateAgent -Recurse -Force }
-  if (Test-Path -LiteralPath $agent) { Remove-Item -LiteralPath $agent -Recurse -Force }
 }
 
 function Assert-AgentKitSafe {
@@ -482,6 +544,15 @@ function Assert-AgentUninstallSafe {
   Assert-AgentOwnedConfigSafe
 }
 
+function Invoke-PostPreflightUninstallTestHook {
+  if ($env:LABWIRED_WINDOWS_TEST_MODE -ne "1" -or -not $env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET) { return }
+  $link = Join-Path $HomeDir "agent\race-after-preflight"
+  $target = $env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET
+  New-Item -ItemType Directory -Path (Split-Path -Parent $link) -Force | Out-Null
+  $null = & cmd.exe /d /c mklink /J $link $target
+  if ($LASTEXITCODE -ne 0) { Fail "could not create post-preflight junction fixture" }
+}
+
 function Cmd-Package {
   $sub = if ($argsRest.Count -gt 0) { $argsRest[0] } else { "info" }
   switch ($sub) {
@@ -493,8 +564,16 @@ function Cmd-Package {
     "uninstall" {
       if ($argsRest -notcontains "--yes") { Fail "re-run: labwired agent package uninstall --yes" }
       Assert-AgentUninstallSafe
-      Remove-AgentOwnedConfig
-      Remove-AgentKit
+      Invoke-PostPreflightUninstallTestHook
+      $tombstones = @(Move-AgentTreesToTombstones)
+      try {
+        Remove-AgentOwnedConfig
+        Remove-AgentLaunchers
+      } catch {
+        Restore-AgentTombstones $tombstones
+        throw
+      }
+      Remove-AgentTombstones $tombstones
       Say "uninstalled Agent from $HomeDir"
     }
     default {
