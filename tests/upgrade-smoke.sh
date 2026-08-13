@@ -81,7 +81,11 @@ assert_exact_version() {
   local evidence_file="$1" expected="$2"
   grep -qx 'LabWired Agent' "$evidence_file" \
     || die "version output does not identify LabWired Agent"
-  grep -qx "version  $expected" "$evidence_file" \
+  local version_count version_line
+  version_count="$(awk 'index($0, "version  ") == 1 { count++ } END { print count + 0 }' "$evidence_file")"
+  [[ "$version_count" == 1 ]] || die "version output must contain exactly one version line"
+  version_line="$(awk 'index($0, "version  ") == 1 { print; exit }' "$evidence_file")"
+  [[ "$version_line" == "version  $expected" ]] \
     || die "version output does not exactly match $expected"
 }
 
@@ -90,13 +94,43 @@ assert_user_sentinels() {
     || die "prefix sentinel was not preserved"
   grep -qx 'keep-user-config' "$CONFIG_DIR/upgrade-sentinel.txt" \
     || die "config sentinel was not preserved"
+  if [[ "${LABWIRED_TEST_REMOVE_SENTINEL_BEFORE_CHECK:-0}" == 1 ]]; then
+    python3 - "$CONFIG_DIR/opencode.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    config = json.load(handle)
+config.pop("user_upgrade", None)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PY
+    unset LABWIRED_TEST_REMOVE_SENTINEL_BEFORE_CHECK
+  fi
   python3 - "$CONFIG_DIR/opencode.json" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     config = json.load(handle)
-assert config["user_upgrade"]["sentinel"] == "keep-user-config"
+if config.get("user_upgrade", {}).get("sentinel") != "keep-user-config":
+    raise SystemExit("user JSON sentinel was not preserved")
+PY
+}
+
+version_is_older() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+
+def parse(value):
+    parts = value.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        raise SystemExit(2)
+    return tuple(int(part) for part in parts)
+
+raise SystemExit(0 if parse(sys.argv[1]) < parse(sys.argv[2]) else 1)
 PY
 }
 
@@ -203,8 +237,13 @@ lifecycle_begin validate-inputs
   || die "LABWIRED_PREVIOUS_AGENT_SHA256 must be exactly 64 hexadecimal characters"
 [[ -f "$ARCHIVE_INPUT" && ! -L "$ARCHIVE_INPUT" ]] \
   || die "LABWIRED_PREVIOUS_AGENT_ARCHIVE must name a regular, non-symlink file"
-[[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
-  || die "LABWIRED_PREVIOUS_AGENT_VERSION is not a valid explicit version"
+[[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || die "LABWIRED_PREVIOUS_AGENT_VERSION must be a stable numeric X.Y.Z version"
+CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
+[[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || die "current VERSION must be a stable numeric X.Y.Z version"
+version_is_older "$PREVIOUS_VERSION" "$CURRENT_VERSION" \
+  || die "previous Agent version $PREVIOUS_VERSION must be older than current version $CURRENT_VERSION"
 lifecycle_pass validate-inputs
 
 lifecycle_begin verify-checksum
@@ -364,10 +403,6 @@ with open(path, "w", encoding="utf-8") as handle:
 PY
 assert_user_sentinels
 lifecycle_pass sentinel-setup
-
-CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
-[[ -n "$CURRENT_VERSION" && "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]] \
-  || die "current Agent version must differ from pinned previous version"
 
 lifecycle_begin current-upgrade-install
 if ! run_captured append "current Agent install" "$EVIDENCE_DIR/upgrade-install.txt" \

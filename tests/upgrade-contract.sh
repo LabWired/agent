@@ -23,6 +23,34 @@ assert_evidence_complete() {
   done
 }
 
+archive_sha256() {
+  python3 - "$1" <<'PY'
+import hashlib
+import sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PY
+}
+
+make_version_fixture() {
+  local archive="$1" version="$2" installer_body="$3"
+  python3 - "$archive" "$version" "$installer_body" <<'PY'
+import io
+import tarfile
+import sys
+
+archive_path, version, installer_body = sys.argv[1:]
+with tarfile.open(archive_path, "w") as archive:
+    for name, payload, mode in (
+        ("previous/VERSION", (version + "\n").encode(), 0o644),
+        ("previous/install.sh", installer_body.encode(), 0o755),
+    ):
+        entry = tarfile.TarInfo(name)
+        entry.size = len(payload)
+        entry.mode = mode
+        archive.addfile(entry, io.BytesIO(payload))
+PY
+}
+
 POSIX_SCRIPT="$ROOT/tests/upgrade-smoke.sh"
 WINDOWS_SCRIPT="$ROOT/tests/windows-upgrade-smoke.ps1"
 WINDOWS_CONTRACT="$ROOT/tests/windows-contract.ps1"
@@ -125,6 +153,10 @@ require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "traversal"'
 require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "reparse"'
 require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "symlink"'
 require_text "$WINDOWS_CONTRACT" 'windows-upgrade-smoke.ps1'
+require_text "$WINDOWS_CONTRACT" "Assert-InvalidUpgradeVersion \$currentAgentVersion"
+require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.12"'
+require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.10-rc.1"'
+require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.10+build.1"'
 
 require_text "$WINDOWS_SCRIPT" 'Get-FileHash'
 require_text "$WINDOWS_SCRIPT" 'ZipArchive'
@@ -204,6 +236,62 @@ expect_partial_failure LABWIRED_PREVIOUS_AGENT_ARCHIVE="$PARTIAL_ARCHIVE" \
   LABWIRED_PREVIOUS_AGENT_SHA256="$PARTIAL_SHA256"
 expect_partial_failure LABWIRED_PREVIOUS_AGENT_VERSION=0.3.10 \
   LABWIRED_PREVIOUS_AGENT_SHA256="$PARTIAL_SHA256"
+
+CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
+for invalid_version in "$CURRENT_VERSION" 0.3.12 0.3.10-rc.1 0.3.10+build.1; do
+  invalid_archive="$TMP/invalid-version-${invalid_version//[^A-Za-z0-9]/_}.tar"
+  make_version_fixture "$invalid_archive" "$invalid_version" $'#!/usr/bin/env bash\nexit 47\n'
+  invalid_sha256="$(archive_sha256 "$invalid_archive")"
+  invalid_evidence="$TMP/invalid-version-${invalid_version//[^A-Za-z0-9]/_}-evidence"
+  mkdir -p "$invalid_evidence"
+  if LABWIRED_EVIDENCE_DIR="$invalid_evidence" \
+    LABWIRED_PREVIOUS_AGENT_ARCHIVE="$invalid_archive" \
+    LABWIRED_PREVIOUS_AGENT_VERSION="$invalid_version" \
+    LABWIRED_PREVIOUS_AGENT_SHA256="$invalid_sha256" \
+    bash "$POSIX_SCRIPT" >"$TMP/invalid-version.out" 2>"$TMP/invalid-version.err"; then
+    fail "invalid upgrade baseline $invalid_version was accepted"
+  fi
+  assert_evidence_complete "$invalid_evidence" "invalid upgrade baseline $invalid_version"
+  grep -qx 'FAIL' "$invalid_evidence/result.txt" \
+    || fail "invalid upgrade baseline $invalid_version did not leave result FAIL"
+  grep -qx 'not-run' "$invalid_evidence/previous-version.txt" \
+    || fail "invalid upgrade baseline $invalid_version reached previous version execution"
+  if grep -q 'phase=previous-install' "$invalid_evidence/lifecycle.txt"; then
+    fail "invalid upgrade baseline $invalid_version reached previous install"
+  fi
+done
+
+near_match_archive="$TMP/near-match.tar"
+make_version_fixture "$near_match_archive" 0.3.10 $'#!/usr/bin/env bash\nmkdir -p "$LABWIRED_BIN_DIR"\ncat >"$LABWIRED_BIN_DIR/labwired" <<\'EOF\'\n#!/usr/bin/env bash\nprintf \'LabWired Agent\\nversion  0x3x10\\nhome     fixture\\n\'\nEOF\nchmod +x "$LABWIRED_BIN_DIR/labwired"\n'
+near_match_sha256="$(archive_sha256 "$near_match_archive")"
+near_match_evidence="$TMP/near-match-evidence"
+mkdir -p "$near_match_evidence"
+if LABWIRED_EVIDENCE_DIR="$near_match_evidence" \
+  LABWIRED_PREVIOUS_AGENT_ARCHIVE="$near_match_archive" \
+  LABWIRED_PREVIOUS_AGENT_VERSION=0.3.10 \
+  LABWIRED_PREVIOUS_AGENT_SHA256="$near_match_sha256" \
+  bash "$POSIX_SCRIPT" >"$TMP/near-match.out" 2>"$TMP/near-match.err"; then
+  fail "regex near-match version output was accepted"
+fi
+assert_evidence_complete "$near_match_evidence" "near-match version"
+grep -qx 'FAIL' "$near_match_evidence/result.txt" || fail "near-match version did not leave result FAIL"
+
+optimized_archive="$TMP/optimized-sentinel.tar"
+git -C "$ROOT" archive --format=tar --prefix=previous/ -o "$optimized_archive" v0.3.10
+optimized_sha256="$(archive_sha256 "$optimized_archive")"
+optimized_evidence="$TMP/optimized-sentinel-evidence"
+mkdir -p "$optimized_evidence"
+if PYTHONOPTIMIZE=1 LABWIRED_TEST_REMOVE_SENTINEL_BEFORE_CHECK=1 \
+  LABWIRED_EVIDENCE_DIR="$optimized_evidence" \
+  LABWIRED_PREVIOUS_AGENT_ARCHIVE="$optimized_archive" \
+  LABWIRED_PREVIOUS_AGENT_VERSION=0.3.10 \
+  LABWIRED_PREVIOUS_AGENT_SHA256="$optimized_sha256" \
+  bash "$POSIX_SCRIPT" >"$TMP/optimized.out" 2>"$TMP/optimized.err"; then
+  fail "missing sentinel was accepted under PYTHONOPTIMIZE=1"
+fi
+assert_evidence_complete "$optimized_evidence" "optimized missing sentinel"
+grep -qx 'FAIL' "$optimized_evidence/result.txt" \
+  || fail "optimized missing sentinel did not leave result FAIL"
 
 silent_archive="$TMP/silent-installer.tar"
 python3 - "$silent_archive" <<'PY'
@@ -380,7 +468,6 @@ LABWIRED_PREVIOUS_AGENT_SHA256="$ARCHIVE_SHA256" \
 grep -qx 'PASS' "$fixture_evidence/result.txt" || fail "fixture-backed upgrade did not pass"
 grep -qx "version  $PREVIOUS_VERSION" "$fixture_evidence/previous-version.txt" \
   || fail "previous version evidence is not exact"
-CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
 grep -qx "version  $CURRENT_VERSION" "$fixture_evidence/current-version.txt" \
   || fail "current version evidence is not exact"
 grep -qx 'prefix_sentinel=preserved' "$fixture_evidence/lifecycle.txt" \

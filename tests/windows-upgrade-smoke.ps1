@@ -105,6 +105,21 @@ function Assert-ExactVersion([string]$Path, [string]$Expected) {
   }
 }
 
+function ConvertTo-StableVersionTuple([string]$Value, [string]$Label) {
+  if ($Value -notmatch "^[0-9]+\.[0-9]+\.[0-9]+$") {
+    throw "$Label must be a stable numeric X.Y.Z version"
+  }
+  return @($Value.Split(".") | ForEach-Object { [uint64]::Parse($_, [Globalization.CultureInfo]::InvariantCulture) })
+}
+
+function Test-VersionOlder([uint64[]]$Previous, [uint64[]]$Current) {
+  for ($index = 0; $index -lt 3; $index++) {
+    if ($Previous[$index] -lt $Current[$index]) { return $true }
+    if ($Previous[$index] -gt $Current[$index]) { return $false }
+  }
+  return $false
+}
+
 function Assert-UserSentinels {
   if ((Get-Content -LiteralPath (Join-Path $Prefix "user-data\upgrade-sentinel.txt") -Raw).Trim() -ne "keep-prefix-data") {
     throw "prefix sentinel was not preserved"
@@ -269,8 +284,11 @@ try {
   if ($expectedSha256 -notmatch "^[0-9a-fA-F]{64}$") {
     throw "LABWIRED_PREVIOUS_AGENT_SHA256 must be exactly 64 hexadecimal characters"
   }
-  if ($previousVersion -notmatch "^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$") {
-    throw "LABWIRED_PREVIOUS_AGENT_VERSION is not a valid explicit version"
+  $previousTuple = ConvertTo-StableVersionTuple $previousVersion "LABWIRED_PREVIOUS_AGENT_VERSION"
+  $currentVersion = (Get-Content -LiteralPath (Join-Path $Root "VERSION") -Raw).Trim()
+  $currentTuple = ConvertTo-StableVersionTuple $currentVersion "current VERSION"
+  if (-not (Test-VersionOlder $previousTuple $currentTuple)) {
+    throw "previous Agent version $previousVersion must be older than current version $currentVersion"
   }
   if (-not (Test-Path -LiteralPath $archiveInput -PathType Leaf)) {
     throw "LABWIRED_PREVIOUS_AGENT_ARCHIVE must name a regular file"
@@ -347,10 +365,6 @@ try {
   Assert-UserSentinels
   Complete-LifecyclePhase "sentinel-setup"
 
-  $currentVersion = (Get-Content -LiteralPath (Join-Path $Root "VERSION") -Raw).Trim()
-  if (-not $currentVersion -or $currentVersion -ceq $previousVersion) {
-    throw "current Agent version must differ from pinned previous version"
-  }
   Start-LifecyclePhase "current-upgrade-install"
   $currentInstallStatus = Invoke-Captured -Append -FailureLabel "current Agent install" -OutputPath (Join-Path $EvidenceDir "upgrade-install.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\install.ps1") @installArgs

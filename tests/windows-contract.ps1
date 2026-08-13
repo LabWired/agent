@@ -121,6 +121,39 @@ function Assert-UnsafeUpgradeZip([string]$Kind) {
   Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "previous-version.txt") -Raw).Trim() -eq "not-run") "$Kind ZIP is rejected before previous install"
 }
 
+function Assert-InvalidUpgradeVersion([string]$Version) {
+  $safeName = $Version -replace "[^0-9A-Za-z]", "_"
+  $zipPath = Join-Path $TempRoot ("invalid-upgrade-version-" + $safeName + ".zip")
+  $evidenceDir = Join-Path $TempRoot ("invalid-upgrade-version-evidence-" + $safeName)
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+  $zip.Dispose()
+  New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+  $env:LABWIRED_EVIDENCE_DIR = $evidenceDir
+  $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $zipPath
+  $env:LABWIRED_PREVIOUS_AGENT_VERSION = $Version
+  $env:LABWIRED_PREVIOUS_AGENT_SHA256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+  try {
+    $result = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $UpgradeSmoke)
+  } finally {
+    Remove-Item Env:LABWIRED_EVIDENCE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_ARCHIVE -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_VERSION -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_SHA256 -ErrorAction SilentlyContinue
+  }
+  Assert-True ($result.Status -ne 0 -and $result.Output -match "stable numeric X.Y.Z|must be older than current") "upgrade rejects invalid baseline version $Version"
+  foreach ($name in @(
+    "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+    "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+  )) {
+    $path = Join-Path $evidenceDir $name
+    Assert-True ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -gt 0) "invalid version $Version retains $name"
+  }
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "result.txt") -Raw).Trim() -eq "FAIL") "invalid version $Version records FAIL"
+  $lifecycle = Get-Content -LiteralPath (Join-Path $evidenceDir "lifecycle.txt") -Raw
+  Assert-True ($lifecycle -notmatch "phase=previous-install") "invalid version $Version fails before previous install"
+}
+
 try {
   Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
   Assert-True (Test-Path -LiteralPath $UpgradeSmoke -PathType Leaf) "Windows upgrade evidence script exists"
@@ -185,6 +218,11 @@ try {
   Assert-UnsafeUpgradeZip "traversal"
   Assert-UnsafeUpgradeZip "reparse"
   Assert-UnsafeUpgradeZip "symlink"
+  $currentAgentVersion = (Get-Content -LiteralPath (Join-Path $Root "VERSION") -Raw).Trim()
+  Assert-InvalidUpgradeVersion $currentAgentVersion
+  Assert-InvalidUpgradeVersion "0.3.12"
+  Assert-InvalidUpgradeVersion "0.3.10-rc.1"
+  Assert-InvalidUpgradeVersion "0.3.10+build.1"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
