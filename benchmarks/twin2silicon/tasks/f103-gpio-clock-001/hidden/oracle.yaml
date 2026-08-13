@@ -1,0 +1,8 @@
+schema_version: "1.0"
+inputs:
+  system: "__SYSTEM__"
+  firmware: "__FIRMWARE__"
+limits:
+  max_steps: 200000
+assertions:
+  - uart_contains: "READY"

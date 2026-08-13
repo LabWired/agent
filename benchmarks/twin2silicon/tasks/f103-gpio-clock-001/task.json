@@ -1,0 +1,1 @@
+{"schema_version":"1.0","id":"f103-gpio-clock-001","board":"stm32f103-bluepill","model":"labwired/labwired-fast","budgets":{"wall_time_seconds":1200,"model_tokens":50000,"repair_iterations":6,"simulator_runs":8,"diagnostic_hil_runs":0},"public_dir":"public","hidden_oracle":"hidden/oracle.yaml","hidden_system":"hidden/system.yaml","firmware_elf":"firmware/build/firmware.elf"}

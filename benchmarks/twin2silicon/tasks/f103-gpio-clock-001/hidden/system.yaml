@@ -1,0 +1,4 @@
+name: "f103-gpio-clock-001"
+chip: "/Volumes/LabWired/worktrees/twin2silicon-core/configs/chips/stm32f103.yaml"
+external_devices: []
+board_io: []
