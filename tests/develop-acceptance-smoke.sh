@@ -112,7 +112,7 @@ else
       && grep -q alive "$WORK/greenfield-twin/evidence/uart.log"; then
       result PASS greenfield-esp32c3 "scaffolded + compiled + serial observed; LED gap; attempts=1; overall=partially_verified"
     else
-      result SKIP greenfield-esp32c3 "scaffold+compile passed; Arduino ELF behavior not supported by local twin; attempts=1; overall=blocked"
+      result SKIP greenfield-esp32c3 "scaffold+compile passed; Arduino ELF behavior not supported by local twin; attempts=1; overall=compiled_only"
     fi
   else
     result FAIL greenfield-esp32c3 "scaffold/compile failed; attempts=1; overall=failed"
