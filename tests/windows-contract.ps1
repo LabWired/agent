@@ -406,9 +406,9 @@ public static class NativeArgvEcho {
   $savedPath = $env:Path
   $env:Path = "$fakeGitBin;$savedPath"
   $env:LABWIRED_HOME = $installPrefix
-  $updateOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") update 2>&1 | Out-String
+  $updateResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "update")
   $env:Path = $savedPath
-  Assert-True ($LASTEXITCODE -ne 0 -and $updateOutput -match 'git clone failed') "failed self-update reports native git failure"
+  Assert-True ($updateResult.Status -ne 0 -and $updateResult.Output -match 'git clone failed') "failed self-update reports native git failure"
   Assert-True ((Get-Content (Join-Path $installPrefix "agent\VERSION") -Raw).Trim() -eq 'old-working') "failed self-update leaves Agent runnable"
 
   $result = Invoke-Installer @("-Prefix", (Join-Path $TempRoot "bad-mode"), "-UserBin", $userBin, "-AgentOnly", "-Full", "-SkipOpenCode", "-SkipPathUpdate")
@@ -461,8 +461,8 @@ public static class NativeArgvEcho {
   $agentJunction = Join-Path $uninstallPrefix "agent"
   $null = & cmd.exe /d /c mklink /J $agentJunction $outside
   $env:LABWIRED_HOME = $uninstallPrefix
-  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
-  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects junction Agent target"
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'reparse-point') "uninstall rejects junction Agent target"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "uninstall preserves external sentinel"
 
   if (Test-Path $agentJunction) { $null = & cmd.exe /d /c rmdir $agentJunction }
@@ -471,8 +471,8 @@ public static class NativeArgvEcho {
   $descendantJunction = Join-Path $uninstallPrefix "agent\nested\outside"
   $null = & cmd.exe /d /c mklink /J $descendantJunction $outside
   Assert-True ($LASTEXITCODE -eq 0) "test descendant junction created"
-  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
-  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects descendant junction before recursive removal"
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'reparse-point') "uninstall rejects descendant junction before recursive removal"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "descendant junction rejection preserves external sentinel"
 
   if (Test-Path $descendantJunction) { $null = & cmd.exe /d /c rmdir $descendantJunction }
@@ -481,9 +481,9 @@ public static class NativeArgvEcho {
   New-Item -ItemType Directory -Path (Join-Path $uninstallPrefix "agent\nested") -Force | Out-Null
   Set-Content (Join-Path $uninstallPrefix "agent\nested\owned.txt") "owned" -Encoding ASCII
   $env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET = $outside
-  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
   Remove-Item Env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET -ErrorAction SilentlyContinue
-  Assert-True ($LASTEXITCODE -eq 0) "post-preflight junction is isolated and removed without following"
+  Assert-True ($uninstallResult.Status -eq 0) "post-preflight junction is isolated and removed without following"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "post-preflight junction cleanup preserves external sentinel"
   Assert-True (-not (Test-Path (Join-Path $uninstallPrefix "agent"))) "atomically isolated Agent root is absent"
 
@@ -497,8 +497,8 @@ public static class NativeArgvEcho {
   $env:LABWIRED_HOME = $malformedPrefix
   $env:LABWIRED_AGENT_CONFIG_DIR = $malformedConfig
   $env:OPENCODE_CONFIG_DIR = $malformedConfig
-  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
-  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'unsafe Agent ownership entry') "malformed JSON ownership is rejected before isolation"
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'unsafe Agent ownership entry') "malformed JSON ownership is rejected before isolation"
   Assert-True ((Get-Content (Join-Path $malformedPrefix "agent\nested\owned.txt") -Raw).Trim() -eq 'agent-intact') "malformed ownership leaves Agent root intact"
   Assert-True ((Get-Content (Join-Path $malformedPrefix "state\agent\state.txt") -Raw).Trim() -eq 'state-intact') "malformed ownership leaves Agent state intact"
   Assert-True ((Get-Content (Join-Path $malformedConfig "opencode.json") -Raw) -match 'config-intact') "malformed ownership leaves config untouched"
