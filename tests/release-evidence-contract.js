@@ -7,6 +7,11 @@ const childProcess = require('child_process');
 const root = path.resolve(__dirname, '..');
 let failed = false;
 
+const ACTION_MAJORS = {
+  'actions/checkout': 'v7',
+  'actions/upload-artifact': 'v7',
+};
+
 function fail(message) {
   process.stderr.write(`FAIL release evidence contract: ${message}\n`);
   failed = true;
@@ -41,6 +46,25 @@ function requireText(text, needle, context) {
   if (!text.includes(needle)) fail(`${context} missing ${needle}`);
 }
 
+function requireCurrentActionMajors() {
+  const workflowDirectory = path.join(root, '.github', 'workflows');
+  for (const entry of fs.readdirSync(workflowDirectory)) {
+    if (!/\.ya?ml$/.test(entry)) continue;
+    const relative = path.join('.github', 'workflows', entry);
+    const workflow = read(relative);
+    for (const [action, expectedMajor] of Object.entries(ACTION_MAJORS)) {
+      const references = [...workflow.matchAll(new RegExp(`${action}@(v[^\\s#]+)`, 'g'))];
+      for (const reference of references) {
+        if (reference[1] !== expectedMajor) {
+          fail(`${relative} uses ${action}@${reference[1]}; expected ${action}@${expectedMajor}`);
+        }
+      }
+    }
+  }
+}
+
+requireCurrentActionMajors();
+
 const harnessPath = '.github/workflows/harness.yml';
 const harness = read(harnessPath);
 const harnessJobs = jobs(harness, harnessPath);
@@ -53,7 +77,7 @@ for (const [key, runner, command, artifact] of [
   if (!job) { fail(`${harnessPath} missing job ${key}`); continue; }
   requireText(job, runner, key);
   requireText(job, command, key);
-  requireText(job, 'actions/upload-artifact@v4', key);
+  requireText(job, 'actions/upload-artifact@v7', key);
   requireText(job, 'if: always()', key);
   requireText(job, 'if-no-files-found: error', key);
   requireText(job, artifact, key);
@@ -79,7 +103,7 @@ for (const [key, runner, endpoint, artifact] of [
   requireText(job, runner, key);
   requireText(job, endpoint, key);
   requireText(job, 'expected_version', key);
-  requireText(job, 'actions/upload-artifact@v4', key);
+  requireText(job, 'actions/upload-artifact@v7', key);
   requireText(job, 'if: always()', key);
   requireText(job, artifact, key);
 }

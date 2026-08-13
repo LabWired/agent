@@ -37,7 +37,7 @@ jobs:
           echo PASS >"$EVIDENCE_DIR/result.txt"
       - name: Upload deployed evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-deployed-ubuntu
           path: evidence/ubuntu
@@ -72,7 +72,7 @@ jobs:
           echo PASS >"$EVIDENCE_DIR/result.txt"
       - name: Upload deployed evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-deployed-macos
           path: evidence/macos
@@ -137,7 +137,7 @@ jobs:
           Set-Content "$env:EVIDENCE_DIR\result.txt" PASS
       - name: Upload deployed evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-deployed-windows
           path: evidence/windows

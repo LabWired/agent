@@ -65,7 +65,7 @@ jobs:
           [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous Ubuntu archive URL must use HTTPS' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous Ubuntu archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install candidate and prove hosted access
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
@@ -151,7 +151,7 @@ jobs:
         run: echo PASS > "$EVIDENCE_DIR/result.txt"
       - name: Upload Ubuntu release readiness evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-release-readiness-ubuntu
           path: |
@@ -192,7 +192,7 @@ jobs:
           [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous macOS archive URL must use HTTPS' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous macOS archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install candidate and prove hosted access
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
@@ -278,7 +278,7 @@ jobs:
         run: echo PASS > "$EVIDENCE_DIR/result.txt"
       - name: Upload macOS release readiness evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-release-readiness-macos
           path: |
@@ -324,7 +324,7 @@ jobs:
           if ($env:PREVIOUS_VERSION -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'previous_version must be stable X.Y.Z' }
           if ($env:PREVIOUS_ARCHIVE_URL -notmatch '^https://') { throw 'previous Windows archive URL must use HTTPS' }
           if ($env:PREVIOUS_ARCHIVE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'previous Windows archive SHA256 must be 64 hexadecimal characters' }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install candidate and prove hosted access with both PowerShell engines
         shell: powershell
         env:
@@ -451,7 +451,7 @@ jobs:
         run: Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR 'result.txt') -Value PASS -Encoding ASCII
       - name: Upload Windows release readiness evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-release-readiness-windows
           path: |

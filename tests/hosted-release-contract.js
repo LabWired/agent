@@ -100,7 +100,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
     requireText(job, runner, key);
     requireText(job, 'Validate required release inputs and credentials', key);
     const validationIndex = job.indexOf('Validate required release inputs and credentials');
-    const checkoutIndex = job.indexOf('actions/checkout@v4');
+    const checkoutIndex = job.indexOf('actions/checkout@v7');
     const evidenceInitializationIndex = job.indexOf('FAIL', validationIndex);
     const hostedCheckIndex = job.indexOf('Install candidate and prove hosted access');
     const preCheckout = checkoutIndex >= 0 ? job.slice(0, checkoutIndex) : '';
@@ -159,7 +159,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
     requireText(job, 'inputs.previous_version', key);
     requireText(job, archiveUrl, key);
     requireText(job, archiveSha, key);
-    requireText(job, 'actions/checkout@v4', key);
+    requireText(job, 'actions/checkout@v7', key);
     requireText(job, 'hosted-tools: model gateway + MCP authenticated', key);
     requireText(job, 'scripts/hosted-mcp-probe.py', key);
     requireText(job, upgradeCommand, key);
@@ -171,7 +171,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
     requireText(job, 'platform.txt', key);
     requireText(job, 'capabilities.txt', key);
     requireText(job, 'result.txt', key);
-    requireText(job, 'actions/upload-artifact@v4', key);
+    requireText(job, 'actions/upload-artifact@v7', key);
     requireText(job, 'if: always()', key);
     requireText(job, 'if-no-files-found: error', key);
     requireText(job, artifact, key);

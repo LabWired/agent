@@ -6,7 +6,7 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: unit + skills + public-install
         run: |
           bash tests/harness.sh
@@ -30,7 +30,7 @@ jobs:
   install-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: install dependencies for sim download
         run: |
           sudo apt-get update -qq
@@ -48,7 +48,7 @@ jobs:
   windows-contract:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Windows dispatcher contract
         shell: powershell
         run: .\tests\windows-contract.ps1
@@ -80,14 +80,14 @@ jobs:
   release-evidence-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Source install evidence
         env:
           LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/ubuntu
         run: bash tests/install-smoke.sh
       - name: Upload source evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-source-ubuntu
           path: artifacts/release-evidence/ubuntu
@@ -96,14 +96,14 @@ jobs:
   release-evidence-macos:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Source install evidence
         env:
           LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/macos
         run: bash tests/install-smoke.sh
       - name: Upload source evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-source-macos
           path: artifacts/release-evidence/macos
@@ -112,7 +112,7 @@ jobs:
   release-evidence-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Source install evidence (Windows PowerShell)
         shell: powershell
         env:
@@ -213,7 +213,7 @@ jobs:
         run: ./tests/windows-upgrade-smoke.ps1
       - name: Upload source evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: labwired-agent-source-windows
           path: artifacts/release-evidence/windows
@@ -222,7 +222,7 @@ jobs:
   llm-deepinfra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: DeepInfra Kimi chat smoke (skip if no secret)
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
