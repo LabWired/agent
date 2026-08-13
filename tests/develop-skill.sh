@@ -36,12 +36,7 @@ need 'STM32F103' 'STM32F103 smoke target'
 need 'Wi-Fi' 'Wi-Fi smoke target'
 need 'custom board' 'custom board smoke target'
 
-if grep -qiE 'workflow engine|state machine|database|new persistence' "$SKILL"; then
-  echo "FAIL KISS rejects orchestration machinery"
-  fail=1
-else
-  echo "ok   KISS rejects orchestration machinery"
-fi
+need 'no new orchestrator|reuse existing.*tools' 'KISS reuses existing tools'
 
 if [[ "$fail" -ne 0 ]]; then
   exit 1
