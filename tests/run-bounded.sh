@@ -110,6 +110,29 @@ else
   fail=1
 fi
 
+if python3 -c 'import signal, sys; sys.exit(0 if hasattr(signal, "SIGHUP") else 1)'; then
+  hup_pid_file="$TMP/hup.pid"
+  PID_FILE="$hup_pid_file" python3 "$RUNNER" --timeout 10 -- python3 -c 'import os, time; open(os.environ["PID_FILE"], "w").write(str(os.getpid())); time.sleep(30)' >"$TMP/hup.out" 2>"$TMP/hup.err" &
+  hup_runner_pid=$!
+  tracked_pids+=("$hup_runner_pid")
+  if wait_for_file "$hup_pid_file"; then
+    hup_child_pid="$(<"$hup_pid_file")"
+    tracked_pids+=("$hup_child_pid")
+    kill -HUP "$hup_runner_pid"
+    set +e
+    wait "$hup_runner_pid"
+    status=$?
+    set -e
+    assert_eq "SIGHUP wrapper exit" "$status" "129"
+    assert_process_gone "SIGHUP wrapper terminates child" "$hup_child_pid"
+  else
+    echo "FAIL SIGHUP wrapper starts child"
+    fail=1
+  fi
+else
+  echo "skip SIGHUP cleanup: signal unavailable"
+fi
+
 set +e
 python3 "$RUNNER" --timeout 1 -- python3 -c 'import os, signal; os.kill(os.getpid(), signal.SIGTERM)' >"$TMP/signaled.out" 2>"$TMP/signaled.err"
 status=$?

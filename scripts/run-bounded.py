@@ -92,8 +92,14 @@ def main(argv):
             stop_process(process_holder[0], signum)
         raise SystemExit(128 + signum)
 
+    handled_signals = [signal.SIGINT, signal.SIGTERM]
+    for signal_name in ("SIGHUP", "SIGQUIT"):
+        signum = getattr(signal, signal_name, None)
+        if signum is not None:
+            handled_signals.append(signum)
+
     handlers = {}
-    for signum in (signal.SIGINT, signal.SIGTERM):
+    for signum in handled_signals:
         handlers[signum] = signal.getsignal(signum)
         signal.signal(signum, forward_signal)
 
