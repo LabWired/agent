@@ -24,6 +24,7 @@ __pycache__/
 # Smoke run artifacts (keep coverage-latest.* tracked)
 # VS Code extension build
 dist/
+/node_modules/
 docs/competitive/embedder-vscode/*.vsix
 docs/competitive/embedder-vscode/marketplace-meta.json
 docs/competitive/embedder-vscode/marketplace-query.json

@@ -2,7 +2,17 @@
 'use strict';
 
 const assert = require('assert');
+const childProcess = require('child_process');
+const path = require('path');
 const { validateActionRuntimePins, workflowStepUses } = require('./lib/action-runtime-pins');
+
+const root = path.resolve(__dirname, '..');
+const ignoredInstallPath = childProcess.spawnSync(
+  'git',
+  ['check-ignore', '--quiet', 'node_modules/yaml/package.json'],
+  { cwd: root },
+);
+assert.strictEqual(ignoredInstallPath.status, 0, 'root node_modules install output must be ignored');
 
 const validWorkflow = `
 name: valid
