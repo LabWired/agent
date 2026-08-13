@@ -64,7 +64,7 @@
   "share": "disabled",
   "agent": {
     "build": {
-      "description": "LabWired Agent \u2014 START with skill golden-path for firmware. Packs: bringup (MCP part/datasheet), prove (labwired_verify only mints model_verified), observe (labwired compose), desk-hw. Superpowers process is secondary. Never invent pins or green.",
+      "description": "LabWired Agent \u2014 START with skill develop for firmware creation, modification, or repair. golden-path is first-session guidance. Packs: bringup, prove, observe, desk-hw. Never invent pins or green.",
       "mode": "primary",
       "color": "#0056b3"
     }
