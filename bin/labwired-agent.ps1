@@ -222,7 +222,7 @@ function Cmd-Doctor {
     Write-Host "warn labwired-sim: no Windows prebuild - use hosted MCP verify or WSL" -ForegroundColor Yellow
   }
 
-  if (Get-Command npm -ErrorAction SilentlyContinue -or Get-Command npx -ErrorAction SilentlyContinue) {
+  if ((Get-Command npm -ErrorAction SilentlyContinue) -or (Get-Command npx -ErrorAction SilentlyContinue)) {
     Say "ok  node/npm present"
   } else {
     Write-Host "FAIL node/npm missing" -ForegroundColor Red
@@ -329,7 +329,7 @@ switch ($cmd) {
   "self-update" { Cmd-Update }
   "upgrade" { Cmd-Update }
   "opencode" {
-    # Internal engine alias — same product start as bare labwired agent.
+    # Internal engine alias - same product start as bare labwired agent.
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
       Fail "LabWired Agent runtime not found. Re-run LabWired install."
     }
@@ -355,7 +355,7 @@ switch ($cmd) {
   }
   default {
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-      Fail "unknown command '$cmd' (LabWired Agent runtime missing — re-run install)"
+      Fail "unknown command '$cmd' (LabWired Agent runtime missing - re-run install)"
     }
     Apply-LabWiredBranding
     & opencode @Rest

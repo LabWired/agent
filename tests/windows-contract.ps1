@@ -78,6 +78,16 @@ try {
   foreach ($marker in @("LABWIRED_EVIDENCE_DIR", "agent version", "agent doctor", "capabilities.txt", "result.txt", "PowerShellExe", "-File `$installer")) {
     Assert-True ($installSmokeText.Contains($marker)) "Windows install evidence includes $marker"
   }
+  foreach ($file in @(
+    (Join-Path $Root "bin\labwired.ps1"),
+    (Join-Path $Root "bin\labwired-agent.ps1"),
+    (Join-Path $Root "scripts\agent-install.ps1")
+  )) {
+    $bytes = [IO.File]::ReadAllBytes($file)
+    Assert-True (-not ($bytes | Where-Object { $_ -gt 127 })) "$file is ASCII-compatible for Windows PowerShell 5.1"
+  }
+  $agentLauncherText = Get-Content -LiteralPath (Join-Path $Root "bin\labwired-agent.ps1") -Raw
+  Assert-True ($agentLauncherText.Contains('(Get-Command npm -ErrorAction SilentlyContinue) -or (Get-Command npx -ErrorAction SilentlyContinue)')) "Windows doctor groups command availability checks"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
