@@ -16,7 +16,7 @@ Follow this loop: inspect or scaffold → ground → edit → compile → twin c
 
 Rules:
 
-- Call `labwired_context` first. Before asserting pins, peripherals, addresses, clocks, timing, or registers, ground facts with `labwired_part`, `labwired_datasheet`, or `labwired_search`. Prefer project and SDK symbols; label unresolved deductions as inferred.
+- Call `labwired_context` first and prefer `labwired_part`, `labwired_datasheet`, or `labwired_search` for hardware facts. If those knowledge tools are unavailable, grounded existing project files, SDK headers, SVD files, and schematics or netlists are valid fallback sources; cite the source used. Label missing-source deductions as inferred or as a gap, and never invent pins, peripherals, addresses, clocks, timing, or registers.
 - Preserve an existing project's structure. For greenfield work, create the smallest conventional project that satisfies the request.
 - Compile with `labwired_compile` or the project's existing compile command.
 - After a successful compile, convert every observable requested behavior into `labwired_verify`, or use `labwired_run` plus `labwired_inspect`. Make coverage gaps explicit, and never say tested when no check ran.

@@ -1,7 +1,7 @@
 ---
 name: prove
 description: >-
-  Twin dispose: labwired_verify with oracle, budgeted repair (max 3), dual-claim
+  Twin dispose: labwired_verify with oracle, three total attempts, dual-claim
   evidence report. model_verified ONLY from labwired_verify. On red fail-first
   then repair; never soft-pass or invent green.
 license: MIT
@@ -33,7 +33,6 @@ Twin dispose: oracle verify, budgeted repair, dual-claim evidence.
 | `failed` | Behavior wrong or fault |
 | `inconclusive` | Missing evidence / runner fail |
 | `unsupported` | Unmodeled surface |
-| `abstain` | Repair budget exhausted or blocking gaps |
 | `hardware_observed` | Desk only — use **desk-hw** pack |
 
 ## A. Verify (dispose)
@@ -42,19 +41,18 @@ Twin dispose: oracle verify, budgeted repair, dual-claim evidence.
 2. Call `labwired_verify`.  
 3. Report `status`, `gaps`, `evidence_ref`.  
 4. **On green** → section C (report-evidence).  
-5. **On red** → section B (diagnose + repair ≤3).
+5. **On red** → section B (diagnose + repair within three total attempts).
 
-## B. Diagnose + repair (max 3)
+## B. Diagnose + repair (three total attempts)
 
-1. **Fail-first:** capture failing verify **before** editing.  
+1. **Fail-first:** the initial implementation and failing verify are attempt one; capture that failure **before** repairing.
 2. Freeze oracle identity; never rewrite clauses.  
-3. Loop while `repairs_used < 3` and not green:  
+3. Make at most two repair patches after the initial red, stopping after three total edit-and-test attempts:
    - localize (serial, diagnosis, gaps)  
    - minimal single-concern patch  
    - compile → new `firmware_ref`  
    - `labwired_verify` same oracle  
-   - increment repairs  
-4. Stop: green → report; or **abstain** with gaps (do not spin).
+4. Stop: green → report; otherwise preserve the tool status and gaps (do not spin). In a user-facing `develop` report, map exhausted repair with no green to `failed`, or to `blocked` only for an actual external blocker.
 
 **Score (deterministic):**  
 `score = 100 * oracle + 20 * build - 5 * warnings - 2 * lines`  

@@ -2,6 +2,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL="$ROOT/skills/develop/SKILL.md"
+PROVE="$ROOT/skills/prove/SKILL.md"
+AGENTS="$ROOT/config/AGENTS.md"
 fail=0
 
 need() {
@@ -11,6 +13,26 @@ need() {
   else
     echo "FAIL $label"
     fail=1
+  fi
+}
+
+need_in() {
+  local file="$1" pattern="$2" label="$3"
+  if grep -qiE "$pattern" "$file"; then
+    echo "ok   $label"
+  else
+    echo "FAIL $label"
+    fail=1
+  fi
+}
+
+reject_in() {
+  local file="$1" pattern="$2" label="$3"
+  if grep -qiE "$pattern" "$file"; then
+    echo "FAIL $label"
+    fail=1
+  else
+    echo "ok   $label"
   fi
 }
 
@@ -26,6 +48,18 @@ need 'labwired_run' 'run tool'
 need 'labwired_inspect' 'inspect tool'
 need 'labwired_verify' 'verify tool'
 need 'three total|3 total' 'three-attempt budget'
+need_in "$PROVE" 'three total|3 total' 'prove uses three total attempts'
+need_in "$AGENTS" 'three total|3 total' 'agent contract uses three total attempts'
+need_in "$PROVE" '(at most|maximum|max).*two.*(repair|patch)|(repair|patch).*(at most|maximum|max).*two' 'prove permits at most two repairs after initial red'
+need_in "$AGENTS" '(at most|maximum|max).*two.*(repair|patch)|(repair|patch).*(at most|maximum|max).*two' 'agent contract permits at most two repairs after initial red'
+reject_in "$PROVE" '(3|three)[[:space:]-]+repairs?|repairs?.*(<|≤|max(imum)?|at most).*(3|three)' 'prove does not allow three repairs after initial red'
+reject_in "$AGENTS" '(3|three)[[:space:]-]+repairs?|repairs?.*(<|≤|max(imum)?|at most).*(3|three)|after.*first red.*(3|three)' 'agent contract does not allow three repairs after initial red'
+need_in "$SKILL" 'project.*(SDK|SVD|schematic)|(SDK|SVD|schematic).*project' 'develop allows grounded project evidence fallback'
+need_in "$AGENTS" 'project.*(SDK|SVD|schematic)|(SDK|SVD|schematic).*project' 'agent contract allows grounded project evidence fallback'
+need_in "$SKILL" '(unavailable|missing).*(project|SDK|SVD|schematic)|(project|SDK|SVD|schematic).*(fallback|unavailable)' 'develop states fallback condition'
+need_in "$AGENTS" '(unavailable|missing).*(project|SDK|SVD|schematic)|(project|SDK|SVD|schematic).*(fallback|unavailable)' 'agent contract states fallback condition'
+reject_in "$PROVE" '\babstain\b' 'prove excludes abstain from result vocabulary'
+reject_in "$SKILL" '\babstain\b' 'develop excludes abstain from user-facing result'
 need '^#+[[:space:]]+Changed' 'Changed heading'
 need '^#+[[:space:]]+Grounded by' 'Grounded by heading'
 need '^#+[[:space:]]+Compiled' 'Compiled heading'

@@ -31,8 +31,8 @@ Do not claim real hardware was tested unless a hardware path actually ran.
 
 1. Prefer MCP `labwired_context` (or an injected `[labwired_context]` block) before assuming board or twin state.
 2. Prefer `labwired_import` with `diagram_json` (P0) over hand-parsing schematics.
-3. If twin is not buildable, continue design from context + `labwired_part` / `labwired_datasheet`. Never invent pins.
-4. No pin or register value unless a tool returned it **this session** (`labwired_part` / `labwired_datasheet` / list / describe).
+3. Prefer `labwired_part`, `labwired_datasheet`, and `labwired_search` for hardware facts. If those knowledge tools are unavailable, cite grounded existing project files, SDK headers, SVD files, and schematics or netlists as valid fallback sources.
+4. Label facts with no available source as inferred or as a gap. Never invent pins, addresses, or register values.
 5. `model_verified` only from `labwired_verify`. `hardware_observed` only from desk-hw / real probe.
 
 
@@ -85,7 +85,8 @@ Constrained multi-step repair (inside **`prove`** pack):
 
 | Parameter | v0 default |
 |-----------|------------|
-| Max verify attempts **after** first red | **3** |
+| Max edit-and-test attempts, including the initial implementation and verify | **3 total** |
+| Repair patches after the initial red | **At most two** |
 | Patch scope | Minimal; single concern — no drive-by refactors |
 | Oracle identity | Frozen after first red (same oracle on re-verify) |
 | Weakening oracle | **Forbidden** |
@@ -150,7 +151,7 @@ See `skills/README.md` · `docs/KNOWLEDGE.md`.
 | **`develop`** | Default inspect → ground → compile → twin-check → repair workflow |
 | **`golden-path`** | First-session guide; delegates firmware work to `develop` |
 | **`bringup`** | Knowledge + diagram + scaffold |
-| **`prove`** | Twin verify, repair ≤3, evidence report |
+| **`prove`** | Twin verify, three total attempts (at most two repairs after initial red), evidence report |
 | **`observe`** | Plots from **elements** (not ready-made) |
 | **`import-circuit`** | Schematic/diagram → twin pack (catalog-honest) |
 | **`desk-hw`** | Flash + `hardware_observed` only |
@@ -209,10 +210,10 @@ tool, and whenever a description points at it. That pointer is not optional.
 - Treating `hardware_observed` as `model_verified`  
 - Inventing plot/waveform series or claiming a ready-made plot product exists  
 - Treating a composed plot as `model_verified` or `hardware_observed`  
-- Inventing pinouts, I²C/SPI addresses, or register values without part/describe tools  
+- Inventing pinouts, I²C/SPI addresses, or register values without a knowledge tool result or cited project/SDK/SVD/schematic fallback source
 - Invoking training / QLoRA / fine-tune tooling as part of the agent product  
 - OpenOCD-first workflows as the primary path (probe-rs remains default backend)  
-- More than **3** repair re-verifies after the first red without stopping and reporting  
+- More than **three total** edit-and-test attempts, including the initial implementation and verify; after the first red, make at most two repair patches
 
 ## Offline
 
