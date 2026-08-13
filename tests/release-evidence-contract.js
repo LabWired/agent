@@ -4,13 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
+const { validateActionRuntimePins } = require('./lib/action-runtime-pins');
 const root = path.resolve(__dirname, '..');
 let failed = false;
-
-const ACTION_MAJORS = {
-  'actions/checkout': 'v7',
-  'actions/upload-artifact': 'v7',
-};
 
 function fail(message) {
   process.stderr.write(`FAIL release evidence contract: ${message}\n`);
@@ -52,14 +48,7 @@ function requireCurrentActionMajors() {
     if (!/\.ya?ml$/.test(entry)) continue;
     const relative = path.join('.github', 'workflows', entry);
     const workflow = read(relative);
-    for (const [action, expectedMajor] of Object.entries(ACTION_MAJORS)) {
-      const references = [...workflow.matchAll(new RegExp(`${action}@(v[^\\s#]+)`, 'g'))];
-      for (const reference of references) {
-        if (reference[1] !== expectedMajor) {
-          fail(`${relative} uses ${action}@${reference[1]}; expected ${action}@${expectedMajor}`);
-        }
-      }
-    }
+    for (const violation of validateActionRuntimePins(workflow, relative)) fail(violation);
   }
 }
 
@@ -120,6 +109,15 @@ const testingDocs = read('docs/TESTING.md');
 requireText(testingDocs, 'Source-install evidence', 'docs/TESTING.md');
 requireText(testingDocs, 'Deployed-endpoint evidence', 'docs/TESTING.md');
 requireText(testingDocs, 'platform.txt', 'docs/TESTING.md');
+
+const actionRuntimeContract = childProcess.spawnSync(
+  process.execPath,
+  [path.join(root, 'tests/action-runtime-pins-contract.js')],
+  { encoding: 'utf8' },
+);
+if (actionRuntimeContract.stdout) process.stdout.write(actionRuntimeContract.stdout);
+if (actionRuntimeContract.stderr) process.stderr.write(actionRuntimeContract.stderr);
+if (actionRuntimeContract.status !== 0) fail('action runtime pins contract failed');
 
 const hostedContract = childProcess.spawnSync(
   process.execPath,

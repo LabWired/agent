@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+'use strict';
+
+const assert = require('assert');
+const { validateActionRuntimePins } = require('./lib/action-runtime-pins');
+
+const validWorkflow = `
+name: valid
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Upload
+        uses: actions/upload-artifact@v7
+`;
+
+assert.deepStrictEqual(validateActionRuntimePins(validWorkflow, 'valid.yml'), []);
+
+for (const [reference, label] of [
+  ['actions/checkout@v4', 'legacy major'],
+  ['actions/checkout@main', 'floating branch'],
+  ['actions/checkout@master', 'floating legacy branch'],
+  ['actions/upload-artifact@release-please', 'arbitrary tag'],
+  ['actions/upload-artifact@0123456789abcdef0123456789abcdef01234567', 'SHA'],
+]) {
+  const mutated = validWorkflow.replace('actions/checkout@v7', reference);
+  const violations = validateActionRuntimePins(mutated, `${label}.yml`);
+  assert.strictEqual(violations.length, 1, `${label} must be rejected`);
+  assert.match(violations[0], /expected .*@v7/);
+}
+
+const scriptTextWorkflow = `
+name: script text
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Explain migration
+        run: |
+          echo 'replace actions/checkout@v4'
+          echo 'uses: actions/upload-artifact@main'
+      - uses: actions/upload-artifact@v7
+`;
+
+assert.deepStrictEqual(validateActionRuntimePins(scriptTextWorkflow, 'script.yml'), []);
+
+const multipleJobsWorkflow = `
+jobs:
+  linux:
+    steps:
+      - uses: actions/checkout@v7
+  nested-name:
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v4
+`;
+assert.strictEqual(validateActionRuntimePins(multipleJobsWorkflow, 'jobs.yml').length, 1);
+
+process.stdout.write('ok   action-runtime-pins-contract PASS\n');
