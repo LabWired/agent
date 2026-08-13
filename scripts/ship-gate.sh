@@ -11,8 +11,24 @@ LABWIRED_SHIP_STAGE_TIMEOUT="${LABWIRED_SHIP_STAGE_TIMEOUT:-90}"
 mkdir -p "$OUT"
 rm -f "$OUT/result.txt"
 fail=0
+active_runner_pid=""
+stage_timed_out=0
 pass() { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fail=1; }
+
+cancel_gate() {
+  local signal_name="$1" signal_number="$2" runner_pid="$active_runner_pid"
+  trap '' HUP INT QUIT TERM
+  if [[ -n "$runner_pid" ]]; then
+    kill -"$signal_name" "$runner_pid" 2>/dev/null || true
+    wait "$runner_pid" 2>/dev/null || true
+  fi
+  exit $((128 + signal_number))
+}
+trap 'cancel_gate HUP 1' HUP
+trap 'cancel_gate INT 2' INT
+trap 'cancel_gate QUIT 3' QUIT
+trap 'cancel_gate TERM 15' TERM
 
 show_diagnostics() {
   local lines="$1" file
@@ -40,15 +56,23 @@ show_diagnostics() {
 }
 
 run_stage() {
-  local name="$1" log="$2" timeout_override timeout status
+  local name="$1" log="$2" timeout_override timeout timeout_marker status
   shift 2
   timeout_override="LABWIRED_SHIP_STAGE_TIMEOUT_${name//-/_}"
   timeout="${!timeout_override:-$LABWIRED_SHIP_STAGE_TIMEOUT}"
+  timeout_marker="$OUT/.${name}.timeout.$$"
+  stage_timed_out=0
   set +e
-  python3 "$ROOT/scripts/run-bounded.py" --timeout "$timeout" -- "$@" >"$log" 2>&1
+  python3 "$ROOT/scripts/run-bounded.py" --timeout "$timeout" \
+    --timeout-marker "$timeout_marker" -- "$@" >"$log" 2>&1 &
+  active_runner_pid=$!
+  wait "$active_runner_pid"
   status=$?
+  active_runner_pid=""
   set -e
-  if [[ "$status" -eq 124 ]]; then
+  if [[ -f "$timeout_marker" ]]; then
+    stage_timed_out=1
+    rm -f "$timeout_marker" || true
     printf "ship-gate: stage '%s' timeout after %ss\n" "$name" "$timeout" >>"$log" || true
     bad "$name timeout after ${timeout}s"
   fi
@@ -91,8 +115,7 @@ if [[ -n "${LABWIRED_SHIP_FIXTURE_DIR:-}" ]]; then
         pass "$stage fixture"
       fi
     else
-      status=$?
-      if [[ "$status" -ne 124 ]]; then
+      if [[ "$stage_timed_out" -eq 0 ]]; then
         bad "$stage fixture exit non-zero"
       fi
     fi
@@ -109,8 +132,7 @@ if run_stage "hosted-auth-probe" "$OUT/hosted-auth-probe.txt" \
   bash "$ROOT/tests/hosted-auth-probe.sh"; then
   pass "hosted-auth-probe"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "hosted-auth-probe"
   fi
   show_diagnostics 20 "$OUT/hosted-auth-probe.txt"
@@ -124,8 +146,7 @@ if run_stage "doctor" "$OUT/doctor.txt" "$LABWIRED" doctor; then
     pass "doctor exit 0"
   fi
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "doctor exit non-zero"
   fi
   show_diagnostics 8 "$OUT/doctor.txt"
@@ -138,8 +159,7 @@ if run_stage "whoami" "$OUT/whoami.txt" "$LABWIRED" whoami; then
     pass "whoami: $(head -3 "$OUT/whoami.txt" | tr '\n' ' ')"
   fi
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     echo "warn whoami failed (continue with local twin)"
   fi
 fi
@@ -149,8 +169,7 @@ if run_stage "assert-fixed" "$OUT/assert-fixed.txt" "$LABWIRED" assert-status mo
   "$ROOT/fixtures/gate1/artifacts/fixed.verify.json"; then
   pass "assert-status offline green"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "assert-status offline green"
   fi
 fi
@@ -158,8 +177,7 @@ if run_stage "assert-broken" "$OUT/assert-broken.txt" "$LABWIRED" assert-status 
   "$ROOT/fixtures/gate1/artifacts/broken.verify.json"; then
   bad "assert-status accepted broken as green"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     pass "assert-status rejects broken"
   fi
 fi
@@ -168,8 +186,7 @@ fi
 if run_stage "live-gate1" "$OUT/live-gate1.txt" "$ROOT/scripts/live-gate1.sh"; then
   pass "live-gate1 twin red→green"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "live-gate1"
   fi
   show_diagnostics 12 "$OUT/live-gate1.txt"
@@ -180,8 +197,7 @@ if run_stage "compose-uart" "$OUT/compose.txt" "$LABWIRED" compose uart \
   --file "$ROOT/fixtures/gate1-live/evidence/fixed/uart.log" --out "$OUT/compose.json"; then
   pass "labwired compose uart"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "labwired compose"
   fi
   show_diagnostics all "$OUT/compose.txt"
@@ -194,15 +210,13 @@ if run_stage "compose-job" "$OUT/compose-job.txt" "$LABWIRED" compose job \
     "import json;d=json.load(open('$OUT/compose-job.json')); assert d.get('ok') and (d.get('series') or d.get('markers'))"; then
     pass "labwired compose job (need→view)"
   else
-    status=$?
-    if [[ "$status" -ne 124 ]]; then
+    if [[ "$stage_timed_out" -eq 0 ]]; then
       bad "compose job empty json"
     fi
     show_diagnostics all "$OUT/compose-job.json"
   fi
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "compose job"
   fi
   show_diagnostics all "$OUT/compose-job.txt"
@@ -213,14 +227,14 @@ if run_stage "knowledge-top-parts" "$OUT/knowledge.txt" python3 \
   "$ROOT/scripts/knowledge-top-parts.py" --out "$OUT/knowledge-heroes.json"; then
   pass "knowledge-top-parts $(tail -1 "$OUT/knowledge.txt")"
 else
-  knowledge_status=$?
+  knowledge_timed_out="$stage_timed_out"
   # local-only fallback still must pass usefulness gate
   if run_stage "knowledge-top-parts-local" "$OUT/knowledge-local.txt" python3 \
     "$ROOT/scripts/knowledge-top-parts.py" --local-only --out "$OUT/knowledge-heroes.json"; then
     pass "knowledge-top-parts local-only $(tail -1 "$OUT/knowledge-local.txt")"
   else
-    local_status=$?
-    if [[ "$knowledge_status" -ne 124 && "$local_status" -ne 124 ]]; then
+    local_timed_out="$stage_timed_out"
+    if [[ "$knowledge_timed_out" -eq 0 && "$local_timed_out" -eq 0 ]]; then
       bad "knowledge-top-parts"
     fi
     show_diagnostics 20 "$OUT/knowledge.txt" "$OUT/knowledge-local.txt"
@@ -247,8 +261,7 @@ if [[ -f "$ROOT/skills/golden-path/SKILL.md" ]] \
     'bringup' "$ROOT/skills/golden-path/SKILL.md"; then
   pass "golden-path is default firmware entry"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "golden-path pack"
   fi
 fi
@@ -257,8 +270,7 @@ if run_stage "golden-path-default" "$OUT/golden-path-default.txt" grep -qi \
   "$ROOT/config/AGENTS.md" "$ROOT/config/opencode.hosted.json"; then
   pass "AGENTS/opencode default golden-path first"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "missing golden-path-first default in AGENTS/opencode"
   fi
 fi
@@ -270,8 +282,7 @@ if run_stage "skills-verify-all" "$OUT/skills-verify.txt" \
   bash "$ROOT/tests/skills-verify-all.sh"; then
   pass "skills-verify-all"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "skills-verify-all"
   fi
   show_diagnostics 10 "$OUT/skills-verify.txt"
@@ -282,8 +293,7 @@ if run_stage "import-diagram" "$OUT/import-smoke.txt" \
   bash "$ROOT/scripts/import-diagram-smoke.sh"; then
   pass "import-diagram twin_buildable"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "import-diagram"
   fi
   show_diagnostics 15 "$OUT/import-smoke.txt"
@@ -295,8 +305,7 @@ if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
     bash "$ROOT/scripts/import-multi-smoke.sh"; then
     pass "import-multi (bom/text/kicad + diagram)"
   else
-    status=$?
-    if [[ "$status" -ne 124 ]]; then
+    if [[ "$stage_timed_out" -eq 0 ]]; then
       bad "import-multi"
     fi
     show_diagnostics 20 "$OUT/import-multi-smoke.txt"
@@ -309,8 +318,7 @@ fi
 if run_stage "desk-hw" "$OUT/desk-hw-smoke.txt" bash "$ROOT/scripts/desk-hw-smoke.sh"; then
   pass "desk-hw polish"
 else
-  status=$?
-  if [[ "$status" -ne 124 ]]; then
+  if [[ "$stage_timed_out" -eq 0 ]]; then
     bad "desk-hw polish"
   fi
   show_diagnostics 20 "$OUT/desk-hw-smoke.txt"
@@ -322,8 +330,7 @@ if [[ -f "$HOME/.labwired/session/cloud.json" ]]; then
     bash "$ROOT/scripts/knowledge-mcp-smoke.sh"; then
     pass "knowledge MCP list+part+datasheet+import"
   else
-    status=$?
-    if [[ "$status" -ne 124 ]]; then
+    if [[ "$stage_timed_out" -eq 0 ]]; then
       bad "knowledge MCP"
     fi
     show_diagnostics 30 "$OUT/knowledge-mcp.txt"

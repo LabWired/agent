@@ -74,13 +74,36 @@ set -e
 assert_eq "child exit propagates" "$status" "37"
 assert_contains "child stderr forwards" "child stderr" "$TMP/nonzero.err"
 
+timeout_marker="$TMP/timeout.marker"
 set +e
-python3 "$RUNNER" --timeout 0.1 -- python3 -c 'import time; time.sleep(1)' >"$TMP/timeout.out" 2>"$TMP/timeout.err"
+python3 "$RUNNER" --timeout 0.1 --timeout-marker "$timeout_marker" -- \
+  python3 -c 'import time; time.sleep(1)' >"$TMP/timeout.out" 2>"$TMP/timeout.err"
 status=$?
 set -e
 assert_eq "timed out command exit" "$status" "124"
 assert_contains "timeout names command" "python3" "$TMP/timeout.err"
 assert_contains "timeout names duration" "0.1" "$TMP/timeout.err"
+if [[ -f "$timeout_marker" ]]; then
+  echo "ok   actual timeout creates marker"
+else
+  echo "FAIL actual timeout creates marker"
+  fail=1
+fi
+
+natural_124_marker="$TMP/natural-124.marker"
+printf 'stale\n' >"$natural_124_marker"
+set +e
+python3 "$RUNNER" --timeout 1 --timeout-marker "$natural_124_marker" -- \
+  sh -c 'exit 124' >"$TMP/natural-124.out" 2>"$TMP/natural-124.err"
+status=$?
+set -e
+assert_eq "natural child 124 propagates" "$status" "124"
+if [[ ! -e "$natural_124_marker" ]]; then
+  echo "ok   natural child 124 has no timeout marker"
+else
+  echo "FAIL natural child 124 has no timeout marker"
+  fail=1
+fi
 
 set +e
 python3 "$RUNNER" --timeout 0.1 -- python3 -c 'import signal, subprocess, sys, time; descendant = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"]); print(descendant.pid, flush=True); time.sleep(30)' >"$TMP/descendant.out" 2>"$TMP/descendant.err"

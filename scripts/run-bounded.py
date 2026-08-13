@@ -26,9 +26,10 @@ def positive_seconds(value):
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Run a command with a time limit.",
-        usage="%(prog)s --timeout SECONDS -- COMMAND [ARG ...]",
+        usage="%(prog)s --timeout SECONDS [--timeout-marker PATH] -- COMMAND [ARG ...]",
     )
     parser.add_argument("--timeout", required=True, type=positive_seconds, metavar="SECONDS")
+    parser.add_argument("--timeout-marker", metavar="PATH")
     if "--" not in argv:
         parser.error("command must follow '--'")
 
@@ -37,7 +38,7 @@ def parse_args(argv):
     command = argv[separator + 1 :]
     if not command:
         parser.error("command must not be empty")
-    return options.timeout, command
+    return options.timeout, options.timeout_marker, command
 
 
 def send_signal(process, signum):
@@ -76,7 +77,15 @@ def shell_exit_code(returncode):
 
 
 def main(argv):
-    timeout, command = parse_args(argv)
+    timeout, timeout_marker, command = parse_args(argv)
+    if timeout_marker is not None:
+        try:
+            os.unlink(timeout_marker)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            print(f"run-bounded: cannot clear timeout marker: {error}", file=sys.stderr)
+            return 2
     popen_args = {}
     if os.name == "posix":
         popen_args["start_new_session"] = True
@@ -107,6 +116,12 @@ def main(argv):
         process_holder[0] = subprocess.Popen(command, **popen_args)
         return shell_exit_code(process_holder[0].wait(timeout=timeout))
     except subprocess.TimeoutExpired:
+        if timeout_marker is not None:
+            try:
+                with open(timeout_marker, "w", encoding="utf-8") as marker_file:
+                    marker_file.write("timeout\n")
+            except OSError as error:
+                print(f"run-bounded: cannot write timeout marker: {error}", file=sys.stderr)
         stop_process(process_holder[0])
         print(
             f"run-bounded: command {command[0]!r} timed out after {timeout:g} seconds",
