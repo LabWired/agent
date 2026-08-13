@@ -1,9 +1,0 @@
-{
-  "reports": [
-    {"id":"greenfield-esp32c3","attempts":1,"compile":"not_run","twin_status":"not_run","hardware_status":"not_run","evidence_source":"none","behaviors":{"led_blink":"not_observable","serial_alive":"not_observable"},"gaps":["led_blink","serial_alive","toolchain_unavailable"]},
-    {"id":"existing-stm32f103","attempts":1,"compile":"not_run","twin_status":"not_run","hardware_status":"not_run","evidence_source":"none","layout_preserved":true,"build_command":"pio run","behaviors":{"heartbeat":"not_observable"},"gaps":["heartbeat","toolchain_unavailable"]},
-    {"id":"compile-recovery-esp32c3","attempts":1,"compile":"not_run","twin_status":"not_run","hardware_status":"not_run","evidence_source":"none","compile_history":[{"status":"not_run"}],"gaps":["compile_recovery","led_blink","serial_alive","toolchain_unavailable"]},
-    {"id":"partial-led-wifi","attempts":1,"compile":"not_run","twin_status":"not_run","hardware_status":"not_run","evidence_source":"none","behaviors":{"led_blink":"not_observable","wifi_association":"unsupported"},"gaps":["led_blink","wifi_association","toolchain_unavailable"]},
-    {"id":"unsupported-custom-board","attempts":1,"compile":"not_run","twin_status":"unsupported","hardware_status":"not_run","evidence_source":"none","claim":"not_run","requires_physical_confirmation":true,"gaps":["board_not_in_catalog","physical_confirmation","toolchain_unavailable"]}
-  ]
-}
