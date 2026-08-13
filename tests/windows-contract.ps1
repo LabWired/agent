@@ -75,7 +75,7 @@ function Invoke-Installer([string[]]$Arguments) {
 try {
   Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
   $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
-  foreach ($marker in @("LABWIRED_EVIDENCE_DIR", "agent version", "agent doctor", "capabilities.txt", "result.txt")) {
+  foreach ($marker in @("LABWIRED_EVIDENCE_DIR", "agent version", "agent doctor", "capabilities.txt", "result.txt", "PowerShellExe", "-File `$installer")) {
     Assert-True ($installSmokeText.Contains($marker)) "Windows install evidence includes $marker"
   }
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null

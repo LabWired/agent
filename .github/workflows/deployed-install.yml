@@ -19,6 +19,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
           echo FAIL >"$EVIDENCE_DIR/result.txt"
+          for file in install.txt version.txt doctor.txt capabilities.txt platform.txt; do echo not-run >"$EVIDENCE_DIR/$file"; done
           trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
           tmp="$(mktemp -d)"
           export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
@@ -28,7 +29,8 @@ jobs:
           sha256sum "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
           bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
           "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
-          grep -q "version  $EXPECTED_VERSION" "$EVIDENCE_DIR/version.txt"
+          actual_version="$(awk '/^version  / { sub(/^version  /, ""); print }' "$EVIDENCE_DIR/version.txt")"
+          test "$actual_version" = "$EXPECTED_VERSION"
           "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
           { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
           { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
@@ -52,6 +54,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
           echo FAIL >"$EVIDENCE_DIR/result.txt"
+          for file in install.txt version.txt doctor.txt capabilities.txt platform.txt; do echo not-run >"$EVIDENCE_DIR/$file"; done
           trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
           tmp="$(mktemp -d)"
           export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
@@ -61,7 +64,8 @@ jobs:
           shasum -a 256 "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
           bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
           "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
-          grep -q "version  $EXPECTED_VERSION" "$EVIDENCE_DIR/version.txt"
+          actual_version="$(awk '/^version  / { sub(/^version  /, ""); print }' "$EVIDENCE_DIR/version.txt")"
+          test "$actual_version" = "$EXPECTED_VERSION"
           "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
           { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
           { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
@@ -86,6 +90,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Path $env:EVIDENCE_DIR -Force | Out-Null
           Set-Content "$env:EVIDENCE_DIR\result.txt" FAIL
+          foreach ($file in @('install.txt', 'version.txt', 'doctor.txt', 'version-pwsh.txt', 'doctor-pwsh.txt', 'capabilities.txt', 'platform.txt')) {
+            Set-Content (Join-Path $env:EVIDENCE_DIR $file) 'not-run'
+          }
           $tmp = Join-Path $env:RUNNER_TEMP ('labwired-deployed-' + [guid]::NewGuid().ToString('n'))
           $env:USERPROFILE = Join-Path $tmp 'home'
           $env:LABWIRED_HOME = Join-Path $tmp 'prefix'
@@ -100,13 +107,24 @@ jobs:
             Tee-Object "$env:EVIDENCE_DIR\install.txt"
           $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
           $powershellExe = Join-Path $PSHOME 'powershell.exe'
+          $dispatchFailed = $false
           & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version *>&1 |
             Tee-Object "$env:EVIDENCE_DIR\version.txt"
-          if ($LASTEXITCODE -ne 0) { throw 'published version command failed' }
-          if ((Get-Content "$env:EVIDENCE_DIR\version.txt" -Raw) -notmatch "version\s+$([regex]::Escape($env:EXPECTED_VERSION))") { throw 'published version mismatch' }
+          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version command failed' }
+          $versionLines = @(Get-Content "$env:EVIDENCE_DIR\version.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
+          if ($versionLines.Count -ne 1 -or $versionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version mismatch' }
           & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor *>&1 |
             Tee-Object "$env:EVIDENCE_DIR\doctor.txt"
-          if ($LASTEXITCODE -ne 0) { throw 'published doctor command failed' }
+          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor.txt" 'ERROR: published doctor command failed' }
+          & pwsh.exe -NoProfile -File $dispatcher agent version *>&1 |
+            Tee-Object "$env:EVIDENCE_DIR\version-pwsh.txt"
+          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version command failed' }
+          $pwshVersionLines = @(Get-Content "$env:EVIDENCE_DIR\version-pwsh.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
+          if ($pwshVersionLines.Count -ne 1 -or $pwshVersionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version mismatch' }
+          & pwsh.exe -NoProfile -File $dispatcher agent doctor *>&1 |
+            Tee-Object "$env:EVIDENCE_DIR\doctor-pwsh.txt"
+          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor-pwsh.txt" 'ERROR: published pwsh doctor command failed' }
+          if ($dispatchFailed) { throw 'one or more deployed Windows dispatcher checks failed' }
           @(
             "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
             "os_architecture=$([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"

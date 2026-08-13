@@ -60,6 +60,8 @@ for (const [key, runner, command, artifact] of [
 const windows = harnessJobs.get('release-evidence-windows') || '';
 requireText(windows, 'shell: powershell', 'release-evidence-windows');
 requireText(windows, 'shell: pwsh', 'release-evidence-windows');
+if ((windows.match(/if: always\(\)/g) || []).length < 2)
+  fail('release-evidence-windows must run the second engine and upload on failure');
 
 const deployedPath = '.github/workflows/deployed-install.yml';
 const deployed = read(deployedPath);
@@ -81,6 +83,10 @@ for (const [key, runner, endpoint, artifact] of [
   requireText(job, artifact, key);
 }
 requireText(deployedJobs.get('deployed-windows') || '', 'powershell.exe', 'deployed-windows');
+requireText(deployedJobs.get('deployed-windows') || '', 'pwsh.exe', 'deployed-windows');
+requireText(deployedJobs.get('deployed-windows') || '', '-cne $env:EXPECTED_VERSION', 'deployed-windows');
+requireText(deployedJobs.get('deployed-ubuntu') || '', 'actual_version', 'deployed-ubuntu');
+requireText(deployedJobs.get('deployed-macos') || '', 'actual_version', 'deployed-macos');
 
 const installDocs = read('docs/INSTALL.md');
 requireText(installDocs, 'Native Agent support', 'docs/INSTALL.md');

@@ -36,7 +36,10 @@ trap cleanup EXIT
   uname -a
   printf 'architecture=%s\n' "$(uname -m)"
 } >"$EVIDENCE_DIR/platform.txt"
-: >"$EVIDENCE_DIR/result.txt"
+for evidence_file in install.txt version.txt doctor.txt capabilities.txt; do
+  echo 'not-run' >"$EVIDENCE_DIR/$evidence_file"
+done
+echo FAIL >"$EVIDENCE_DIR/result.txt"
 
 # Reproduce the obsolete direct-Agent shim observed in an existing user install.
 # The current installer must replace it with the product dispatcher.

@@ -118,6 +118,7 @@ jobs:
           LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\powershell
         run: ./tests/windows-install-smoke.ps1
       - name: Source install evidence (PowerShell Core)
+        if: always()
         shell: pwsh
         env:
           LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\pwsh

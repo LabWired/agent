@@ -52,6 +52,9 @@ try {
     "process_architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
     "powershell=$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
   ) | Set-Content -LiteralPath (Join-Path $EvidenceDir "platform.txt") -Encoding UTF8
+  foreach ($file in @("install.txt", "version.txt", "doctor.txt", "capabilities.txt")) {
+    Set-Content -LiteralPath (Join-Path $EvidenceDir $file) -Value "not-run" -Encoding ASCII
+  }
 
   @('@echo off', 'if "%1"=="--version" echo opencode 1.18.7', 'exit /b 0') |
     Set-Content -LiteralPath (Join-Path $TestBin "opencode.cmd") -Encoding ASCII
@@ -68,7 +71,8 @@ try {
 
   $installer = Join-Path $Root "scripts\install.ps1"
   $installStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "install.txt") -Command {
-    & $installer -Prefix $Prefix -UserBin $UserBin -AgentOnly -SkipOpenCode -SkipPathUpdate
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer `
+      -Prefix $Prefix -UserBin $UserBin -AgentOnly -SkipOpenCode -SkipPathUpdate
   }
   if ($installStatus -ne 0) { throw "Windows source install failed with code $installStatus" }
 
