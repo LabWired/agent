@@ -92,4 +92,31 @@ jobs:
       - uses: ACTIONS/UPLOAD-ARTIFACT@v7
 `, 'case-current.yml'), []);
 
+for (const [workflow, label] of [
+  ['jobs: { flow: { steps: [{ uses: actions/checkout@v4 }] } }', 'flow-style steps'],
+  [`jobs:
+  tagged:
+    steps:
+      - uses: !!str actions/checkout@v4
+`, 'tagged scalar'],
+  [`jobs:
+  anchored:
+    steps:
+      - uses: &old actions/upload-artifact@v4
+      - uses: *old
+`, 'anchored scalar'],
+  [`jobs:
+  escaped:
+    steps:
+      - uses: "actions\\x2fcheckout@v4"
+`, 'YAML hex escape'],
+]) {
+  assert.ok(validateActionRuntimePins(workflow, `${label}.yml`).length >= 1, `${label} must be rejected`);
+}
+
+assert.ok(validateActionRuntimePins('jobs: [not-a-mapping]', 'invalid-shape.yml').length >= 1,
+  'invalid workflow shape must fail closed');
+assert.ok(validateActionRuntimePins('jobs: {', 'invalid-yaml.yml').length >= 1,
+  'invalid YAML must fail closed');
+
 process.stdout.write('ok   action-runtime-pins-contract PASS\n');

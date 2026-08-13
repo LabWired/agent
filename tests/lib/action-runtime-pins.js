@@ -1,113 +1,36 @@
 'use strict';
 
+const YAML = require('yaml');
+
 const REQUIRED_ACTION_REFS = new Map([
   ['actions/checkout', 'v7'],
   ['actions/upload-artifact', 'v7'],
 ]);
 
-function indentation(line) {
-  return line.match(/^ */)[0].length;
-}
-
-function stripYamlComment(value) {
-  let quote = null;
-  for (let index = 0; index < value.length; index++) {
-    const character = value[index];
-    if (quote === "'") {
-      if (character === "'" && value[index + 1] === "'") {
-        index++;
-      } else if (character === "'") {
-        quote = null;
-      }
-      continue;
-    }
-    if (quote === '"') {
-      if (character === '\\') index++;
-      else if (character === '"') quote = null;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-    } else if (character === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
-      return value.slice(0, index);
-    }
+function mapping(value, context) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${context} must be a mapping`);
   }
   return value;
 }
 
-function yamlScalar(value) {
-  const trimmed = stripYamlComment(value).trim();
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1).replace(/''/g, "'");
-  }
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    try {
-      return JSON.parse(trimmed);
-    } catch (_) {
-      return trimmed.slice(1, -1);
-    }
-  }
-  return trimmed;
-}
-
 function workflowStepUses(source) {
+  const document = mapping(YAML.parse(source, { uniqueKeys: true }), 'workflow');
+  const jobs = mapping(document.jobs, 'jobs');
   const result = [];
-  let jobsIndent = null;
-  let stepsIndent = null;
-  let stepIndent = null;
-  let blockScalarIndent = null;
 
-  for (const line of source.split(/\r?\n/)) {
-    if (!line.trim() || /^\s*#/.test(line)) continue;
-    const indent = indentation(line);
+  for (const [jobName, jobValue] of Object.entries(jobs)) {
+    const job = mapping(jobValue, `jobs.${jobName}`);
+    if (job.steps === undefined) continue;
+    if (!Array.isArray(job.steps)) throw new Error(`jobs.${jobName}.steps must be a sequence`);
 
-    if (blockScalarIndent !== null) {
-      if (indent > blockScalarIndent) continue;
-      blockScalarIndent = null;
-    }
-
-    if (/^\s*jobs:\s*(?:#.*)?$/.test(line)) {
-      jobsIndent = indent;
-      stepsIndent = null;
-      stepIndent = null;
-      continue;
-    }
-    if (jobsIndent === null) continue;
-    if (indent <= jobsIndent) {
-      jobsIndent = null;
-      stepsIndent = null;
-      stepIndent = null;
-      continue;
-    }
-
-    if (/^\s*steps:\s*(?:#.*)?$/.test(line)) {
-      stepsIndent = indent;
-      stepIndent = null;
-      continue;
-    }
-    if (stepsIndent === null) continue;
-    if (indent <= stepsIndent) {
-      stepsIndent = null;
-      stepIndent = null;
-      continue;
-    }
-
-    const listItem = line.match(/^(\s*)-\s+(.*)$/);
-    if (listItem && indent > stepsIndent) {
-      stepIndent = indent;
-      const directUses = listItem[2].match(/^uses:\s*(.+)$/);
-      if (directUses) result.push(yamlScalar(directUses[1]));
-      const directBlock = listItem[2].match(/^run:\s*[|>][-+]?\s*(?:#.*)?$/);
-      if (directBlock) blockScalarIndent = indent;
-      continue;
-    }
-    if (stepIndent === null) continue;
-
-    const propertyIndent = stepIndent + 2;
-    if (indent === propertyIndent) {
-      const uses = line.match(/^\s*uses:\s*(.+)$/);
-      if (uses) result.push(yamlScalar(uses[1]));
-      if (/^\s*run:\s*[|>][-+]?\s*(?:#.*)?$/.test(line)) blockScalarIndent = indent;
+    for (let index = 0; index < job.steps.length; index++) {
+      const step = mapping(job.steps[index], `jobs.${jobName}.steps[${index}]`);
+      if (step.uses === undefined) continue;
+      if (typeof step.uses !== 'string') {
+        throw new Error(`jobs.${jobName}.steps[${index}].uses must be a string`);
+      }
+      result.push(step.uses);
     }
   }
 
@@ -115,8 +38,15 @@ function workflowStepUses(source) {
 }
 
 function validateActionRuntimePins(source, relative) {
+  let references;
+  try {
+    references = workflowStepUses(source);
+  } catch (error) {
+    return [`${relative} is not a valid workflow document: ${error.message}`];
+  }
+
   const violations = [];
-  for (const reference of workflowStepUses(source)) {
+  for (const reference of references) {
     const separator = reference.lastIndexOf('@');
     if (separator < 0) continue;
     const actionIdentifier = reference.slice(0, separator).toLowerCase();

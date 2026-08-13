@@ -7,8 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Install contract dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: unit + skills + public-install
         run: |
+          node tests/release-evidence-contract.js
           bash tests/harness.sh
           bash tests/skills-inventory.sh
           bash tests/public-install.sh

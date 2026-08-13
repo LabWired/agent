@@ -57,6 +57,9 @@ requireCurrentActionMajors();
 const harnessPath = '.github/workflows/harness.yml';
 const harness = read(harnessPath);
 const harnessJobs = jobs(harness, harnessPath);
+const unitJob = harnessJobs.get('unit') || '';
+requireText(unitJob, 'npm ci --ignore-scripts', 'unit');
+requireText(unitJob, 'node tests/release-evidence-contract.js', 'unit');
 for (const [key, runner, command, artifact] of [
   ['release-evidence-ubuntu', 'runs-on: ubuntu-latest', 'tests/install-smoke.sh', 'labwired-agent-source-ubuntu'],
   ['release-evidence-macos', 'runs-on: macos-14', 'tests/install-smoke.sh', 'labwired-agent-source-macos'],
