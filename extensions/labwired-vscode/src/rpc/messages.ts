@@ -35,9 +35,26 @@ export function parseChatToolCall(p: any): ChatToolCall {
   return { name: String(p?.name ?? ''), title: String(p?.title ?? p?.name ?? ''), params: p?.params ?? {} };
 }
 
-export interface ChatToolResult { name: string; code: number; detail: string; }
+/** One chunk of a running tool's output. `stream` is 'stdout' | 'stderr'. */
+export interface ChatToolDelta { name: string; stream: string; text: string; }
+export function parseChatToolDelta(p: any): ChatToolDelta {
+  return {
+    name: String(p?.name ?? ''),
+    stream: p?.stream === 'stderr' ? 'stderr' : 'stdout',
+    text: typeof p?.text === 'string' ? p.text : '',
+  };
+}
+
+/** `streamed` = the body already arrived via chat/toolDelta; do not re-render `detail`.
+ *  Absent on in-process tools (__plot__/__hw__/__debug__), which return output whole. */
+export interface ChatToolResult { name: string; code: number; detail: string; streamed: boolean; }
 export function parseChatToolResult(p: any): ChatToolResult {
-  return { name: String(p?.name ?? ''), code: Number(p?.code ?? -1), detail: String(p?.detail ?? '') };
+  return {
+    name: String(p?.name ?? ''),
+    code: Number(p?.code ?? -1),
+    detail: String(p?.detail ?? ''),
+    streamed: p?.streamed === true,
+  };
 }
 
 export function parseSerialConnectionState(p: any): boolean { return p?.open === true; }

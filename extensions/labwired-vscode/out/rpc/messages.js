@@ -7,6 +7,7 @@ exports.onNotification = onNotification;
 exports.tryRpc = tryRpc;
 exports.parseChatTextDelta = parseChatTextDelta;
 exports.parseChatToolCall = parseChatToolCall;
+exports.parseChatToolDelta = parseChatToolDelta;
 exports.parseChatToolResult = parseChatToolResult;
 exports.parseSerialConnectionState = parseSerialConnectionState;
 exports.parseSerialData = parseSerialData;
@@ -34,8 +35,20 @@ function parseChatTextDelta(p) { return typeof p?.text === 'string' ? p.text : '
 function parseChatToolCall(p) {
     return { name: String(p?.name ?? ''), title: String(p?.title ?? p?.name ?? ''), params: p?.params ?? {} };
 }
+function parseChatToolDelta(p) {
+    return {
+        name: String(p?.name ?? ''),
+        stream: p?.stream === 'stderr' ? 'stderr' : 'stdout',
+        text: typeof p?.text === 'string' ? p.text : '',
+    };
+}
 function parseChatToolResult(p) {
-    return { name: String(p?.name ?? ''), code: Number(p?.code ?? -1), detail: String(p?.detail ?? '') };
+    return {
+        name: String(p?.name ?? ''),
+        code: Number(p?.code ?? -1),
+        detail: String(p?.detail ?? ''),
+        streamed: p?.streamed === true,
+    };
 }
 function parseSerialConnectionState(p) { return p?.open === true; }
 function parseSerialData(p) { return typeof p?.data === 'string' ? p.data : ''; }

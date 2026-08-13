@@ -265,7 +265,11 @@ function expandArgv(template, params = {}) {
   );
 }
 
-function runLabwired(argv, { timeoutMs = 120_000 } = {}) {
+/** Run the Agent CLI.
+ *  onDelta(stream, text) fires per chunk as the child writes, so a long tool
+ *  (smoke ~180s, install_deps ~600s) reports progress instead of going silent
+ *  until close. Output is still accumulated for the final result. */
+function runLabwired(argv, { timeoutMs = 120_000, onDelta } = {}) {
   return new Promise((resolveRun) => {
     const bin = findLabwiredAgent();
     if (!bin) {
@@ -297,10 +301,14 @@ function runLabwired(argv, { timeoutMs = 120_000 } = {}) {
       resolveRun({ code: 124, stdout, stderr: stderr + "\n(timeout)", timedOut: true });
     }, timeoutMs);
     child.stdout?.on("data", (d) => {
-      stdout += d.toString();
+      const s = d.toString();
+      stdout += s;
+      onDelta?.("stdout", s);
     });
     child.stderr?.on("data", (d) => {
-      stderr += d.toString();
+      const s = d.toString();
+      stderr += s;
+      onDelta?.("stderr", s);
     });
     child.on("error", (err) => {
       clearTimeout(timer);
@@ -500,13 +508,23 @@ async function toolRun(params) {
     chip: "STM32F401RETx",
     ...toolParams,
   });
-  const result = await runLabwired(argv, { timeoutMs: tool.timeoutMs || 120_000 });
+  let streamed = false;
+  const result = await runLabwired(argv, {
+    timeoutMs: tool.timeoutMs || 120_000,
+    onDelta: (stream, text) => {
+      streamed = true;
+      notify("chat/toolDelta", { name: tool.name, stream, text });
+    },
+  });
   const detail =
     (result.stdout || "") + (result.stderr ? (result.stdout ? "\n" : "") + result.stderr : "");
+  // streamed=true tells the client the body already arrived as deltas, so it
+  // renders the verdict instead of appending `detail` a second time.
   notify("chat/toolResult", {
     name: tool.name,
     code: result.code,
     detail: detail.slice(0, 100_000),
+    streamed,
   });
   return {
     name: tool.name,
@@ -655,7 +673,10 @@ async function runSpecialTool(tool, params) {
       // re-enter labwired flash via nested toolRun path
       const flashTool = TOOLS.find((t) => t.name === "probe_flash");
       const argv = expandArgv(flashTool.argv, flashParams);
-      const fr = await runLabwired(argv, { timeoutMs: 120_000 });
+      const fr = await runLabwired(argv, {
+        timeoutMs: 120_000,
+        onDelta: (stream, text) => notify("chat/toolDelta", { name: "hw_promote", stream, text }),
+      });
       flashOut = (fr.stdout || "") + (fr.stderr || "");
       flashed = fr.code === 0;
     }
@@ -673,7 +694,10 @@ async function runSpecialTool(tool, params) {
         marker,
         timeout,
       });
-      const cr = await runLabwired(argv, { timeoutMs: 60_000 });
+      const cr = await runLabwired(argv, {
+        timeoutMs: 60_000,
+        onDelta: (stream, text) => notify("chat/toolDelta", { name: "hw_promote", stream, text }),
+      });
       captureOut = (cr.stdout || "") + (cr.stderr || "");
       marker_matched =
         cr.code === 0 ||

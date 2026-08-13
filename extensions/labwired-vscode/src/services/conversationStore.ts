@@ -136,6 +136,13 @@ export class ConversationStore {
     return msg;
   }
 
+  /** Persist + notify after a caller mutated a message in place (streamed text).
+   *  Streaming updates bypass append() so they do not write workspaceState per
+   *  chunk; call this once at the end of a stream to make the text durable. */
+  touch() {
+    this.emit();
+  }
+
   clearActive() {
     const tab = this.getActive();
     tab.messages = [];

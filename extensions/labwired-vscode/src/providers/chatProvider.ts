@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { LabWiredBridge } from "../cli/bridge";
-import type { ConversationStore } from "../services/conversationStore";
+import type { ChatMessage, ConversationStore } from "../services/conversationStore";
 import type { SessionState, AgentMode } from "../services/sessionState";
 import type { ToolRunner } from "../tools/runner";
 import type { ToolRunEvent } from "../tools/runner";
@@ -13,6 +13,7 @@ import {
   onNotification,
   parseChatTextDelta,
   parseChatToolCall,
+  parseChatToolDelta,
   parseChatToolResult,
 } from "../rpc/messages";
 
@@ -22,6 +23,16 @@ const MODE_LABEL: Record<AgentMode, string> = {
   debug: "Debug",
   verify: "Verify",
 };
+
+/** Repaint coalescing for streamed tool output. A chatty tool emits many
+ *  chunks per second; the webview does not need every one of them. */
+const TOOL_FLUSH_MS = 60;
+/** Keep the most recent output. Matches the server's 100k `detail` slice. */
+const TOOL_STREAM_CAP = 100_000;
+
+function tailCap(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(s.length - max);
+}
 
 /**
  * Embedder-clone chat + real LabWired tools in-panel.
@@ -52,19 +63,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       });
       onNotification(rpc, "chat/toolCall", (p) => {
         const t = parseChatToolCall(p);
-        this.store.append(
+        this.rpcToolMsg = this.store.append(
           "tool",
           `⚙ ${t.name || "tool"}\n${JSON.stringify(t.params || {}).slice(0, 800)}`
         );
+        this.rpcToolHead = this.rpcToolMsg.text;
+        this.rpcToolBody = "";
+      });
+      onNotification(rpc, "chat/toolDelta", (p) => {
+        const d = parseChatToolDelta(p);
+        if (!this.rpcToolMsg || !d.text) return;
+        this.rpcToolBody = tailCap(this.rpcToolBody + d.text, TOOL_STREAM_CAP);
+        this.rpcToolMsg.text = `${this.rpcToolHead}\n${this.rpcToolBody}`;
+        this.scheduleToolFlush();
       });
       onNotification(rpc, "chat/toolResult", (p) => {
         const r = parseChatToolResult(p);
-        this.store.append(
-          "tool",
-          `${r.code !== 0 ? "✗" : "✓"} ${r.name || "tool"}\n${r.detail}`
-        );
+        const mark = r.code !== 0 ? "✗" : "✓";
+        if (r.streamed && this.rpcToolMsg) {
+          // Body already arrived as deltas — swap the spinner for the verdict.
+          this.rpcToolMsg.text =
+            `${mark} ${r.name || "tool"}` + (this.rpcToolBody ? `\n${this.rpcToolBody}` : "");
+        } else {
+          // In-process tools (__plot__/__hw__/__debug__) return output whole.
+          this.store.append("tool", `${mark} ${r.name || "tool"}\n${r.detail}`);
+        }
+        this.endToolStream();
       });
       onNotification(rpc, "chat/done", () => {
+        this.endToolStream();
         if (this.rpcAsstMsg && !this.rpcAssistant) {
           this.rpcAsstMsg.text = "(done)";
         }
@@ -76,6 +103,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private rpcAssistant = "";
   private rpcAsstMsg: { text: string; role: string } | null = null;
+
+  // Live tool stream: the ⚙ row created by chat/toolCall, grown by chat/toolDelta.
+  private rpcToolMsg: ChatMessage | null = null;
+  private rpcToolHead = "";
+  private rpcToolBody = "";
+  private toolFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleToolFlush() {
+    if (this.toolFlushTimer) return;
+    this.toolFlushTimer = setTimeout(() => {
+      this.toolFlushTimer = null;
+      this.pushState();
+    }, TOOL_FLUSH_MS);
+  }
+
+  /** Flush the pending repaint and make the streamed text durable. */
+  private endToolStream() {
+    if (this.toolFlushTimer) {
+      clearTimeout(this.toolFlushTimer);
+      this.toolFlushTimer = null;
+    }
+    const streaming = !!this.rpcToolMsg;
+    this.rpcToolMsg = null;
+    this.rpcToolHead = "";
+    this.rpcToolBody = "";
+    // Deltas mutate the message in place and bypass the store, so persist once here.
+    if (streaming) this.store.touch();
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,

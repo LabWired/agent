@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import {
-  parseChatTextDelta, parseChatToolCall, parseChatToolResult,
+  parseChatTextDelta, parseChatToolCall, parseChatToolDelta, parseChatToolResult,
   parseSerialConnectionState, parseSerialData, parsePlotUpdate,
   parseGdbState, onNotification, tryRpc,
 } from '../../rpc/messages';
@@ -16,10 +16,29 @@ suite('rpc messages (server payload shapes)', () => {
       parseChatToolCall({ name: 'doctor', title: 'Doctor', params: { verbose: 1 } }),
       { name: 'doctor', title: 'Doctor', params: { verbose: 1 } });
   });
-  test('chat/toolResult uses {name,code,detail}', () => {
+  test('chat/toolDelta uses {name,stream,text}', () => {
     assert.deepStrictEqual(
-      parseChatToolResult({ name: 'doctor', code: 0, detail: 'ok' }),
-      { name: 'doctor', code: 0, detail: 'ok' });
+      parseChatToolDelta({ name: 'smoke', stream: 'stdout', text: 'line\n' }),
+      { name: 'smoke', stream: 'stdout', text: 'line\n' });
+    assert.deepStrictEqual(
+      parseChatToolDelta({ name: 'smoke', stream: 'stderr', text: 'warn\n' }),
+      { name: 'smoke', stream: 'stderr', text: 'warn\n' });
+  });
+  test('chat/toolDelta defaults an unknown stream to stdout, missing text to empty', () => {
+    assert.deepStrictEqual(
+      parseChatToolDelta({ name: 'smoke' }),
+      { name: 'smoke', stream: 'stdout', text: '' });
+  });
+  test('chat/toolResult uses {name,code,detail,streamed}', () => {
+    assert.deepStrictEqual(
+      parseChatToolResult({ name: 'doctor', code: 0, detail: 'ok', streamed: true }),
+      { name: 'doctor', code: 0, detail: 'ok', streamed: true });
+  });
+  test('chat/toolResult without streamed means the body was NOT sent as deltas', () => {
+    // In-process tools (__plot__/__hw__/__debug__) return output whole; the client
+    // must render `detail` for them, so the default has to be false, never true.
+    assert.strictEqual(
+      parseChatToolResult({ name: 'plot_status', code: 0, detail: 'n=2' }).streamed, false);
   });
   test('serial/connectionState uses {open}', () => {
     assert.strictEqual(parseSerialConnectionState({ open: true, port: '/dev/cu.usb1' }), true);
