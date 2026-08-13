@@ -38,6 +38,7 @@ const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const theme_1 = require("../webview/theme");
+const messages_1 = require("../rpc/messages");
 /**
  * Evidence panel — loads twin/verify JSON + runs twin/run via RPC.
  */
@@ -115,28 +116,33 @@ class EvidenceViewProvider {
         };
         this.pushEvidence();
     }
+    /** Fallback: CLI smoke via bridge — used when the server has no twin/* API. */
+    async runTwinViaCli(suite) {
+        await this.bridge.ensureCli();
+        const r = await this.bridge.run(["smoke"], { timeoutMs: 120_000 });
+        const synth = {
+            runId: `local_${Date.now().toString(36)}`,
+            ok: r.code === 0,
+            suite,
+            twin_verified: r.code === 0,
+            model_verified: false,
+            summary: (r.stdout || r.stderr || "").slice(0, 4000),
+            code: r.code,
+        };
+        await this.showTwinResult(synth);
+        return synth;
+    }
     async runTwin(suite = "smoke") {
-        if (!this.rpc?.isRunning()) {
-            // Fallback: CLI smoke via bridge
-            await this.bridge.ensureCli();
-            const r = await this.bridge.run(["smoke"], { timeoutMs: 120_000 });
-            const synth = {
-                runId: `local_${Date.now().toString(36)}`,
-                ok: r.code === 0,
-                suite,
-                twin_verified: r.code === 0,
-                model_verified: false,
-                summary: (r.stdout || r.stderr || "").slice(0, 4000),
-                code: r.code,
-            };
-            await this.showTwinResult(synth);
-            return synth;
-        }
+        if (!this.rpc?.isRunning())
+            return this.runTwinViaCli(suite);
         this.post({ type: "status", text: `Running twin/${suite}…` });
         try {
-            const result = (await this.rpc.request("twin/run", {
+            const result = (await (0, messages_1.tryRpc)(this.rpc, "twin/run", {
                 suite,
             }));
+            // Protocol 0.5.0 has no twin/* — fall back to the CLI instead of a dead view.
+            if (result === null)
+                return this.runTwinViaCli(suite);
             await this.showTwinResult(result);
             return result;
         }
@@ -145,19 +151,21 @@ class EvidenceViewProvider {
             return null;
         }
     }
-    async refreshFromRpc(runId) {
+    /** Latest twin evidence from the server, or null when it has no twin/* API. */
+    async twinEvidence(params) {
         if (!this.rpc?.isRunning())
-            return;
+            return null;
         try {
-            const ev = (await this.rpc.request("twin/evidence", {
-                runId: runId || this.lastTwin?.runId,
-            }));
-            if (ev.last)
-                await this.showTwinResult(ev.last);
+            return await (0, messages_1.tryRpc)(this.rpc, "twin/evidence", params);
         }
         catch {
-            /* */
+            return null;
         }
+    }
+    async refreshFromRpc(runId) {
+        const ev = await this.twinEvidence({ runId: runId || this.lastTwin?.runId });
+        if (ev?.last)
+            await this.showTwinResult(ev.last);
     }
     async loadPath(file) {
         try {
@@ -203,17 +211,10 @@ class EvidenceViewProvider {
         switch (msg.type) {
             case "ready": {
                 // Prefer latest twin evidence from RPC
-                if (this.rpc?.isRunning()) {
-                    try {
-                        const ev = (await this.rpc.request("twin/evidence", {}));
-                        if (ev.last) {
-                            await this.showTwinResult(ev.last);
-                            break;
-                        }
-                    }
-                    catch {
-                        /* */
-                    }
+                const ev = await this.twinEvidence({});
+                if (ev?.last) {
+                    await this.showTwinResult(ev.last);
+                    break;
                 }
                 const hints = this.bridge.findDefaultEvidenceHints();
                 if (hints[0])

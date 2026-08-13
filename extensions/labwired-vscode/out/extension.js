@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
-const path = __importStar(require("path"));
 const bridge_1 = require("./cli/bridge");
 const conversationStore_1 = require("./services/conversationStore");
 const sessionState_1 = require("./services/sessionState");
@@ -70,6 +69,7 @@ function activate(context) {
     const probeDebug = new probeGdb_1.ProbeDebugService();
     const billing = new billing_1.BillingService(context);
     billing.setBridge(bridge);
+    billing.setOutput(output);
     const agentRoot = (0, rpcClient_1.resolveAgentRoot)(context.extensionPath);
     const rpc = new rpcClient_1.RpcClient(output, agentRoot);
     const tools = new runner_1.ToolRunner(bridge, catalog, datasheets, probeDebug, billing, rpc);
@@ -421,139 +421,6 @@ function activate(context) {
                 }
                 else {
                     void vscode.window.showWarningMessage("twin/run failed");
-                }
-            },
-        ],
-        [
-            "labwired.startRtt",
-            async () => {
-                if (!rpc.isRunning()) {
-                    void vscode.window.showWarningMessage("labwired server not running");
-                    return;
-                }
-                const chip = (await vscode.window.showInputBox({
-                    prompt: "Chip for probe-rs RTT (e.g. STM32F401RETx, nRF52840_xxAA)",
-                    value: vscode.workspace.getConfiguration("labwired").get("defaultChip") ||
-                        process.env.LABWIRED_CHIP ||
-                        "",
-                    placeHolder: "Leave empty for demo stream without probe",
-                })) || "";
-                const elf = (await vscode.window.showInputBox({
-                    prompt: "ELF path (optional, for RTT control block / defmt)",
-                    value: process.env.LABWIRED_ELF || "",
-                })) || "";
-                try {
-                    const res = (await rpc.request("trace/sessionStart", {
-                        transport: chip ? "rtt" : "demo",
-                        chip: chip || undefined,
-                        elf: elf || undefined,
-                        demo: !chip,
-                    }));
-                    const ch = vscode.window.createOutputChannel("LabWired RTT");
-                    ch.show(true);
-                    ch.appendLine(res.demo
-                        ? `[demo] ${res.message || "RTT demo stream"}`
-                        : `[rtt] session ${res.sessionId} chip=${res.chip}`);
-                    const onEv = (method, params) => {
-                        if (method === "trace/eventBatch") {
-                            const events = params.events;
-                            for (const e of events || []) {
-                                ch.appendLine(e.msg || "");
-                            }
-                        }
-                        else if (method === "trace/streamStatus") {
-                            ch.appendLine(`[status] ${JSON.stringify(params)}`);
-                        }
-                    };
-                    rpc.on("notification", onEv);
-                    void vscode.window.showInformationMessage(res.demo
-                        ? `RTT demo started (${res.sessionId}) — attach probe + chip for live`
-                        : `RTT live: ${res.sessionId}`);
-                }
-                catch (e) {
-                    void vscode.window.showErrorMessage(`RTT start failed: ${e}`);
-                }
-            },
-        ],
-        [
-            "labwired.stopRtt",
-            async () => {
-                if (!rpc.isRunning())
-                    return;
-                try {
-                    await rpc.request("trace/sessionStop", {});
-                    void vscode.window.showInformationMessage("RTT/trace session stopped");
-                }
-                catch (e) {
-                    void vscode.window.showErrorMessage(String(e));
-                }
-            },
-        ],
-        [
-            "labwired.instruments",
-            async () => {
-                if (!rpc.isRunning()) {
-                    void vscode.window.showWarningMessage("labwired server not running");
-                    return;
-                }
-                const list = (await rpc.request("instrument/list", {}));
-                const pick = await vscode.window.showQuickPick((list.drivers || []).map((d) => ({
-                    label: d.label,
-                    description: d.id + (d.available === false ? " (not installed)" : ""),
-                    id: d.id,
-                })), { title: "Open instrument driver" });
-                if (!pick)
-                    return;
-                try {
-                    let resource = "";
-                    let chip = "";
-                    let profile = "";
-                    if (pick.id === "scpi") {
-                        resource =
-                            (await vscode.window.showInputBox({
-                                prompt: "SCPI resource (TCPIP0::host::5025::SOCKET)",
-                                value: process.env.LABWIRED_SCPI_RESOURCE || "TCPIP0::127.0.0.1::5025::SOCKET",
-                            })) || "";
-                        profile =
-                            (await vscode.window.showQuickPick([
-                                "generic",
-                                "rigol-ds1000z",
-                                "siglent-sds",
-                                "keysight-dsox",
-                                "rigol-dp800",
-                                "siglent-spd",
-                            ], { title: "SCPI profile" })) || "generic";
-                    }
-                    if (pick.id === "probe_rs") {
-                        chip =
-                            (await vscode.window.showInputBox({
-                                prompt: "Chip (optional)",
-                                value: process.env.LABWIRED_CHIP || "",
-                            })) || "";
-                    }
-                    const opened = (await rpc.request("instrument/open", {
-                        driver: pick.id,
-                        resource,
-                        chip,
-                        profile,
-                        force: true,
-                    }));
-                    const id = opened.session?.id;
-                    if (!id)
-                        return;
-                    const idn = (await rpc.request("instrument/scpi", {
-                        id,
-                        command: "*IDN?",
-                    }));
-                    const cap = (await rpc.request("instrument/capture", { id }));
-                    void vscode.window.showInformationMessage(`${opened.session?.label}: ${idn.response || "?"} · evidence ${cap.runId || ""}`);
-                    if (cap.evidencePath) {
-                        await evidence.loadPath(path.join(cap.evidencePath, "result.json"));
-                        await focus("labwired.evidence");
-                    }
-                }
-                catch (e) {
-                    void vscode.window.showErrorMessage(String(e));
                 }
             },
         ],
