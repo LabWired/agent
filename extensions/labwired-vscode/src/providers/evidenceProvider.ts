@@ -5,6 +5,7 @@ import type { LabWiredBridge } from "../cli/bridge";
 import type { RpcClient } from "../cli/rpcClient";
 import type { OverviewViewProvider } from "./overviewProvider";
 import { shellHtml } from "../webview/theme";
+import { tryRpc } from "../rpc/messages";
 
 type TwinResult = {
   runId?: string;
@@ -104,28 +105,32 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
     this.pushEvidence();
   }
 
+  /** Fallback: CLI smoke via bridge — used when the server has no twin/* API. */
+  private async runTwinViaCli(suite: string): Promise<TwinResult> {
+    await this.bridge.ensureCli();
+    const r = await this.bridge.run(["smoke"], { timeoutMs: 120_000 });
+    const synth: TwinResult = {
+      runId: `local_${Date.now().toString(36)}`,
+      ok: r.code === 0,
+      suite,
+      twin_verified: r.code === 0,
+      model_verified: false,
+      summary: (r.stdout || r.stderr || "").slice(0, 4000),
+      code: r.code,
+    };
+    await this.showTwinResult(synth);
+    return synth;
+  }
+
   async runTwin(suite = "smoke"): Promise<TwinResult | null> {
-    if (!this.rpc?.isRunning()) {
-      // Fallback: CLI smoke via bridge
-      await this.bridge.ensureCli();
-      const r = await this.bridge.run(["smoke"], { timeoutMs: 120_000 });
-      const synth: TwinResult = {
-        runId: `local_${Date.now().toString(36)}`,
-        ok: r.code === 0,
-        suite,
-        twin_verified: r.code === 0,
-        model_verified: false,
-        summary: (r.stdout || r.stderr || "").slice(0, 4000),
-        code: r.code,
-      };
-      await this.showTwinResult(synth);
-      return synth;
-    }
+    if (!this.rpc?.isRunning()) return this.runTwinViaCli(suite);
     this.post({ type: "status", text: `Running twin/${suite}…` });
     try {
-      const result = (await this.rpc.request("twin/run", {
+      const result = (await tryRpc(this.rpc, "twin/run", {
         suite,
-      })) as TwinResult;
+      })) as TwinResult | null;
+      // Protocol 0.5.0 has no twin/* — fall back to the CLI instead of a dead view.
+      if (result === null) return this.runTwinViaCli(suite);
       await this.showTwinResult(result);
       return result;
     } catch (e) {
@@ -134,16 +139,21 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  async refreshFromRpc(runId?: string): Promise<void> {
-    if (!this.rpc?.isRunning()) return;
+  /** Latest twin evidence from the server, or null when it has no twin/* API. */
+  private async twinEvidence(
+    params: Record<string, unknown>
+  ): Promise<{ last?: TwinResult & { evidencePath?: string }; runs?: string[] } | null> {
+    if (!this.rpc?.isRunning()) return null;
     try {
-      const ev = (await this.rpc.request("twin/evidence", {
-        runId: runId || this.lastTwin?.runId,
-      })) as { last?: TwinResult & { evidencePath?: string } };
-      if (ev.last) await this.showTwinResult(ev.last);
+      return await tryRpc(this.rpc, "twin/evidence", params);
     } catch {
-      /* */
+      return null;
     }
+  }
+
+  async refreshFromRpc(runId?: string): Promise<void> {
+    const ev = await this.twinEvidence({ runId: runId || this.lastTwin?.runId });
+    if (ev?.last) await this.showTwinResult(ev.last);
   }
 
   async loadPath(file: string): Promise<void> {
@@ -196,19 +206,10 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
     switch (msg.type) {
       case "ready": {
         // Prefer latest twin evidence from RPC
-        if (this.rpc?.isRunning()) {
-          try {
-            const ev = (await this.rpc.request("twin/evidence", {})) as {
-              last?: TwinResult;
-              runs?: string[];
-            };
-            if (ev.last) {
-              await this.showTwinResult(ev.last);
-              break;
-            }
-          } catch {
-            /* */
-          }
+        const ev = await this.twinEvidence({});
+        if (ev?.last) {
+          await this.showTwinResult(ev.last);
+          break;
         }
         const hints = this.bridge.findDefaultEvidenceHints();
         if (hints[0]) await this.loadPath(hints[0]);

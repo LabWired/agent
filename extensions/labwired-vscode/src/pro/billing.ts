@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import { loadCloudSession } from "../cli/cloudSession";
 import type { LabWiredBridge } from "../cli/bridge";
 import type { RpcClient } from "../cli/rpcClient";
+import { tryRpc } from "../rpc/messages";
 
 export type BillingStatus = {
   loggedIn: boolean;
@@ -24,15 +25,45 @@ const SECRET_KEY = "labwired.authToken";
 export class BillingService {
   private rpc?: RpcClient;
   private bridge?: LabWiredBridge;
+  private output?: vscode.OutputChannel;
+  private noCloudApiLogged = false;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {}
 
   setRpc(rpc: RpcClient | undefined) {
     this.rpc = rpc;
+    this.noCloudApiLogged = false;
   }
 
   setBridge(bridge: LabWiredBridge | undefined) {
     this.bridge = bridge;
+  }
+
+  setOutput(output: vscode.OutputChannel | undefined) {
+    this.output = output;
+  }
+
+  /** Cloud RPC is optional: protocol 0.5.0 has no auth/*, entitlement/*, project/*.
+   *  null = "no cloud API here" → caller degrades to signed-out / local mode.
+   *  Never throws into the UI. */
+  private async cloudRpc(method: string, params: unknown = {}): Promise<any | null> {
+    if (!this.rpc?.isRunning()) return null;
+    try {
+      const res = await tryRpc(this.rpc, method, params);
+      if (res === null) this.logNoCloudApi(method);
+      return res;
+    } catch (e) {
+      this.output?.appendLine(`billing: ${method} failed — ${String(e)}`);
+      return null;
+    }
+  }
+
+  private logNoCloudApi(method: string) {
+    if (this.noCloudApiLogged) return;
+    this.noCloudApiLogged = true;
+    this.output?.appendLine(
+      `billing: agent has no cloud API (${method} not found, protocol 0.5.0) — local mode. Use \`labwired login\` for the hosted session.`
+    );
   }
 
   appUrl(path = ""): string {
@@ -103,13 +134,7 @@ export class BillingService {
 
     if (choice.id === "free") {
       await this.setToken(undefined);
-      if (this.rpc?.isRunning()) {
-        try {
-          await this.rpc.request("auth/logout", {});
-        } catch {
-          /* */
-        }
-      }
+      await this.cloudRpc("auth/logout");
       void vscode.window.showInformationMessage("Using free local agent");
       return;
     }
@@ -117,26 +142,30 @@ export class BillingService {
     if (choice.id === "dev") {
       const token = `dev_${Date.now().toString(36)}`;
       await this.setToken(token);
-      if (this.rpc?.isRunning()) {
-        await this.rpc.request("auth/loginWithToken", {
-          token,
-          email: "example@example.com",
-          plan: "pro",
-        });
-        await this.ensureProject();
-      }
+      const ok = await this.cloudRpc("auth/loginWithToken", {
+        token,
+        email: "example@example.com",
+        plan: "pro",
+      });
+      if (ok) await this.ensureProject();
       void vscode.window.showInformationMessage("Local Pro active (dev token)");
       return;
     }
 
     if (choice.id === "device" && this.rpc?.isRunning()) {
-      const started = (await this.rpc.request("auth/startDeviceCode", {})) as {
+      const started = (await this.cloudRpc("auth/startDeviceCode")) as {
         userCode?: string;
         deviceCode?: string;
         verificationUri?: string;
         autoCompleted?: boolean;
         message?: string;
-      };
+      } | null;
+      if (!started) {
+        void vscode.window.showWarningMessage(
+          "This agent has no device-code API — run `labwired login` in the terminal instead."
+        );
+        return;
+      }
       if (started.autoCompleted) {
         void vscode.window.showInformationMessage(started.message || "Pro login OK");
         await this.ensureProject();
@@ -159,13 +188,15 @@ export class BillingService {
       });
       if (token) {
         await this.setToken(token.trim());
-        await this.rpc.request("auth/completeDeviceCode", {
+        const done = await this.cloudRpc("auth/completeDeviceCode", {
           token: token.trim(),
           email: "example@example.com",
           plan: "pro",
         });
-        await this.ensureProject();
-        void vscode.window.showInformationMessage("Pro login complete");
+        if (done) await this.ensureProject();
+        void vscode.window.showInformationMessage(
+          done ? "Pro login complete" : "Token saved locally (agent has no cloud API)"
+        );
       }
       return;
     }
@@ -179,13 +210,11 @@ export class BillingService {
       });
       if (token) {
         await this.setToken(token.trim());
-        if (this.rpc?.isRunning()) {
-          await this.rpc.request("auth/loginWithToken", {
-            token: token.trim(),
-            plan: "pro",
-          });
-          await this.ensureProject();
-        }
+        const ok = await this.cloudRpc("auth/loginWithToken", {
+          token: token.trim(),
+          plan: "pro",
+        });
+        if (ok) await this.ensureProject();
       }
       return;
     }
@@ -198,13 +227,11 @@ export class BillingService {
       });
       if (token) {
         await this.setToken(token.trim());
-        if (this.rpc?.isRunning()) {
-          await this.rpc.request("auth/loginWithToken", {
-            token: token.trim(),
-            plan: "pro",
-          });
-          await this.ensureProject();
-        }
+        const ok = await this.cloudRpc("auth/loginWithToken", {
+          token: token.trim(),
+          plan: "pro",
+        });
+        if (ok) await this.ensureProject();
         void vscode.window.showInformationMessage("Token saved");
       }
     }
@@ -213,12 +240,13 @@ export class BillingService {
   async ensureProject(): Promise<void> {
     if (!this.rpc?.isRunning()) return;
     try {
-      const list = (await this.rpc.request("project/list", {})) as {
+      const list = (await this.cloudRpc("project/list")) as {
         projects?: { id: string; name: string }[];
-      };
+      } | null;
+      if (!list) return; // no cloud API — nothing to select, stay local
       const projects = list.projects || [];
       if (!projects.length) {
-        await this.rpc.request("project/create", { name: "Default project" });
+        await this.cloudRpc("project/create", { name: "Default project" });
         return;
       }
       const pick = await vscode.window.showQuickPick(
@@ -238,9 +266,9 @@ export class BillingService {
         const name =
           (await vscode.window.showInputBox({ prompt: "Project name" })) ||
           "New project";
-        await this.rpc.request("project/create", { name });
+        await this.cloudRpc("project/create", { name });
       } else {
-        await this.rpc.request("project/select", {
+        await this.cloudRpc("project/select", {
           projectId: pick.id,
           name: pick.name || pick.label,
         });
@@ -260,13 +288,7 @@ export class BillingService {
 
   async logout(): Promise<void> {
     await this.setToken(undefined);
-    if (this.rpc?.isRunning()) {
-      try {
-        await this.rpc.request("auth/logout", {});
-      } catch {
-        /* */
-      }
-    }
+    await this.cloudRpc("auth/logout");
     void vscode.window.showInformationMessage("Logged out");
   }
 
@@ -285,35 +307,29 @@ export class BillingService {
       };
     }
 
-    if (this.rpc?.isRunning()) {
-      try {
-        const a = (await this.rpc.request("auth/status", {})) as {
-          loggedIn?: boolean;
-          email?: string;
-          plan?: string;
-          project?: { id?: string; name?: string };
-        };
-        const ent = (await this.rpc.request("entitlement/status", {})) as {
-          pro?: boolean;
-          features?: string[];
-          limits?: { hostedModel?: boolean };
-        };
-        if (a.loggedIn) {
-          return {
-            loggedIn: true,
-            email: a.email,
-            plan: (a.plan as BillingStatus["plan"]) || "pro",
-            projectId: a.project?.id,
-            projectName: a.project?.name,
-            usageNote: ent.pro
-              ? `Pro · project ${a.project?.name || a.project?.id || "(none)"} · hostedModel=${!!ent.limits?.hostedModel}`
-              : "Logged in",
-            raw: { a, ent },
-          };
-        }
-      } catch {
-        /* fall through */
-      }
+    const a = (await this.cloudRpc("auth/status")) as {
+      loggedIn?: boolean;
+      email?: string;
+      plan?: string;
+      project?: { id?: string; name?: string };
+    } | null;
+    if (a?.loggedIn) {
+      const ent = ((await this.cloudRpc("entitlement/status")) || {}) as {
+        pro?: boolean;
+        features?: string[];
+        limits?: { hostedModel?: boolean };
+      };
+      return {
+        loggedIn: true,
+        email: a.email,
+        plan: (a.plan as BillingStatus["plan"]) || "pro",
+        projectId: a.project?.id,
+        projectName: a.project?.name,
+        usageNote: ent.pro
+          ? `Pro · project ${a.project?.name || a.project?.id || "(none)"} · hostedModel=${!!ent.limits?.hostedModel}`
+          : "Logged in",
+        raw: { a, ent },
+      };
     }
 
     const token = await this.getToken();
