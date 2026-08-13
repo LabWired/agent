@@ -46,7 +46,7 @@ Checks run, observations, coverage, and resulting verification status.
 
 Physical checks, unsupported behavior, and remaining risks.
 
-End with one overall result: `verified`, `partially verified`, `compiled only`, `failed`, or `blocked`.
+End with one overall result. Use `verified` only when every requested behavior has passing `labwired_verify` / `model_verified` evidence. If some behaviors are only observed or have coverage gaps, cap the result at `partially verified`. If compilation passes but no twin behavior was checked, use `compiled only`. Use `failed` for failures and `blocked` for blockers.
 
 Smoke scenarios:
 
