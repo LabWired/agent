@@ -23,6 +23,7 @@ run() {
 run "harness"           "$ROOT/tests/harness.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "skills-verify-all" "$ROOT/tests/skills-verify-all.sh"
+run "develop-skill"     "$ROOT/tests/develop-skill.sh"
 run "hosted-config"     "$ROOT/tests/hosted-config.sh"
 run "hosted-auth-probe" "$ROOT/tests/hosted-auth-probe.sh"
 run "agents-tool-search" "$ROOT/tests/agents-tool-search.sh"
