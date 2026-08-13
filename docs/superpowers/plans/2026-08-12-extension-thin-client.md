@@ -604,7 +604,7 @@ In `ext/src/extension.ts`, find `new ToolRunner(...)` and pass the existing `rpc
 - [ ] **Step 4: Run tests + contract**
 
 Run: `npm run test:unit && npm run contract`
-Expected: all PASS (14 tests — 9 messages + 5 runner); contract OK baseline 17.
+Expected: all PASS (15 tests — 9 messages + 6 runner); contract OK baseline 17.
 
 - [ ] **Step 5: Commit**
 
@@ -803,7 +803,7 @@ cd /Users/andrii/projects/labwired-agent
 ./tests/rpc-contract.sh                       # PASS
 cd extensions/labwired-vscode
 npm run compile                               # clean
-npm run test:unit                             # 14 tests pass
+npm run test:unit                             # 15 tests pass
 npm run contract                              # baseline 0, OK
 npm run package                               # VSIX built
 unzip -l labwired-vscode.vsix | grep rpc-server.mjs
@@ -841,7 +841,7 @@ In `/Users/andrii/projects/labwired-cursor/docs/superpowers/plans/2026-07-31-gap
 
 ## Definition of Done (Part 6)
 
-- [ ] `npm run compile`, `npm run test:unit` (14 tests), `npm run contract` (baseline 0) all green
+- [ ] `npm run compile`, `npm run test:unit` (15 tests), `npm run contract` (baseline 0) all green
 - [ ] `tests/rpc-contract.sh` wired into `tests/all.sh`, green
 - [ ] VSIX contains `server/rpc-server.mjs` + `server/AGENT_VERSION`
 - [ ] Manual smoke: `/doctor`, chat stream, chat stop, plan-mode flash refusal — all honest
