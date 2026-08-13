@@ -8,12 +8,15 @@ class ToolRunner {
     datasheets;
     debug;
     billing;
-    constructor(bridge, catalog, datasheets, debug, billing) {
+    rpc;
+    serverTools = null;
+    constructor(bridge, catalog, datasheets, debug, billing, rpc) {
         this.bridge = bridge;
         this.catalog = catalog;
         this.datasheets = datasheets;
         this.debug = debug;
         this.billing = billing;
+        this.rpc = rpc;
     }
     listCatalog() {
         return (0, registry_1.toolsHelpText)();
@@ -122,7 +125,51 @@ class ToolRunner {
             return err(name, "Internal tool not handled in runner");
         }
         const argv = (0, registry_1.resolveArgv)(tool, params).filter((a) => a !== "");
+        // Prefer the running server: plan/verify-mode gates and flash confirm
+        // gate live server-side. CLI below stays as explicit fallback.
+        if (await this.rpcSupports(name)) {
+            try {
+                const r = (await this.rpc.request("tool/run", { name, params }));
+                const output = [r.stdout, r.stderr].filter(Boolean).join("\n").trim() ||
+                    "(no output)";
+                return {
+                    tool: r.name,
+                    title: tool.title,
+                    argv,
+                    status: r.code === 0 ? "ok" : "error",
+                    output: output.slice(0, 12000),
+                    code: r.code,
+                };
+            }
+            catch (e) {
+                // Mode gates / confirm gates arrive as JSON-RPC errors — surface honestly.
+                const err = e;
+                return {
+                    tool: name,
+                    title: tool.title,
+                    argv,
+                    status: "error",
+                    output: String(err?.message ?? e),
+                    code: typeof err?.code === "number" ? err.code : -1,
+                };
+            }
+        }
         return this.exec(tool, argv);
+    }
+    /** True when the server is up and exposes this tool name (cached tool/list). */
+    async rpcSupports(tool) {
+        if (!this.rpc || !this.rpc.isRunning())
+            return false;
+        if (!this.serverTools) {
+            try {
+                const res = (await this.rpc.request("tool/list"));
+                this.serverTools = new Set(res.tools.map((t) => t.name));
+            }
+            catch {
+                return false;
+            }
+        }
+        return this.serverTools.has(tool);
     }
     async tryRoute(message) {
         const route = (0, registry_1.routeMessage)(message);

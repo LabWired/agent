@@ -70,10 +70,10 @@ function activate(context) {
     const probeDebug = new probeGdb_1.ProbeDebugService();
     const billing = new billing_1.BillingService(context);
     billing.setBridge(bridge);
-    const tools = new runner_1.ToolRunner(bridge, catalog, datasheets, probeDebug, billing);
-    const agent = new session_1.AgentSession(catalog, tools);
     const agentRoot = (0, rpcClient_1.resolveAgentRoot)(context.extensionPath);
     const rpc = new rpcClient_1.RpcClient(output, agentRoot);
+    const tools = new runner_1.ToolRunner(bridge, catalog, datasheets, probeDebug, billing, rpc);
+    const agent = new session_1.AgentSession(catalog, tools);
     bridge.refresh();
     const plot = new plotProvider_1.PlotViewProvider(context.extensionUri);
     const overview = new overviewProvider_1.OverviewViewProvider(context.extensionUri, bridge, catalog);
