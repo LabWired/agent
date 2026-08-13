@@ -846,3 +846,23 @@ In `/Users/andrii/projects/labwired-cursor/docs/superpowers/plans/2026-07-31-gap
 - [ ] VSIX contains `server/rpc-server.mjs` + `server/AGENT_VERSION`
 - [ ] Manual smoke: `/doctor`, chat stream, chat stop, plan-mode flash refusal — all honest
 - [ ] Gap worklist Part 6 marked DONE
+
+---
+
+## Execution record (2026-08-13)
+
+| Task | Commit | Evidence |
+|------|--------|----------|
+| 1 Unbreak build | `44dc8ed` | `tsc -p . --noEmit` exit 0 |
+| 2 Contract checker | `69b27ef` | red with drift, green with baseline |
+| 3 Notification contract | `50f38dd`, `0393ea0` | 9 message unit tests |
+| 4 ToolRunner via `tool/run` | `c81faf4`, `769ed43` | 15 unit tests (6 runner) |
+| 5 Dead RPC removed | `abb3e0d` | `contract`: 10 calls, 7 subs, **baseline 0** |
+| 6 Server bundled in VSIX | `5eb51bd` | VSIX lists `server/rpc-server.mjs` + `AGENT_VERSION`; bundled copy byte-identical to repo root and answers `initialize` → `0.5.0` |
+| 7 Gate wired into CI | `f131d18` | `tests/rpc-contract.sh` in `tests/all.sh` |
+
+Gate is non-vacuous: appending `rpc.request("fake/method")` to `src/extension.ts` makes
+`./tests/rpc-contract.sh` print `DRIFT call: fake/method` and exit 1; removing it returns exit 0.
+
+**Not done:** Task 7 Step 4 (manual Cursor sideload smoke — human, desk).
+Worklist Part 6 flipped to DONE in `labwired-cursor` `f006a88f`, with the manual smoke noted as pending.
