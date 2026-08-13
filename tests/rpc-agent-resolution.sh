@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+node "$ROOT/tests/rpc-agent-launcher.mjs"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/server" "$TMP/path" "$TMP/home/.labwired/agent/bin"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
+cp "$ROOT/server/agent-launcher.mjs" "$TMP/server/agent-launcher.mjs"
 
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agent-path-ok"' >"$TMP/path/labwired-agent"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "CORE MUST NOT RUN" >&2' 'exit 42' >"$TMP/path/labwired"

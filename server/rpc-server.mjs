@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readdir } from "node:fs/promises";
+import { resolveAgentLauncher } from "./agent-launcher.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
@@ -115,22 +116,14 @@ function onData(chunk) {
 // ——— labwired resolution ———
 
 function findLabwiredAgent() {
-  const windows = process.platform === "win32";
-  const sibling = join(AGENT_ROOT, "bin", windows ? "labwired.cmd" : "labwired-agent");
-  const onPath = whichSync(windows ? "labwired" : "labwired-agent");
-  const legacy = windows
-    ? join(homedir(), ".labwired", "bin", "labwired.cmd")
-    : join(homedir(), ".labwired", "agent", "bin", "labwired-agent");
-  const candidates = [
-    process.env.LABWIRED_AGENT_CLI_PATH,
-    sibling,
-    onPath,
-    legacy,
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return null;
+  return resolveAgentLauncher({
+    platform: process.platform,
+    env: process.env,
+    agentRoot: AGENT_ROOT,
+    home: homedir(),
+    exists: existsSync,
+    which: whichSync,
+  });
 }
 
 /**
@@ -272,8 +265,8 @@ function expandArgv(template, params = {}) {
 
 function runLabwired(argv, { timeoutMs = 120_000 } = {}) {
   return new Promise((resolveRun) => {
-    const bin = findLabwiredAgent();
-    if (!bin) {
+    const launcher = findLabwiredAgent();
+    if (!launcher) {
       resolveRun({
         code: 127,
         stdout: "",
@@ -281,7 +274,7 @@ function runLabwired(argv, { timeoutMs = 120_000 } = {}) {
       });
       return;
     }
-    const child = spawn(bin, argv, {
+    const child = spawn(launcher.command, [...launcher.argsPrefix, ...argv], {
       cwd: state.workspacePath,
       env: {
         ...process.env,
@@ -389,7 +382,7 @@ function initialize(params) {
     serverName: "labwired-agent",
     serverVersion: "0.5.0",
     agentRoot: AGENT_ROOT,
-    labwiredPath: labwired,
+    labwiredPath: labwired?.path || null,
     capabilities: {
       tools: true,
       chat: true,
