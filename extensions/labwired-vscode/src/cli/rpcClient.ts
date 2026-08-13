@@ -13,6 +13,9 @@ type RpcMsg = {
   error?: { code: number; message: string };
 };
 
+/** RPC protocol this client is written against (server/rpc-server.mjs). */
+export const PROTOCOL_VERSION = "0.5.0";
+
 /**
  * Embedder-style thin client: spawns `labwired server` (JSON-RPC stdio).
  */
@@ -97,7 +100,7 @@ export class RpcClient extends EventEmitter {
     });
 
     const init = (await this.request("initialize", {
-      protocolVersion: "0.5.0",
+      protocolVersion: PROTOCOL_VERSION,
       workspacePath,
       clientName: "labwired-vscode",
       clientVersion: "0.6.0",
@@ -105,6 +108,13 @@ export class RpcClient extends EventEmitter {
     this.output.appendLine(
       `RPC: protocol ${init?.protocolVersion || "?"} caps=${JSON.stringify(init?.capabilities || {})}`
     );
+    // The client is pinned to 0.5.0 (see src/rpc/messages.ts). A mismatch is not
+    // fatal — tryRpc degrades optional methods — but it must be visible.
+    if (init?.protocolVersion !== PROTOCOL_VERSION) {
+      this.output.appendLine(
+        `[rpc] WARNING: server protocol ${init?.protocolVersion || "?"} != client ${PROTOCOL_VERSION} — some features may degrade`
+      );
+    }
     // Auto-confirm destructive tools from UI unless user disables later
     try {
       await this.request("autoConfirm/set", { enabled: true });
