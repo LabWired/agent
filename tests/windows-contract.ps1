@@ -14,6 +14,7 @@ $Shim = Join-Path $ShimDir "labwired.cmd"
 $ArgsFile = Join-Path $TempRoot "args.txt"
 $Installer = Join-Path $Root "scripts\install.ps1"
 $OriginalPath = $env:Path
+$InstallSmoke = Join-Path $Root "tests\windows-install-smoke.ps1"
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
   Join-Path $PSHOME "pwsh.exe"
 } else {
@@ -72,6 +73,11 @@ function Invoke-Installer([string[]]$Arguments) {
 }
 
 try {
+  Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
+  $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
+  foreach ($marker in @("LABWIRED_EVIDENCE_DIR", "agent version", "agent doctor", "capabilities.txt", "result.txt")) {
+    Assert-True ($installSmokeText.Contains($marker)) "Windows install evidence includes $marker"
+  }
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)

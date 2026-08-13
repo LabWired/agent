@@ -238,9 +238,7 @@ function Cmd-Doctor {
   }
 
   $skills = @(
-    "verify-firmware", "diagnose-firmware", "inspect-evidence",
-    "board-bringup", "scaffold-firmware", "report-evidence", "flash-firmware",
-    "firmware-repair-loop", "hw-promote"
+    "golden-path", "bringup", "prove", "observe", "desk-hw", "import-circuit"
   )
   foreach ($s in $skills) {
     $p = Join-Path $cfg "skills\$s\SKILL.md"
