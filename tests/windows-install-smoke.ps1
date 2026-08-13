@@ -10,6 +10,10 @@ $Prefix = Join-Path $SessionRoot "prefix"
 $UserBin = Join-Path $SessionRoot "user-bin"
 $ConfigDir = Join-Path $SessionRoot "config"
 $TestBin = Join-Path $SessionRoot "test-bin"
+$LifecycleFile = Join-Path $EvidenceDir "lifecycle.txt"
+$OwnershipSnapshot = Join-Path $SessionRoot "installed-ownership.manifest"
+$LifecyclePhase = "not-started"
+$LifecycleStarted = $false
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
   Join-Path $PSHOME "pwsh.exe"
 } else {
@@ -28,6 +32,25 @@ function Write-Result([string]$Value) {
   Set-Content -LiteralPath (Join-Path $EvidenceDir "result.txt") -Value $Value -Encoding ASCII
 }
 
+function Start-LifecyclePhase([string]$Name) {
+  $script:LifecyclePhase = $Name
+  if (-not $script:LifecycleStarted) {
+    [IO.File]::WriteAllText($LifecycleFile, "", (New-Object Text.UTF8Encoding($false)))
+    $script:LifecycleStarted = $true
+  }
+  Add-Content -LiteralPath $LifecycleFile -Value "phase=$Name" -Encoding ASCII
+}
+
+function Complete-LifecyclePhase([string]$Name) {
+  if ($Name -ne $script:LifecyclePhase) {
+    throw "lifecycle phase mismatch: active=$($script:LifecyclePhase) passed=$Name"
+  }
+  if ($env:LABWIRED_TEST_FAIL_PHASE -eq $Name) {
+    throw "injected lifecycle failure: $Name"
+  }
+  Add-Content -LiteralPath $LifecycleFile -Value "$Name=PASS" -Encoding ASCII
+}
+
 function Invoke-Captured {
   param([scriptblock]$Command, [string]$OutputPath)
   $oldPreference = $ErrorActionPreference
@@ -43,8 +66,107 @@ function Invoke-Captured {
   return [int]$status
 }
 
+function Test-JsonProperty([object]$Object, [string]$Name) {
+  return ($null -ne $Object -and $null -ne $Object.PSObject.Properties[$Name])
+}
+
+function Assert-OwnedConfigRemoved([string]$ConfigRoot, [string]$ManifestPath) {
+  $configPath = Join-Path $ConfigRoot "opencode.json"
+  $config = if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+    Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+  } else {
+    [pscustomobject]@{}
+  }
+
+  foreach ($entry in @(Get-Content -LiteralPath $ManifestPath)) {
+    if (-not $entry) { continue }
+    if ($entry -eq "opencode.json") { continue }
+    if ($entry.StartsWith("json-file:tui.json:")) {
+      $property = $entry.Substring("json-file:tui.json:".Length)
+      $tui = Get-Content -LiteralPath (Join-Path $ConfigRoot "tui.json") -Raw | ConvertFrom-Json
+      if (Test-JsonProperty $tui $property) { throw "owned TUI JSON entry remains: $property" }
+      continue
+    }
+    if ($entry -eq "json-array:tui.json:plugin") {
+      $tui = Get-Content -LiteralPath (Join-Path $ConfigRoot "tui.json") -Raw | ConvertFrom-Json
+      if (@($tui.plugin) -contains "./plugins/labwired-brand.tsx") {
+        throw "owned TUI plugin remains"
+      }
+      continue
+    }
+    if ($entry.StartsWith("json-array-value:opencode.json:")) {
+      $parts = @($entry -split ":", 4)
+      $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+      if (@($config.PSObject.Properties[$parts[2]].Value) -contains $parts[3]) {
+        throw "owned config array value remains: $($parts[2])=$($parts[3])"
+      }
+      continue
+    }
+    if ($entry.StartsWith("json:")) {
+      $jsonPath = $entry.Substring(5)
+      $parts = @($jsonPath -split "\.")
+      if (-not $jsonPath -or @($parts | Where-Object { -not $_ }).Count -gt 0) {
+        throw "invalid owned JSON entry: $entry"
+      }
+      $node = $config
+      $found = $true
+      foreach ($part in $parts) {
+        if (-not (Test-JsonProperty $node $part)) {
+          $found = $false
+          break
+        }
+        $node = $node.PSObject.Properties[$part].Value
+      }
+      if ($found) { throw "owned JSON entry remains: $jsonPath" }
+      continue
+    }
+
+    if ([IO.Path]::IsPathRooted($entry) -or @($entry -split "[\\/]" | Where-Object { $_ -in @("", ".", "..") }).Count -gt 0) {
+      throw "invalid owned file entry: $entry"
+    }
+    $ownedPath = Join-Path $ConfigRoot ($entry -replace "/", "\")
+    if (Test-Path -LiteralPath $ownedPath) { throw "owned file remains: $entry" }
+  }
+}
+
+function Assert-UserStatePreserved {
+  $prefixSentinel = Join-Path $Prefix "user-data\lifecycle-sentinel.txt"
+  $configSentinel = Join-Path $ConfigDir "lifecycle-sentinel.txt"
+  if ((Get-Content -LiteralPath $prefixSentinel -Raw).Trim() -ne "keep-prefix-data") {
+    throw "prefix sentinel was not preserved"
+  }
+  if ((Get-Content -LiteralPath $configSentinel -Raw).Trim() -ne "keep-user-config") {
+    throw "config sentinel was not preserved"
+  }
+  $config = Get-Content -LiteralPath (Join-Path $ConfigDir "opencode.json") -Raw | ConvertFrom-Json
+  if ($config.user_lifecycle.sentinel -ne "keep-user-config" -or $config.user_setting -ne "unrelated-value") {
+    throw "unrelated user config was not preserved"
+  }
+  $tui = Get-Content -LiteralPath (Join-Path $ConfigDir "tui.json") -Raw | ConvertFrom-Json
+  if ($tui.user_tui -ne "unrelated-value" -or @($tui.plugin) -notcontains "./plugins/user-plugin.tsx") {
+    throw "unrelated user TUI config was not preserved"
+  }
+}
+
+function Assert-AgentConfigPresent {
+  $config = Get-Content -LiteralPath (Join-Path $ConfigDir "opencode.json") -Raw | ConvertFrom-Json
+  if (-not (Test-JsonProperty $config "model")) { throw "Agent model config is missing" }
+  if (-not (Test-JsonProperty $config "default_agent")) { throw "Agent default_agent config is missing" }
+  if (-not (Test-JsonProperty $config "agent")) { throw "Agent persona config is missing" }
+  if (-not (Test-JsonProperty $config "mcp") -or -not (Test-JsonProperty $config.mcp "labwired")) {
+    throw "Agent MCP config is missing"
+  }
+  if (-not (Test-JsonProperty $config "provider") -or -not (Test-JsonProperty $config.provider "labwired-local")) {
+    throw "Agent provider config is missing"
+  }
+  $tui = Get-Content -LiteralPath (Join-Path $ConfigDir "tui.json") -Raw | ConvertFrom-Json
+  if ($tui.theme -ne "labwired" -or @($tui.plugin) -notcontains "./plugins/labwired-brand.tsx") {
+    throw "Agent TUI config is missing"
+  }
+}
+
 try {
-  New-Item -ItemType Directory -Path $EvidenceDir, $TestBin -Force | Out-Null
+  New-Item -ItemType Directory -Path $EvidenceDir, $TestBin, $ConfigDir, (Join-Path $Prefix "user-data") -Force | Out-Null
   Write-Result "FAIL"
   @(
     "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
@@ -52,7 +174,7 @@ try {
     "process_architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
     "powershell=$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
   ) | Set-Content -LiteralPath (Join-Path $EvidenceDir "platform.txt") -Encoding UTF8
-  foreach ($file in @("install.txt", "version.txt", "doctor.txt", "capabilities.txt")) {
+  foreach ($file in @("install.txt", "version.txt", "doctor.txt", "lifecycle.txt", "capabilities.txt")) {
     Set-Content -LiteralPath (Join-Path $EvidenceDir $file) -Value "not-run" -Encoding ASCII
   }
 
@@ -69,45 +191,184 @@ try {
   $env:Path = "$TestBin;$UserBin;$($Original.Path)"
   New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
 
+  Set-Content -LiteralPath (Join-Path $Prefix "user-data\lifecycle-sentinel.txt") -Value "keep-prefix-data" -Encoding ASCII
+  Set-Content -LiteralPath (Join-Path $ConfigDir "lifecycle-sentinel.txt") -Value "keep-user-config" -Encoding ASCII
+  [IO.File]::WriteAllText(
+    (Join-Path $ConfigDir "opencode.json"),
+    '{"user_lifecycle":{"sentinel":"keep-user-config"},"user_setting":"unrelated-value"}',
+    (New-Object Text.UTF8Encoding($false))
+  )
+  [IO.File]::WriteAllText(
+    (Join-Path $ConfigDir "tui.json"),
+    '{"theme":"system","plugin":["./plugins/user-plugin.tsx"],"user_tui":"unrelated-value"}',
+    (New-Object Text.UTF8Encoding($false))
+  )
+
   $installer = Join-Path $Root "scripts\install.ps1"
+  $installArgs = @("-Prefix", $Prefix, "-UserBin", $UserBin, "-AgentOnly", "-SkipOpenCode", "-SkipPathUpdate")
+  Start-LifecyclePhase "initial-install"
   $installStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "install.txt") -Command {
-    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer `
-      -Prefix $Prefix -UserBin $UserBin -AgentOnly -SkipOpenCode -SkipPathUpdate
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer @installArgs
   }
   if ($installStatus -ne 0) { throw "Windows source install failed with code $installStatus" }
-
   $dispatcher = Join-Path $Prefix "bin\labwired.ps1"
+  $cmd = Join-Path $UserBin "labwired.cmd"
+  if (-not (Test-Path -LiteralPath (Join-Path $Prefix "agent\bin\labwired-agent.ps1") -PathType Leaf)) {
+    throw "Agent launcher was not installed"
+  }
+  if (-not (Test-Path -LiteralPath $dispatcher -PathType Leaf) -or -not (Test-Path -LiteralPath $cmd -PathType Leaf)) {
+    throw "Agent dispatchers were not installed"
+  }
+  Assert-AgentConfigPresent
+  Assert-UserStatePreserved
+  Complete-LifecyclePhase "initial-install"
+
+  Start-LifecyclePhase "initial-version"
   $versionStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "version.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version
   }
   if ($versionStatus -ne 0) { throw "labwired agent version failed with code $versionStatus" }
+  $versionText = Get-Content -LiteralPath (Join-Path $EvidenceDir "version.txt") -Raw
+  if ($versionText -notmatch "LabWired Agent" -or $versionText -notmatch "(?m)^version  ") {
+    throw "initial Agent version output is incomplete"
+  }
+  Complete-LifecyclePhase "initial-version"
 
+  Start-LifecyclePhase "initial-doctor"
   $doctorStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "doctor.txt") -Command {
     & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor
   }
   if ($doctorStatus -ne 0) { throw "labwired agent doctor failed with code $doctorStatus" }
+  $doctorText = Get-Content -LiteralPath (Join-Path $EvidenceDir "doctor.txt") -Raw
+  if ($doctorText -notmatch "agent-runtime" -or $doctorText -notmatch "ready") {
+    throw "initial Agent doctor output is incomplete"
+  }
+  Complete-LifecyclePhase "initial-doctor"
 
-  $cmd = Join-Path $UserBin "labwired.cmd"
+  Start-LifecyclePhase "initial-cmd-dispatch"
   $cmdOutput = & cmd.exe /d /c "`"$cmd`" agent version" 2>&1
   if ($LASTEXITCODE -ne 0 -or (($cmdOutput -join "`n") -notmatch "LabWired Agent")) {
     throw "installed cmd dispatcher did not route agent version"
   }
+  Complete-LifecyclePhase "initial-cmd-dispatch"
 
-  $combined = (Get-Content (Join-Path $EvidenceDir "version.txt") -Raw) + (Get-Content (Join-Path $EvidenceDir "doctor.txt") -Raw)
+  Start-LifecyclePhase "ownership-snapshot"
+  $manifest = Join-Path $ConfigDir "labwired-agent.manifest"
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Agent ownership manifest is missing" }
+  Copy-Item -LiteralPath $manifest -Destination $OwnershipSnapshot
+  $ownershipEntries = @(Get-Content -LiteralPath $OwnershipSnapshot | Where-Object { $_ })
+  if (-not @($ownershipEntries | Where-Object { $_.StartsWith("json:") }).Count) {
+    throw "Agent ownership manifest has no merged JSON entries"
+  }
+  if (-not @($ownershipEntries | Where-Object { -not $_.StartsWith("json:") }).Count) {
+    throw "Agent ownership manifest has no owned files"
+  }
+  Complete-LifecyclePhase "ownership-snapshot"
+
+  # Required records include phase=uninstall and phase=reinstall. The uninstall
+  # command is agent package uninstall --yes in a nested matching PowerShell so
+  # the launcher's exit cannot terminate this evidence process.
+  Start-LifecyclePhase "uninstall"
+  $uninstallOutputPath = Join-Path $SessionRoot "uninstall.txt"
+  $uninstallStatus = Invoke-Captured -OutputPath $uninstallOutputPath -Command {
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent package uninstall --yes
+  }
+  Get-Content -LiteralPath $uninstallOutputPath | Add-Content -LiteralPath $LifecycleFile -Encoding UTF8
+  if ($uninstallStatus -ne 0) { throw "Agent uninstall failed with code $uninstallStatus" }
+  foreach ($ownedKitPath in @(
+    (Join-Path $Prefix "agent"),
+    (Join-Path $Prefix "state\agent"),
+    (Join-Path $Prefix "bin\labwired.ps1"),
+    (Join-Path $Prefix "bin\labwired.cmd"),
+    (Join-Path $Prefix "bin\labwired-agent.ps1"),
+    (Join-Path $UserBin "labwired.cmd")
+  )) {
+    if (Test-Path -LiteralPath $ownedKitPath) { throw "Agent-owned kit path remains: $ownedKitPath" }
+  }
+  Assert-OwnedConfigRemoved $ConfigDir $OwnershipSnapshot
+  if (Test-Path -LiteralPath $manifest) { throw "Agent ownership manifest remains after uninstall" }
+  Assert-UserStatePreserved
+  Complete-LifecyclePhase "uninstall"
+
+  Start-LifecyclePhase "reinstall"
+  $reinstallOutputPath = Join-Path $SessionRoot "reinstall.txt"
+  $reinstallStatus = Invoke-Captured -OutputPath $reinstallOutputPath -Command {
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer @installArgs
+  }
+  Get-Content -LiteralPath $reinstallOutputPath | Add-Content -LiteralPath (Join-Path $EvidenceDir "install.txt") -Encoding UTF8
+  if ($reinstallStatus -ne 0) { throw "Windows source reinstall failed with code $reinstallStatus" }
+  if (-not (Test-Path -LiteralPath (Join-Path $Prefix "agent\bin\labwired-agent.ps1") -PathType Leaf)) {
+    throw "Agent launcher did not return after reinstall"
+  }
+  if (-not (Test-Path -LiteralPath $dispatcher -PathType Leaf) -or -not (Test-Path -LiteralPath $cmd -PathType Leaf)) {
+    throw "Agent dispatchers did not return after reinstall"
+  }
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Agent ownership manifest did not return" }
+  Assert-AgentConfigPresent
+  Assert-UserStatePreserved
+  Complete-LifecyclePhase "reinstall"
+
+  Start-LifecyclePhase "reinstalled-version"
+  $reinstalledVersionPath = Join-Path $SessionRoot "reinstalled-version.txt"
+  $versionStatus = Invoke-Captured -OutputPath $reinstalledVersionPath -Command {
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version
+  }
+  Get-Content -LiteralPath $reinstalledVersionPath | Add-Content -LiteralPath (Join-Path $EvidenceDir "version.txt") -Encoding UTF8
+  if ($versionStatus -ne 0) { throw "reinstalled labwired agent version failed with code $versionStatus" }
+  $versionText = Get-Content -LiteralPath $reinstalledVersionPath -Raw
+  if ($versionText -notmatch "LabWired Agent" -or $versionText -notmatch "(?m)^version  ") {
+    throw "reinstalled Agent version output is incomplete"
+  }
+  Complete-LifecyclePhase "reinstalled-version"
+
+  Start-LifecyclePhase "reinstalled-doctor"
+  $reinstalledDoctorPath = Join-Path $SessionRoot "reinstalled-doctor.txt"
+  $doctorStatus = Invoke-Captured -OutputPath $reinstalledDoctorPath -Command {
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor
+  }
+  Get-Content -LiteralPath $reinstalledDoctorPath | Add-Content -LiteralPath (Join-Path $EvidenceDir "doctor.txt") -Encoding UTF8
+  if ($doctorStatus -ne 0) { throw "reinstalled labwired agent doctor failed with code $doctorStatus" }
+  $doctorText = Get-Content -LiteralPath $reinstalledDoctorPath -Raw
+  if ($doctorText -notmatch "agent-runtime" -or $doctorText -notmatch "ready") {
+    throw "reinstalled Agent doctor output is incomplete"
+  }
+  $combined = (
+    (Get-Content -LiteralPath (Join-Path $EvidenceDir "version.txt") -Raw) +
+    (Get-Content -LiteralPath (Join-Path $EvidenceDir "doctor.txt") -Raw)
+  )
   if ($combined -match "Failed to change directory" -or $combined -match "(?im)(^|[^a-z])not ready([^a-z]|$)") {
     throw "installed Windows command dispatch or doctor output is not ready"
   }
-  if ($combined -notmatch "LabWired Agent" -or $combined -notmatch "agent-runtime") {
-    throw "Windows evidence is missing Agent version or doctor markers"
-  }
+  Assert-AgentConfigPresent
+  Assert-UserStatePreserved
+  Complete-LifecyclePhase "reinstalled-doctor"
 
+  Start-LifecyclePhase "final-evidence"
   @(
     "simulator=$(if (Test-Path (Join-Path $Prefix 'tools\sim\labwired-sim.exe')) { 'present' } else { 'absent' })"
     "probe=$(if (Test-Path (Join-Path $Prefix 'tools\probe-rs\probe-rs.exe')) { 'present' } else { 'absent' })"
     "verification_fallback=hosted-or-wsl"
   ) | Set-Content -LiteralPath (Join-Path $EvidenceDir "capabilities.txt") -Encoding UTF8
+  Assert-UserStatePreserved
+  foreach ($file in @("platform.txt", "install.txt", "version.txt", "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt")) {
+    $evidencePath = Join-Path $EvidenceDir $file
+    if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf) -or (Get-Item -LiteralPath $evidencePath).Length -eq 0) {
+      throw "required evidence is empty: $file"
+    }
+  }
+  Complete-LifecyclePhase "final-evidence"
+  Add-Content -LiteralPath $LifecycleFile -Value "prefix_sentinel=preserved" -Encoding ASCII
+  Add-Content -LiteralPath $LifecycleFile -Value "config_sentinel=preserved" -Encoding ASCII
+  Add-Content -LiteralPath $LifecycleFile -Value "result=PASS" -Encoding ASCII
   Write-Result "PASS"
   Write-Host "ok   windows-install-smoke PASS"
+} catch {
+  Write-Result "FAIL"
+  if ($LifecycleStarted) {
+    Add-Content -LiteralPath $LifecycleFile -Value "failed_phase=$LifecyclePhase" -Encoding ASCII
+    Add-Content -LiteralPath $LifecycleFile -Value "result=FAIL" -Encoding ASCII
+  }
+  throw
 } finally {
   foreach ($key in $Original.Keys) {
     [Environment]::SetEnvironmentVariable($key, $Original[$key], "Process")

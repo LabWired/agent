@@ -13,6 +13,7 @@ $ShimDir = Join-Path $TempRoot "shim"
 $Shim = Join-Path $ShimDir "labwired.cmd"
 $ArgsFile = Join-Path $TempRoot "args.txt"
 $Installer = Join-Path $Root "scripts\install.ps1"
+$Harness = Join-Path $Root ".github\workflows\harness.yml"
 $OriginalPath = $env:Path
 $InstallSmoke = Join-Path $Root "tests\windows-install-smoke.ps1"
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
@@ -75,19 +76,52 @@ function Invoke-Installer([string[]]$Arguments) {
 try {
   Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
   $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
-  foreach ($marker in @("LABWIRED_EVIDENCE_DIR", "agent version", "agent doctor", "capabilities.txt", "result.txt", "PowerShellExe", "-File `$installer")) {
+  foreach ($marker in @(
+    "LABWIRED_EVIDENCE_DIR",
+    "agent version",
+    "agent doctor",
+    "capabilities.txt",
+    "lifecycle.txt",
+    "result.txt",
+    "PowerShellExe",
+    "-File `$installer",
+    "installed-ownership.manifest",
+    "agent package uninstall --yes",
+    "phase=uninstall",
+    "phase=reinstall",
+    "failed_phase=",
+    'Write-Result "FAIL"',
+    "Complete-LifecyclePhase",
+    "prefix_sentinel=preserved",
+    "config_sentinel=preserved"
+  )) {
     Assert-True ($installSmokeText.Contains($marker)) "Windows install evidence includes $marker"
   }
   foreach ($file in @(
     (Join-Path $Root "bin\labwired.ps1"),
     (Join-Path $Root "bin\labwired-agent.ps1"),
-    (Join-Path $Root "scripts\agent-install.ps1")
+    (Join-Path $Root "scripts\agent-install.ps1"),
+    (Join-Path $Root "scripts\install.ps1"),
+    (Join-Path $Root "tests\windows-contract.ps1"),
+    (Join-Path $Root "tests\windows-install-smoke.ps1")
   )) {
     $bytes = [IO.File]::ReadAllBytes($file)
     Assert-True (-not ($bytes | Where-Object { $_ -gt 127 })) "$file is ASCII-compatible for Windows PowerShell 5.1"
   }
   $agentLauncherText = Get-Content -LiteralPath (Join-Path $Root "bin\labwired-agent.ps1") -Raw
   Assert-True ($agentLauncherText.Contains('(Get-Command npm -ErrorAction SilentlyContinue) -or (Get-Command npx -ErrorAction SilentlyContinue)')) "Windows doctor groups command availability checks"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentOwnedConfig')) "Windows uninstall removes only recorded Agent config ownership"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentKit')) "Windows uninstall removes the Agent kit through a safe lifecycle helper"
+  Assert-True ($agentLauncherText.Contains('Assert-NoReparseTree')) "Windows uninstall rejects descendant reparse points before recursive deletion"
+  Assert-True ($agentLauncherText.Contains('Assert-AgentUninstallSafe')) "Windows uninstall validates every target before mutation"
+  Assert-True ($agentLauncherText.Contains('Join-Path $env:USERPROFILE ".config\opencode"')) "Windows install and uninstall share the default config path"
+  Assert-True ($agentLauncherText.Contains('json-array:')) "Windows uninstall supports granular array ownership"
+  $installerText = Get-Content -LiteralPath $Installer -Raw
+  Assert-True ($installerText.Contains('labwired-agent.manifest')) "Windows installer records Agent config ownership"
+  Assert-True ($installerText.Contains('json:')) "Windows installer records merged JSON ownership"
+  Assert-True ($installerText.Contains('json-array:')) "Windows installer records granular TUI array ownership"
+  $harnessText = Get-Content -LiteralPath $Harness -Raw
+  Assert-True ($harnessText.Contains('windows\powershell') -and $harnessText.Contains('windows\pwsh')) "Windows engines write independent evidence directories"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
@@ -321,6 +355,16 @@ public static class NativeArgvEcho {
   $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
   Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects junction Agent target"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "uninstall preserves external sentinel"
+
+  if (Test-Path $agentJunction) { $null = & cmd.exe /d /c rmdir $agentJunction }
+  $agentJunction = $null
+  New-Item -ItemType Directory -Path (Join-Path $uninstallPrefix "agent\nested") -Force | Out-Null
+  $descendantJunction = Join-Path $uninstallPrefix "agent\nested\outside"
+  $null = & cmd.exe /d /c mklink /J $descendantJunction $outside
+  Assert-True ($LASTEXITCODE -eq 0) "test descendant junction created"
+  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
+  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects descendant junction before recursive removal"
+  Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "descendant junction rejection preserves external sentinel"
   Write-Host "ok   windows-contract PASS"
 } finally {
   Remove-Item Env:LABWIRED_AGENT_BIN -ErrorAction SilentlyContinue
@@ -331,6 +375,7 @@ public static class NativeArgvEcho {
   Remove-Item Env:LABWIRED_TEST_CORE_CMD -ErrorAction SilentlyContinue
   $env:Path = $OriginalPath
   if ($agentJunction -and (Test-Path $agentJunction)) { $null = & cmd.exe /d /c rmdir $agentJunction }
+  if ($descendantJunction -and (Test-Path $descendantJunction)) { $null = & cmd.exe /d /c rmdir $descendantJunction }
   if ($junction -and (Test-Path $junction)) { $null = & cmd.exe /d /c rmdir $junction }
   Remove-Item $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
   if ($outside) { Remove-Item $outside -Recurse -Force -ErrorAction SilentlyContinue }
