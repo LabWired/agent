@@ -102,22 +102,40 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
     const validationIndex = job.indexOf('Validate required release inputs and credentials');
     const checkoutIndex = job.indexOf('actions/checkout@v4');
     const evidenceInitializationIndex = job.indexOf('FAIL', validationIndex);
-    const requiredCredentialCheckIndex = job.indexOf(
-      key === 'hosted-release-windows'
-        ? "if (-not $env:RELEASE_ACCESS_TOKEN)"
-        : '[[ -n "$RELEASE_ACCESS_TOKEN" ]]',
-      validationIndex,
-    );
     const hostedCheckIndex = job.indexOf('Install candidate and prove hosted access');
+    const preCheckout = checkoutIndex >= 0 ? job.slice(0, checkoutIndex) : '';
+    const requiredValidationMarkers = key === 'hosted-release-windows'
+      ? [
+        "if (-not $env:RELEASE_ACCESS_TOKEN)",
+        "if (-not $env:RELEASE_PROJECT)",
+        "$env:CANDIDATE_VERSION -notmatch",
+        "$env:PREVIOUS_VERSION -notmatch",
+        "$env:PREVIOUS_ARCHIVE_URL -notmatch",
+        "$env:PREVIOUS_ARCHIVE_SHA256 -notmatch",
+      ]
+      : [
+        '[[ -n "$RELEASE_ACCESS_TOKEN" ]]',
+        '[[ -n "$RELEASE_PROJECT" ]]',
+        '[[ "$CANDIDATE_VERSION" =~',
+        '[[ "$PREVIOUS_VERSION" =~',
+        '[[ "$PREVIOUS_ARCHIVE_URL" == https://* ]]',
+        '[[ "$PREVIOUS_ARCHIVE_SHA256" =~',
+      ];
+    for (const marker of requiredValidationMarkers) {
+      requireText(preCheckout, marker, `${key} pre-checkout validation`);
+    }
+    const firstRequiredValidationIndex = job.indexOf(requiredValidationMarkers[0], validationIndex);
+    const lastRequiredValidationIndex = job.indexOf(requiredValidationMarkers.at(-1), validationIndex);
     if (
       validationIndex < 0 || checkoutIndex < 0 || evidenceInitializationIndex < 0
-      || requiredCredentialCheckIndex < 0 || hostedCheckIndex < 0
-      || checkoutIndex >= validationIndex
+      || firstRequiredValidationIndex < 0 || lastRequiredValidationIndex < 0
+      || hostedCheckIndex < 0
       || validationIndex > evidenceInitializationIndex
-      || evidenceInitializationIndex > requiredCredentialCheckIndex
-      || evidenceInitializationIndex > hostedCheckIndex
+      || evidenceInitializationIndex > firstRequiredValidationIndex
+      || lastRequiredValidationIndex > checkoutIndex
+      || checkoutIndex > hostedCheckIndex
     ) {
-      fail(`${key} must checkout, initialize FAIL evidence, validate required values, then run hosted checks`);
+      fail(`${key} must initialize FAIL evidence, validate required values, checkout, then run hosted checks`);
     }
     requireText(job, `EVIDENCE_DIR: ${artifactRoot}`, `${key} stable evidence root`);
     forbidText(job, 'EVIDENCE_DIR: ${{ github.workspace }}', `${key} evidence root`);

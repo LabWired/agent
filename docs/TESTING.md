@@ -95,10 +95,11 @@ probe. The uploaded artifacts are:
 - `labwired-agent-release-readiness-macos`
 - `labwired-agent-release-readiness-windows`
 
-After checkout succeeds, each job initializes `result.txt` to `FAIL` under the
-runner's temporary directory before validating credentials or release inputs.
-Checkout cannot clean this evidence root, so later failures retain negative
-evidence. Artifacts include sanitized `hosted-status.txt` and `mcp-result.txt`,
+Before checkout, each job initializes `result.txt` to `FAIL` under the runner's
+temporary directory and validates every credential and release input. Missing
+required values therefore fail immediately. Checkout cannot clean this evidence
+root, so validation, checkout, and later failures retain negative evidence.
+Artifacts include sanitized `hosted-status.txt` and `mcp-result.txt`,
 `platform.txt`, `capabilities.txt`, `result.txt`, and the platform upgrade
 evidence directory. They exclude raw logs, configuration, session, environment,
 token, and HTTP-header files. A release reviewer must confirm top-level and
