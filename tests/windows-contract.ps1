@@ -160,6 +160,7 @@ function Assert-InvalidUpgradeVersion([string]$Version, [switch]$RequireOrdering
 }
 
 try {
+  New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
   Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
   Assert-True (Test-Path -LiteralPath $UpgradeSmoke -PathType Leaf) "Windows upgrade evidence script exists"
   $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
