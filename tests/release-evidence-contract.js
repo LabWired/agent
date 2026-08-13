@@ -80,6 +80,12 @@ requireText(windows, 'shell: pwsh', 'release-evidence-windows');
 if ((windows.match(/if: always\(\)/g) || []).length < 2)
   fail('release-evidence-windows must run the second engine and upload on failure');
 
+const windowsContract = read('tests/windows-contract.ps1');
+const compressionAssembly = windowsContract.indexOf('Add-Type -AssemblyName System.IO.Compression');
+const zipArchiveMode = windowsContract.indexOf('[IO.Compression.ZipArchiveMode]');
+if (compressionAssembly < 0 || zipArchiveMode < 0 || compressionAssembly > zipArchiveMode)
+  fail('Windows PowerShell 5.1 must load System.IO.Compression before using ZipArchiveMode');
+
 const deployedPath = '.github/workflows/deployed-install.yml';
 const deployed = read(deployedPath);
 requireText(deployed, 'workflow_dispatch:', deployedPath);

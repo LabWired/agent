@@ -77,6 +77,7 @@ function Invoke-Installer([string[]]$Arguments) {
 function Assert-UnsafeUpgradeZip([string]$Kind) {
   $zipPath = Join-Path $TempRoot ("unsafe-upgrade-" + $Kind + ".zip")
   $evidenceDir = Join-Path $TempRoot ("unsafe-upgrade-evidence-" + $Kind)
+  Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
   try {
@@ -125,6 +126,7 @@ function Assert-InvalidUpgradeVersion([string]$Version, [switch]$RequireOrdering
   $safeName = $Version -replace "[^0-9A-Za-z]", "_"
   $zipPath = Join-Path $TempRoot ("invalid-upgrade-version-" + $safeName + ".zip")
   $evidenceDir = Join-Path $TempRoot ("invalid-upgrade-version-evidence-" + $safeName)
+  Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
   $zip.Dispose()
