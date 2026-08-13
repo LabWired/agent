@@ -102,6 +102,10 @@ class RpcClient extends events_1.EventEmitter {
             this.output.appendLine(`RPC: server exited ${code}`);
             this.child = null;
             this.ready = false;
+            for (const [, p] of this.pending) {
+                p.reject(new Error(`RPC server exited (code ${code})`));
+            }
+            this.pending.clear();
             this.emit("exit", code);
         });
         const init = (await this.request("initialize", {
@@ -153,7 +157,7 @@ class RpcClient extends events_1.EventEmitter {
                     this.pending.delete(id);
                     reject(new Error(`RPC timeout: ${method}`));
                 }
-            }, 600_000);
+            }, 660_000);
         });
     }
     onData(chunk) {

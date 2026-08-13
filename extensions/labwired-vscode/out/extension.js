@@ -733,8 +733,21 @@ function activate(context) {
     for (const [id, fn] of cmds) {
         context.subscriptions.push(vscode.commands.registerCommand(id, fn));
     }
-    // Mode change → notify chat
-    context.subscriptions.push(session.onChange(() => chat.refresh()));
+    // Mode change → notify chat + keep server-side gates in sync, so
+    // palette-initiated tool runs honor the current plan/verify mode too.
+    const pushMode = () => {
+        if (!rpc.isRunning())
+            return;
+        void rpc
+            .request("mode/set", { mode: session.getMode() })
+            .catch(() => { });
+    };
+    context.subscriptions.push(session.onChange(() => {
+        chat.refresh();
+        pushMode();
+    }));
+    // Session mode may be restored (e.g. plan) while the server boots in act.
+    rpc.on("ready", pushMode);
     const cfg = vscode.workspace.getConfiguration("labwired");
     if (cfg.get("autoRevealOnStartup")) {
         void vscode.commands.executeCommand("workbench.view.extension.labwired");

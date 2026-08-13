@@ -17,6 +17,13 @@ class ToolRunner {
         this.debug = debug;
         this.billing = billing;
         this.rpc = rpc;
+        // Server restarts may change the exposed tool set — refetch tool/list.
+        this.rpc?.on("exit", () => {
+            this.serverTools = null;
+        });
+        this.rpc?.on("ready", () => {
+            this.serverTools = null;
+        });
     }
     listCatalog() {
         return (0, registry_1.toolsHelpText)();
