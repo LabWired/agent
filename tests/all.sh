@@ -42,6 +42,7 @@ run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
 run "dispatcher"        "$ROOT/tests/dispatcher.sh"
 run "agent-lifecycle"   "$ROOT/tests/agent-lifecycle.sh"
 run "rpc-agent-resolution" "$ROOT/tests/rpc-agent-resolution.sh"
+run "upgrade-contract"   "$ROOT/tests/upgrade-contract.sh"
 echo ""
 echo "======== release-evidence-contract ========"
 if node "$ROOT/tests/release-evidence-contract.js"; then
