@@ -3,16 +3,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/server" "$TMP/path"
+mkdir -p "$TMP/server" "$TMP/path" "$TMP/home/.labwired/agent/bin"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
 
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agent-path-ok"' >"$TMP/path/labwired-agent"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "CORE MUST NOT RUN" >&2' 'exit 42' >"$TMP/path/labwired"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "explicit-agent-ok"' >"$TMP/explicit-agent"
-chmod +x "$TMP/path/labwired-agent" "$TMP/path/labwired" "$TMP/explicit-agent"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "STALE HOME AGENT MUST NOT RUN" >&2' 'exit 43' >"$TMP/home/.labwired/agent/bin/labwired-agent"
+chmod +x "$TMP/path/labwired-agent" "$TMP/path/labwired" "$TMP/explicit-agent" "$TMP/home/.labwired/agent/bin/labwired-agent"
 
 NODE_BIN="$(command -v node)"
-PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
+HOME="$TMP/home" PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
 import json, os, select, subprocess, sys, time
 server, node, core, explicit = sys.argv[1:5]
 
@@ -41,7 +42,7 @@ def run(expected, extra):
                 break
     p.terminate()
     result = (message or {}).get("result") or {}
-    if result.get("code") != 0 or expected not in result.get("stdout", "") or "CORE MUST NOT RUN" in result.get("stderr", ""):
+    if result.get("code") != 0 or expected not in result.get("stdout", "") or "MUST NOT RUN" in result.get("stderr", ""):
         print(json.dumps(message or {}))
         raise SystemExit(1)
 

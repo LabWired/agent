@@ -118,8 +118,8 @@ function findLabwiredAgent() {
   const candidates = [
     process.env.LABWIRED_AGENT_CLI_PATH,
     join(AGENT_ROOT, "bin", "labwired-agent"),
-    join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
     "labwired-agent", // PATH
+    join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
   ].filter(Boolean);
   for (const c of candidates) {
     if (c === "labwired-agent") return c;
