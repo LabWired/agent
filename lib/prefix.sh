@@ -175,7 +175,7 @@ labwired_prefix_register_existing_core() {
   # Never register one of our shell dispatchers/agent launchers as Core: doing
   # so would make `labwired core` recursively dispatch to itself.
   if head -n 80 "$source" 2>/dev/null \
-    | grep -Eq 'labwired_product_help|labwired_dispatch_exec_|LABWIRED_AGENT_HOME|LabWired Agent'; then
+    | grep -Eq 'labwired_product_help|labwired_dispatch_exec_|LABWIRED_AGENT_HOME|/agent/bin/labwired-agent|LabWired Agent'; then
     return 0
   fi
 
