@@ -80,6 +80,7 @@ for (const [key, runner, endpoint, artifact] of [
   requireText(job, 'if: always()', key);
   requireText(job, artifact, key);
 }
+requireText(deployedJobs.get('deployed-windows') || '', 'powershell.exe', 'deployed-windows');
 
 const installDocs = read('docs/INSTALL.md');
 requireText(installDocs, 'Native Agent support', 'docs/INSTALL.md');

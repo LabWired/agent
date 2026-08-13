@@ -99,9 +99,14 @@ jobs:
           & $installer -Prefix $env:LABWIRED_HOME -UserBin $env:LABWIRED_BIN_DIR -AgentOnly -SkipPathUpdate *>&1 |
             Tee-Object "$env:EVIDENCE_DIR\install.txt"
           $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
-          & $dispatcher agent version *>&1 | Tee-Object "$env:EVIDENCE_DIR\version.txt"
+          $powershellExe = Join-Path $PSHOME 'powershell.exe'
+          & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version *>&1 |
+            Tee-Object "$env:EVIDENCE_DIR\version.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'published version command failed' }
           if ((Get-Content "$env:EVIDENCE_DIR\version.txt" -Raw) -notmatch "version\s+$([regex]::Escape($env:EXPECTED_VERSION))") { throw 'published version mismatch' }
-          & $dispatcher agent doctor *>&1 | Tee-Object "$env:EVIDENCE_DIR\doctor.txt"
+          & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor *>&1 |
+            Tee-Object "$env:EVIDENCE_DIR\doctor.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'published doctor command failed' }
           @(
             "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
             "os_architecture=$([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
