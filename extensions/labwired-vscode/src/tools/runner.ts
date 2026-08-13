@@ -1,4 +1,5 @@
 import type { LabWiredBridge, RunResult } from "../cli/bridge";
+import type { RpcClient } from "../cli/rpcClient";
 import type { CatalogService } from "../catalog/service";
 import type { DatasheetService } from "../datasheet/agentic";
 import type { ProbeDebugService } from "../debug/probeGdb";
@@ -21,12 +22,15 @@ export type ToolRunEvent = {
 };
 
 export class ToolRunner {
+  private serverTools: Set<string> | null = null;
+
   constructor(
     private readonly bridge: LabWiredBridge,
     private readonly catalog?: CatalogService,
     private readonly datasheets?: DatasheetService,
     private readonly debug?: ProbeDebugService,
-    private readonly billing?: BillingService
+    private readonly billing?: BillingService,
+    private readonly rpc?: RpcClient
   ) {}
 
   listCatalog(): string {
@@ -185,7 +189,61 @@ export class ToolRunner {
     }
 
     const argv = resolveArgv(tool, params).filter((a) => a !== "");
+
+    // Prefer the running server: plan/verify-mode gates and flash confirm
+    // gate live server-side. CLI below stays as explicit fallback.
+    if (await this.rpcSupports(name)) {
+      try {
+        const r = (await this.rpc!.request("tool/run", { name, params })) as {
+          name: string;
+          code: number;
+          stdout: string;
+          stderr: string;
+          timedOut: boolean;
+          extra?: unknown;
+        };
+        const output =
+          [r.stdout, r.stderr].filter(Boolean).join("\n").trim() ||
+          "(no output)";
+        return {
+          tool: r.name,
+          title: tool.title,
+          argv,
+          status: r.code === 0 ? "ok" : "error",
+          output: output.slice(0, 12000),
+          code: r.code,
+        };
+      } catch (e) {
+        // Mode gates / confirm gates arrive as JSON-RPC errors — surface honestly.
+        const err = e as Error & { code?: number };
+        return {
+          tool: name,
+          title: tool.title,
+          argv,
+          status: "error",
+          output: String(err?.message ?? e),
+          code: typeof err?.code === "number" ? err.code : -1,
+        };
+      }
+    }
+
     return this.exec(tool, argv);
+  }
+
+  /** True when the server is up and exposes this tool name (cached tool/list). */
+  private async rpcSupports(tool: string): Promise<boolean> {
+    if (!this.rpc || !this.rpc.isRunning()) return false;
+    if (!this.serverTools) {
+      try {
+        const res = (await this.rpc.request("tool/list")) as {
+          tools: { name: string }[];
+        };
+        this.serverTools = new Set(res.tools.map((t) => t.name));
+      } catch {
+        return false;
+      }
+    }
+    return this.serverTools.has(tool);
   }
 
   async tryRoute(message: string): Promise<ToolRunEvent | null> {

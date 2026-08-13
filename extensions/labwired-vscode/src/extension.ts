@@ -34,16 +34,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const probeDebug = new ProbeDebugService();
   const billing = new BillingService(context);
   billing.setBridge(bridge);
+  const agentRoot = resolveAgentRoot(context.extensionPath);
+  const rpc = new RpcClient(output, agentRoot);
   const tools = new ToolRunner(
     bridge,
     catalog,
     datasheets,
     probeDebug,
-    billing
+    billing,
+    rpc
   );
   const agent = new AgentSession(catalog, tools);
-  const agentRoot = resolveAgentRoot(context.extensionPath);
-  const rpc = new RpcClient(output, agentRoot);
   bridge.refresh();
 
   const plot = new PlotViewProvider(context.extensionUri);
