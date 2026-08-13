@@ -22,6 +22,19 @@ for s in using-superpowers test-driven-development systematic-debugging \
   need_skill "$s"
 done
 
+if grep -qiE 'develop.*first|first.*develop' "$ROOT/skills/using-superpowers/SKILL.md"; then
+  echo "ok   using-superpowers develop-first routing"
+else
+  echo "FAIL using-superpowers missing develop-first routing"
+  fail=1
+fi
+if grep -qiE 'load.*golden-path.*first' "$ROOT/skills/using-superpowers/SKILL.md"; then
+  echo "FAIL using-superpowers still mandates golden-path first"
+  fail=1
+else
+  echo "ok   using-superpowers no golden-path-first mandate"
+fi
+
 # Legacy must be gone
 for s in verify-firmware part-knowledge board-bringup compose-observability \
   diagnose-firmware firmware-repair-loop report-evidence inspect-evidence \

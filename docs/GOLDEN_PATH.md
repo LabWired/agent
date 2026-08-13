@@ -3,11 +3,14 @@
 **Goal:** Cold machine: sign in → agent → blinky (or UART hello) → **`model_verified`**.  
 Optional: compose LED vs UART from **elements**.
 
-Skill packs only (no legacy names):
+Start firmware work with `develop`. `golden-path` is the first-session guide
+and delegates the firmware workflow:
 
 ```text
-golden-path → bringup → prove → optional observe → optional desk-hw
+develop → optional bringup / import-circuit → prove → optional observe / desk-hw
 ```
+
+On a first session, enter through `golden-path`; it routes into `develop`.
 
 Knowledge: one MCP path — see `docs/KNOWLEDGE.md`.
 

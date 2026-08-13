@@ -43,12 +43,16 @@ installations and data stay in place.
 
 | Pack | Job |
 |------|-----|
-| **golden-path** | Stranger → twin green entry loop |
+| **develop** | Default firmware create, modify, compile, twin-check, repair, and report workflow |
+| **golden-path** | First-session guide; delegates firmware work to **develop** |
 | **bringup** | Board + part knowledge (`labwired_part` / `labwired_datasheet`) |
 | **import-circuit** | Schematic/diagram → twin pack (catalog-honest) |
 | **prove** | Twin verify → green only via the twin check |
 | **observe** | Plots from run elements |
 | **desk-hw** | Flash + serial marker → desk green only |
+
+Start firmware creation, modification, and repair with **develop**. Use
+**golden-path** for first-session onboarding.
 
 Twin green and desk green are **separate claims**. Never treat a desk check as twin green. Exact status names: [docs/VERIFY.md](docs/VERIFY.md).
 

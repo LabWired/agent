@@ -18,7 +18,7 @@ This kit ships **two layers**:
 
 | Layer | Skills | Job |
 |-------|--------|-----|
-| **Domain (LabWired)** | `golden-path`, `bringup`, `prove`, `observe`, `desk-hw` | Firmware + twin + claims |
+| **Domain (LabWired)** | `develop`, `golden-path`, `bringup`, `import-circuit`, `prove`, `observe`, `desk-hw` | Firmware + twin + claims |
 | **Process (Superpowers)** | TDD, plans, systematic-debugging, verification-before-completion, … | How to work rigorously |
 
 ## Instruction priority (non-negotiable)
@@ -40,15 +40,17 @@ Before pin/register/electrical claims or firmware that depends on them:
 3. **Never invent.** Label fact vs quote vs missing.  
 4. Superpowers does **not** replace knowledge MCP. See `docs/KNOWLEDGE.md`.
 
-## Default firmware path (always first)
+## Default firmware path
 
-**For firmware / board / blink / prove tasks: load `golden-path` before Superpowers process skills.**
+**For firmware creation, modification, or repair: load `develop` first.**
+Use `golden-path` as first-session guidance; it delegates firmware work to `develop`.
 
 ```text
-golden-path → bringup → prove → optional observe → optional desk-hw
+develop → optional bringup / import-circuit → prove → optional observe / desk-hw
 ```
 
-Superpowers (TDD, plans, …) are **secondary** on firmware work.
+LabWired domain packs and honest claim rules take precedence over Superpowers
+(TDD, plans, …), which remain **secondary** on firmware work.
 
 ## When to load Superpowers process skills
 
