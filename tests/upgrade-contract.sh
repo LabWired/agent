@@ -154,7 +154,8 @@ require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "reparse"'
 require_text "$WINDOWS_CONTRACT" 'Assert-UnsafeUpgradeZip "symlink"'
 require_text "$WINDOWS_CONTRACT" 'windows-upgrade-smoke.ps1'
 require_text "$WINDOWS_CONTRACT" "Assert-InvalidUpgradeVersion \$currentAgentVersion"
-require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.12"'
+require_text "$WINDOWS_CONTRACT" "Assert-InvalidUpgradeVersion \$futureAgentVersion"
+require_text "$WINDOWS_CONTRACT" "\$futureAgentVersion = \"{0}.{1}.{2}\" -f"
 require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.10-rc.1"'
 require_text "$WINDOWS_CONTRACT" 'Assert-InvalidUpgradeVersion "0.3.10+build.1"'
 
@@ -238,7 +239,17 @@ expect_partial_failure LABWIRED_PREVIOUS_AGENT_VERSION=0.3.10 \
   LABWIRED_PREVIOUS_AGENT_SHA256="$PARTIAL_SHA256"
 
 CURRENT_VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
-for invalid_version in "$CURRENT_VERSION" 0.3.12 0.3.10-rc.1 0.3.10+build.1; do
+FUTURE_VERSION="$(python3 - "$CURRENT_VERSION" <<'PY'
+import sys
+
+parts = sys.argv[1].split(".")
+if len(parts) != 3 or any(not part.isdigit() for part in parts):
+    raise SystemExit("current VERSION must be numeric X.Y.Z")
+major, minor, patch = (int(part) for part in parts)
+print(f"{major}.{minor}.{patch + 1}")
+PY
+)"
+for invalid_version in "$CURRENT_VERSION" "$FUTURE_VERSION" 0.3.10-rc.1 0.3.10+build.1; do
   invalid_archive="$TMP/invalid-version-${invalid_version//[^A-Za-z0-9]/_}.tar"
   make_version_fixture "$invalid_archive" "$invalid_version" $'#!/usr/bin/env bash\nexit 47\n'
   invalid_sha256="$(archive_sha256 "$invalid_archive")"
@@ -258,6 +269,10 @@ for invalid_version in "$CURRENT_VERSION" 0.3.12 0.3.10-rc.1 0.3.10+build.1; do
     || fail "invalid upgrade baseline $invalid_version reached previous version execution"
   if grep -q 'phase=previous-install' "$invalid_evidence/lifecycle.txt"; then
     fail "invalid upgrade baseline $invalid_version reached previous install"
+  fi
+  if [[ "$invalid_version" == "$CURRENT_VERSION" || "$invalid_version" == "$FUTURE_VERSION" ]]; then
+    grep -Fq "must be older than current version $CURRENT_VERSION" "$TMP/invalid-version.err" \
+      || fail "ordered baseline $invalid_version did not fail for ordering"
   fi
 done
 

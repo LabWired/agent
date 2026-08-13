@@ -121,7 +121,7 @@ function Assert-UnsafeUpgradeZip([string]$Kind) {
   Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "previous-version.txt") -Raw).Trim() -eq "not-run") "$Kind ZIP is rejected before previous install"
 }
 
-function Assert-InvalidUpgradeVersion([string]$Version) {
+function Assert-InvalidUpgradeVersion([string]$Version, [switch]$RequireOrderingError) {
   $safeName = $Version -replace "[^0-9A-Za-z]", "_"
   $zipPath = Join-Path $TempRoot ("invalid-upgrade-version-" + $safeName + ".zip")
   $evidenceDir = Join-Path $TempRoot ("invalid-upgrade-version-evidence-" + $safeName)
@@ -142,6 +142,9 @@ function Assert-InvalidUpgradeVersion([string]$Version) {
     Remove-Item Env:LABWIRED_PREVIOUS_AGENT_SHA256 -ErrorAction SilentlyContinue
   }
   Assert-True ($result.Status -ne 0 -and $result.Output -match "stable numeric X.Y.Z|must be older than current") "upgrade rejects invalid baseline version $Version"
+  if ($RequireOrderingError) {
+    Assert-True ($result.Output -match "must be older than current version") "ordered baseline $Version fails for ordering"
+  }
   foreach ($name in @(
     "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
     "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
@@ -219,8 +222,10 @@ try {
   Assert-UnsafeUpgradeZip "reparse"
   Assert-UnsafeUpgradeZip "symlink"
   $currentAgentVersion = (Get-Content -LiteralPath (Join-Path $Root "VERSION") -Raw).Trim()
-  Assert-InvalidUpgradeVersion $currentAgentVersion
-  Assert-InvalidUpgradeVersion "0.3.12"
+  $currentVersionParts = @($currentAgentVersion.Split(".") | ForEach-Object { [uint64]::Parse($_, [Globalization.CultureInfo]::InvariantCulture) })
+  $futureAgentVersion = "{0}.{1}.{2}" -f $currentVersionParts[0], $currentVersionParts[1], ($currentVersionParts[2] + 1)
+  Assert-InvalidUpgradeVersion $currentAgentVersion -RequireOrderingError
+  Assert-InvalidUpgradeVersion $futureAgentVersion -RequireOrderingError
   Assert-InvalidUpgradeVersion "0.3.10-rc.1"
   Assert-InvalidUpgradeVersion "0.3.10+build.1"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
