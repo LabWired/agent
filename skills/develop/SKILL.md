@@ -1,12 +1,13 @@
 ---
 name: develop
-description: Default firmware workflow for greenfield and existing projects: inspect, ground hardware facts, edit, compile, check on twin, repair, report.
+description: >-
+  Default firmware workflow for greenfield and existing projects: inspect, ground hardware facts, edit, compile, check on the twin, repair, and report.
 license: MIT
 compatibility: opencode
 metadata:
-  gate: workflow
-  labwired: true
-  pack: develop
+  gate: "workflow"
+  labwired: "true"
+  pack: "develop"
 ---
 
 # Develop firmware
@@ -20,10 +21,10 @@ Rules:
 - Compile with `labwired_compile` or the project's existing compile command.
 - After a successful compile, convert every observable requested behavior into `labwired_verify`, or use `labwired_run` plus `labwired_inspect`. Make coverage gaps explicit, and never say tested when no check ran.
 - Allow at most three total edit-and-test attempts, including the initial attempt. Use failures to make focused repairs.
-- Only `labwired_verify` can mint `model_verified`; only desk hardware may report `hardware_observed`.
+- Only `labwired_verify` can mint `model_verified`; only `desk-hw` may report `hardware_observed`.
 - Keep it simple: reuse existing tools and add no new orchestrator.
 
-Report one overall result: `verified`, `partially verified`, `compiled only`, `failed`, or `blocked`. Use exactly these report labels:
+Use exactly these report labels:
 
 ## Changed
 
@@ -45,10 +46,12 @@ Checks run, observations, coverage, and resulting verification status.
 
 Physical checks, unsupported behavior, and remaining risks.
 
+End with one overall result: `verified`, `partially verified`, `compiled only`, `failed`, or `blocked`.
+
 Smoke scenarios:
 
-- Greenfield ESP32-C3 PlatformIO Arduino: build an LED blink plus alive signal, then compile and twin-check both behaviors.
-- Existing STM32F103 heartbeat: retain its structure, make the smallest edit, and do not restructure it.
+- Greenfield ESP32-C3 DevKitM-1 with PlatformIO Arduino: blink the configured LED once per second and print `alive` over serial; compile and twin-check both behaviors.
+- Existing STM32F103 heartbeat: retain its structure and add a one-second heartbeat without restructuring.
 - Compile recovery ESP32-C3: use compiler diagnostics for focused repair within the three-total-attempt budget.
-- Partial coverage ESP32-C3: verify the LED behavior and report Wi-Fi as uncovered and still needing hardware.
+- Partial coverage ESP32-C3: check the LED but leave Wi-Fi association uncovered; full `verified` is forbidden unless both behaviors are checked.
 - Unsupported custom board: compile successfully, report `compiled only`, and require physical confirmation.
