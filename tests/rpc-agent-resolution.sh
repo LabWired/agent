@@ -48,6 +48,11 @@ def run(expected, extra):
 
 run("agent-path-ok", {"LABWIRED_CLI_PATH": core})
 run("explicit-agent-ok", {"LABWIRED_CLI_PATH": core, "LABWIRED_AGENT_CLI_PATH": explicit})
+os.remove(os.path.join(os.environ["PATH"].split(os.pathsep)[0], "labwired-agent"))
+with open(os.path.join(os.environ["HOME"], ".labwired", "agent", "bin", "labwired-agent"), "w") as f:
+    f.write("#!/bin/sh\necho legacy-home-ok\n")
+os.chmod(os.path.join(os.environ["HOME"], ".labwired", "agent", "bin", "labwired-agent"), 0o755)
+run("legacy-home-ok", {"LABWIRED_CLI_PATH": core})
 PY
 
 echo "ok   RPC Agent override/PATH ignore legacy Core override"

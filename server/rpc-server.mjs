@@ -115,14 +115,19 @@ function onData(chunk) {
 // ——— labwired resolution ———
 
 function findLabwiredAgent() {
+  const windows = process.platform === "win32";
+  const sibling = join(AGENT_ROOT, "bin", windows ? "labwired.cmd" : "labwired-agent");
+  const onPath = whichSync(windows ? "labwired" : "labwired-agent");
+  const legacy = windows
+    ? join(homedir(), ".labwired", "bin", "labwired.cmd")
+    : join(homedir(), ".labwired", "agent", "bin", "labwired-agent");
   const candidates = [
     process.env.LABWIRED_AGENT_CLI_PATH,
-    join(AGENT_ROOT, "bin", "labwired-agent"),
-    "labwired-agent", // PATH
-    join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
+    sibling,
+    onPath,
+    legacy,
   ].filter(Boolean);
   for (const c of candidates) {
-    if (c === "labwired-agent") return c;
     if (existsSync(c)) return c;
   }
   return null;
