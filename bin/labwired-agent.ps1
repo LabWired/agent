@@ -299,12 +299,14 @@ function Remove-JsonOwnedPath([object]$Root, [string[]]$Parts) {
   }
 }
 
-function Remove-AgentOwnedConfig {
+function Get-AgentOwnershipPlan {
   $cfg = Get-LabWiredAgentConfigDir
   $manifest = Join-Path $cfg "labwired-agent.manifest"
   Assert-SafePath $cfg
   Assert-SafePath $manifest
-  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return }
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+    return @{ ConfigRoot = $cfg; Manifest = $manifest; Entries = @(); JsonEntries = @(); JsonArrayEntries = @(); FileEntries = @(); TuiEntries = @() }
+  }
 
   $cfgRoot = [IO.Path]::GetFullPath($cfg).TrimEnd([char[]]@(92, 47))
   $entries = @(Get-Content -LiteralPath $manifest | Where-Object { $_ })
@@ -318,17 +320,22 @@ function Remove-AgentOwnedConfig {
     if ($entry.StartsWith("json-array-value:opencode.json:")) {
       $parts = @($entry -split ":", 4)
       if ($parts.Count -ne 4 -or $parts[2] -ne "enabled_providers" -or -not $parts[3]) {
-        Fail "unsafe Agent ownership entry: $entry"
+        throw "unsafe Agent ownership entry: $entry"
       }
       $jsonArrayEntries += @(@{ Name = $parts[2]; Value = $parts[3] })
       continue
     }
-    if ($entry.StartsWith("json-file:") -or $entry.StartsWith("json-array:")) { continue }
+    if ($entry.StartsWith("json-file:") -or $entry.StartsWith("json-array:")) {
+      if ($entry -notin @('json-file:tui.json:theme', 'json-file:tui.json:$schema', 'json-array:tui.json:plugin')) {
+        throw "unsafe Agent ownership entry: $entry"
+      }
+      continue
+    }
     if ($entry.StartsWith("json:")) {
       $jsonPath = $entry.Substring(5)
       $parts = @($jsonPath -split "\.")
       if (-not $jsonPath -or @($parts | Where-Object { -not $_ -or $_ -in @(".", "..") -or $_ -match "[\\/]" }).Count -gt 0) {
-        Fail "unsafe Agent ownership entry: $entry"
+        throw "unsafe Agent ownership entry: $entry"
       }
       $jsonEntries += ,$parts
       continue
@@ -336,22 +343,45 @@ function Remove-AgentOwnedConfig {
 
     $segments = @($entry -split "[\\/]")
     if ([IO.Path]::IsPathRooted($entry) -or @($segments | Where-Object { -not $_ -or $_ -in @(".", "..") }).Count -gt 0) {
-      Fail "unsafe Agent ownership entry: $entry"
+      throw "unsafe Agent ownership entry: $entry"
     }
     $path = [IO.Path]::GetFullPath((Join-Path $cfg ($entry -replace "/", "\")))
     if (-not $path.StartsWith($cfgRoot + "\", [StringComparison]::OrdinalIgnoreCase)) {
-      Fail "unsafe Agent ownership entry: $entry"
+      throw "unsafe Agent ownership entry: $entry"
     }
     Assert-SafePath (Split-Path -Parent $path)
     if ((Test-Path -LiteralPath $path) -and (Get-Item -LiteralPath $path -Force).PSIsContainer) {
-      Fail "refusing directory Agent ownership entry: $entry"
+      throw "refusing directory Agent ownership entry: $entry"
     }
     $fileEntries += $path
   }
 
+  $tuiEntries = @($entries | Where-Object { $_.StartsWith("json-file:tui.json:") -or $_ -eq "json-array:tui.json:plugin" })
+  $configPath = Join-Path $cfg "opencode.json"
+  $tuiPath = Join-Path $cfg "tui.json"
+  foreach ($jsonPath in @($configPath, $tuiPath)) {
+    Assert-SafePath $jsonPath
+    if (Test-Path -LiteralPath $jsonPath -PathType Leaf) {
+      try { $null = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json }
+      catch { throw "invalid Agent-owned JSON target: $jsonPath" }
+    }
+  }
+  return @{
+    ConfigRoot = $cfg; Manifest = $manifest; Entries = $entries
+    JsonEntries = $jsonEntries; JsonArrayEntries = $jsonArrayEntries
+    FileEntries = $fileEntries; TuiEntries = $tuiEntries
+  }
+}
+
+function Remove-AgentOwnedConfig([hashtable]$Plan) {
+  $cfg = $Plan.ConfigRoot
+  $manifest = $Plan.Manifest
+  $jsonEntries = @($Plan.JsonEntries)
+  $jsonArrayEntries = @($Plan.JsonArrayEntries)
+  $fileEntries = @($Plan.FileEntries)
+  $tuiEntries = @($Plan.TuiEntries)
   $configPath = Join-Path $cfg "opencode.json"
   if (($jsonEntries.Count -gt 0 -or $jsonArrayEntries.Count -gt 0) -and (Test-Path -LiteralPath $configPath -PathType Leaf)) {
-    Assert-SafePath $configPath
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
     foreach ($parts in $jsonEntries) { Remove-JsonOwnedPath $config $parts }
     foreach ($arrayEntry in $jsonArrayEntries) {
@@ -365,14 +395,12 @@ function Remove-AgentOwnedConfig {
   }
 
   $tuiPath = Join-Path $cfg "tui.json"
-  $tuiEntries = @($entries | Where-Object { $_.StartsWith("json-file:tui.json:") -or $_ -eq "json-array:tui.json:plugin" })
   if ($tuiEntries.Count -gt 0 -and (Test-Path -LiteralPath $tuiPath -PathType Leaf)) {
-    Assert-SafePath $tuiPath
     $tui = Get-Content -LiteralPath $tuiPath -Raw | ConvertFrom-Json
     foreach ($entry in $tuiEntries) {
       if ($entry.StartsWith("json-file:tui.json:")) {
         $property = $entry.Substring("json-file:tui.json:".Length)
-        if ($property -notin @("theme", '$schema')) { Fail "unsafe Agent ownership entry: $entry" }
+        if ($property -notin @("theme", '$schema')) { throw "unsafe Agent ownership entry: $entry" }
         if (Test-JsonProperty $tui $property) { $tui.PSObject.Properties.Remove($property) }
       } elseif (Test-JsonProperty $tui "plugin") {
         $plugins = @($tui.plugin | Where-Object { $_ -ne "./plugins/labwired-brand.tsx" })
@@ -390,41 +418,33 @@ function Remove-AgentOwnedConfig {
   foreach ($path in $fileEntries) {
     if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
   }
-  Remove-Item -LiteralPath $manifest -Force
+  if (Test-Path -LiteralPath $manifest) { Remove-Item -LiteralPath $manifest -Force }
 }
 
 function Remove-NoFollowTree([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return }
-  $item = Get-Item -LiteralPath $Path -Force
-  if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-    Remove-Item -LiteralPath $Path -Force
-    return
+  # cmd.exe's native rmdir removes directory reparse entries themselves during
+  # recursive cleanup. Unlike a PowerShell check-then-enumerate walker, it does
+  # not separately resolve a junction and then enumerate its external target.
+  $quoted = '"' + $Path.Replace('"', '""') + '"'
+  $command = "rmdir /s /q $quoted"
+  $null = & cmd.exe /d /v:off /s /c $command
+  if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $Path)) {
+    throw "could not remove isolated Agent tombstone: $Path"
   }
-  if (-not $item.PSIsContainer) {
-    Remove-Item -LiteralPath $Path -Force
-    return
-  }
-  foreach ($child in @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)) {
-    Remove-NoFollowTree $child.FullName
-  }
-  Remove-Item -LiteralPath $Path -Force
 }
 
 function Move-AgentTreeToTombstone([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return $null }
-  # The full tree was checked during uninstall preflight. Re-check only the
-  # rename boundary here: descendants may race in, but the atomic same-parent
-  # move isolates them before no-follow cleanup.
-  Assert-SafePath $Path
+  # Preflight validated the root and parent. Descendants may race in afterward,
+  # but the atomic same-parent move isolates them before no-follow cleanup.
   $parent = Split-Path -Parent $Path
-  Assert-SafePath $parent
   $tombstone = Join-Path $parent (".labwired-agent-delete-" + [guid]::NewGuid().ToString("n"))
-  Assert-SafePath $tombstone
   Move-Item -LiteralPath $Path -Destination $tombstone
   $isolated = Get-Item -LiteralPath $tombstone -Force
   if ($isolated.Attributes -band [IO.FileAttributes]::ReparsePoint) {
     Move-Item -LiteralPath $tombstone -Destination $Path
-    Fail "refusing reparse-point Agent tombstone: $tombstone"
+    throw "refusing reparse-point Agent tombstone: $tombstone"
   }
   return @{ Original = $Path; Tombstone = $tombstone }
 }
@@ -456,7 +476,16 @@ function Restore-AgentTombstones([object[]]$Moved) {
 }
 
 function Remove-AgentTombstones([object[]]$Moved) {
-  foreach ($entry in $Moved) { Remove-NoFollowTree $entry.Tombstone }
+  foreach ($entry in $Moved) {
+    try { Remove-NoFollowTree $entry.Tombstone }
+    catch { Write-Host "warn: isolated Agent tombstone requires manual cleanup: $($entry.Tombstone)" -ForegroundColor Yellow }
+  }
+}
+
+function Assert-CmdLiteralSafePath([string]$Path) {
+  if ($Path -match '[%!^&|<>()]') {
+    Fail "refusing cmd.exe metacharacter in Agent cleanup path: $Path"
+  }
 }
 
 function Remove-AgentLaunchers {
@@ -471,9 +500,7 @@ function Remove-AgentLaunchers {
     (Test-Path -LiteralPath (Join-Path $HomeDir "components\editor") -PathType Container)
   )
 
-  Assert-SafePath $agentPs1
   if (-not $hasSharedComponent) {
-    foreach ($path in @($prefixCmd, $prefixPs1, $userCmd)) { Assert-SafePath $path }
     if ((Test-Path -LiteralPath $userCmd -PathType Leaf) -and (Test-Path -LiteralPath $prefixCmd -PathType Leaf)) {
       if ((Get-FileHash -LiteralPath $userCmd -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $prefixCmd -Algorithm SHA256).Hash) {
         Remove-Item -LiteralPath $userCmd -Force
@@ -491,57 +518,26 @@ function Assert-AgentKitSafe {
   $stateAgent = Join-Path $HomeDir "state\agent"
   $prefixBin = Join-Path $HomeDir "bin"
   $userBin = if ($env:LABWIRED_BIN_DIR) { $env:LABWIRED_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "LabWired\bin" }
-  foreach ($path in @($prefixBin, $userBin)) { Assert-SafePath $path }
+  foreach ($path in @(
+    $prefixBin,
+    (Join-Path $prefixBin "labwired.cmd"),
+    (Join-Path $prefixBin "labwired.ps1"),
+    (Join-Path $prefixBin "labwired-agent.ps1"),
+    $userBin,
+    (Join-Path $userBin "labwired.cmd")
+  )) { Assert-SafePath $path }
+  Assert-CmdLiteralSafePath $agent
+  Assert-CmdLiteralSafePath $stateAgent
   foreach ($path in @($agent, $stateAgent)) { Assert-NoReparseTree $path }
 }
 
 function Assert-AgentOwnedConfigSafe {
-  $cfg = Get-LabWiredAgentConfigDir
-  $manifest = Join-Path $cfg "labwired-agent.manifest"
-  Assert-SafePath $cfg
-  Assert-SafePath $manifest
-  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return }
-  $cfgRoot = [IO.Path]::GetFullPath($cfg).TrimEnd([char[]]@(92, 47))
-  $needsOpenCodeJson = $false
-  $needsTuiJson = $false
-  foreach ($entry in @(Get-Content -LiteralPath $manifest | Where-Object { $_ })) {
-    if ($entry -eq "opencode.json") { continue }
-    if ($entry.StartsWith("json:") -or $entry.StartsWith("json-array-value:opencode.json:")) {
-      $needsOpenCodeJson = $true
-      continue
-    }
-    if ($entry.StartsWith("json-file:") -or $entry.StartsWith("json-array:")) {
-      if ($entry -notin @('json-file:tui.json:theme', 'json-file:tui.json:$schema', 'json-array:tui.json:plugin')) {
-        Fail "unsafe Agent ownership entry: $entry"
-      }
-      $needsTuiJson = $true
-      continue
-    }
-    $segments = @($entry -split "[\\/]")
-    if ([IO.Path]::IsPathRooted($entry) -or @($segments | Where-Object { -not $_ -or $_ -in @(".", "..") }).Count -gt 0) {
-      Fail "unsafe Agent ownership entry: $entry"
-    }
-    $path = [IO.Path]::GetFullPath((Join-Path $cfg ($entry -replace "/", "\")))
-    if (-not $path.StartsWith($cfgRoot + "\", [StringComparison]::OrdinalIgnoreCase)) {
-      Fail "unsafe Agent ownership entry: $entry"
-    }
-    Assert-SafePath (Split-Path -Parent $path)
-  }
-  $jsonTargets = @()
-  if ($needsOpenCodeJson) { $jsonTargets += Join-Path $cfg "opencode.json" }
-  if ($needsTuiJson) { $jsonTargets += Join-Path $cfg "tui.json" }
-  foreach ($jsonPath in $jsonTargets) {
-    Assert-SafePath $jsonPath
-    if (Test-Path -LiteralPath $jsonPath -PathType Leaf) {
-      try { $null = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json }
-      catch { Fail "invalid Agent-owned JSON target: $jsonPath" }
-    }
-  }
+  return (Get-AgentOwnershipPlan)
 }
 
 function Assert-AgentUninstallSafe {
   Assert-AgentKitSafe
-  Assert-AgentOwnedConfigSafe
+  return (Assert-AgentOwnedConfigSafe)
 }
 
 function Invoke-PostPreflightUninstallTestHook {
@@ -563,16 +559,19 @@ function Cmd-Package {
     }
     "uninstall" {
       if ($argsRest -notcontains "--yes") { Fail "re-run: labwired agent package uninstall --yes" }
-      Assert-AgentUninstallSafe
+      $ownershipPlan = Assert-AgentUninstallSafe
       Invoke-PostPreflightUninstallTestHook
       $tombstones = @(Move-AgentTreesToTombstones)
       try {
-        Remove-AgentOwnedConfig
+        Remove-AgentOwnedConfig $ownershipPlan
         Remove-AgentLaunchers
       } catch {
         Restore-AgentTombstones $tombstones
         throw
       }
+      # Irreversible deletion begins only after the rollback-capable transaction
+      # commits. Cleanup failures are warnings and leave isolated tombstones;
+      # they never claim that already-deleted roots were restored.
       Remove-AgentTombstones $tombstones
       Say "uninstalled Agent from $HomeDir"
     }

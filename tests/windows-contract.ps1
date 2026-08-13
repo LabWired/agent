@@ -117,7 +117,12 @@ try {
   Assert-True ($agentLauncherText.Contains('Assert-AgentUninstallSafe')) "Windows uninstall validates every target before mutation"
   Assert-True ($agentLauncherText.Contains('Move-AgentTreeToTombstone')) "Windows uninstall atomically isolates recursive delete roots"
   Assert-True ($agentLauncherText.Contains('Remove-NoFollowTree')) "Windows uninstall removes tombstones without following reparse entries"
+  Assert-True ($agentLauncherText.Contains('rmdir /s /q')) "Windows tombstone cleanup uses native reparse-safe directory removal"
+  Assert-True ($agentLauncherText.Contains('Assert-CmdLiteralSafePath')) "Windows uninstall rejects cmd.exe-expanded cleanup paths before isolation"
+  Assert-True ($agentLauncherText.Contains('Irreversible deletion begins only after')) "Windows tombstone deletion is an explicit post-commit phase"
   Assert-True ($agentLauncherText.Contains('LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET')) "Windows uninstall exposes an adversarial post-preflight test hook"
+  Assert-True ($agentLauncherText.Contains('Get-AgentOwnershipPlan')) "Windows uninstall shares one validated ownership plan"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentOwnedConfig $ownershipPlan')) "Windows uninstall consumes its preflight ownership plan after isolation"
   Assert-True ($agentLauncherText.Contains('Join-Path $env:USERPROFILE ".config\opencode"')) "Windows install and uninstall share the default config path"
   Assert-True ($agentLauncherText.Contains('json-array:')) "Windows uninstall supports granular array ownership"
   $installerText = Get-Content -LiteralPath $Installer -Raw
@@ -383,6 +388,23 @@ public static class NativeArgvEcho {
   Assert-True ($LASTEXITCODE -eq 0) "post-preflight junction is isolated and removed without following"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "post-preflight junction cleanup preserves external sentinel"
   Assert-True (-not (Test-Path (Join-Path $uninstallPrefix "agent"))) "atomically isolated Agent root is absent"
+
+  $malformedPrefix = Join-Path $TempRoot "malformed-manifest-prefix"
+  $malformedConfig = Join-Path $TempRoot "malformed-manifest-config"
+  New-Item -ItemType Directory -Path (Join-Path $malformedPrefix "agent\nested"), (Join-Path $malformedPrefix "state\agent"), $malformedConfig -Force | Out-Null
+  Set-Content (Join-Path $malformedPrefix "agent\nested\owned.txt") "agent-intact" -Encoding ASCII
+  Set-Content (Join-Path $malformedPrefix "state\agent\state.txt") "state-intact" -Encoding ASCII
+  Set-Content (Join-Path $malformedConfig "opencode.json") '{"user":"config-intact"}' -Encoding ASCII
+  Set-Content (Join-Path $malformedConfig "labwired-agent.manifest") "json:" -Encoding ASCII
+  $env:LABWIRED_HOME = $malformedPrefix
+  $env:LABWIRED_AGENT_CONFIG_DIR = $malformedConfig
+  $env:OPENCODE_CONFIG_DIR = $malformedConfig
+  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
+  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'unsafe Agent ownership entry') "malformed JSON ownership is rejected before isolation"
+  Assert-True ((Get-Content (Join-Path $malformedPrefix "agent\nested\owned.txt") -Raw).Trim() -eq 'agent-intact') "malformed ownership leaves Agent root intact"
+  Assert-True ((Get-Content (Join-Path $malformedPrefix "state\agent\state.txt") -Raw).Trim() -eq 'state-intact') "malformed ownership leaves Agent state intact"
+  Assert-True ((Get-Content (Join-Path $malformedConfig "opencode.json") -Raw) -match 'config-intact') "malformed ownership leaves config untouched"
+  Assert-True (-not @(Get-ChildItem -LiteralPath $malformedPrefix -Recurse -Force | Where-Object { $_.Name -like '.labwired-agent-delete-*' }).Count) "malformed ownership leaks no tombstones"
   Write-Host "ok   windows-contract PASS"
 } finally {
   Remove-Item Env:LABWIRED_AGENT_BIN -ErrorAction SilentlyContinue
