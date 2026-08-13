@@ -6,7 +6,7 @@ fail=0
 pass() { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fail=1; }
 
-PRIMARY=(golden-path bringup prove observe desk-hw import-circuit)
+PRIMARY=(develop golden-path bringup prove observe desk-hw import-circuit)
 SUPERPOWERS=(
   using-superpowers brainstorming test-driven-development systematic-debugging
   verification-before-completion writing-plans executing-plans writing-skills
@@ -71,11 +71,11 @@ for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
 done
 
 n=$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-# 6 domain packs + customize-labwired-agent + 14 superpowers = 21
-if [[ "$n" -eq 21 ]]; then
-  pass "skill dir count $n (6 packs + customize + 14 superpowers)"
+# 7 domain packs + customize-labwired-agent + 14 superpowers = 22
+if [[ "$n" -eq 22 ]]; then
+  pass "skill dir count $n (7 packs + customize + 14 superpowers)"
 else
-  bad "skill dir count $n expected 21"
+  bad "skill dir count $n expected 22"
 fi
 
 if [[ "$fail" -ne 0 ]]; then

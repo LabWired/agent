@@ -13,7 +13,8 @@
   },
   "permission": {
     "skill": {
-      "brainstorming": "allow",
+    "brainstorming": "allow",
+    "develop": "allow",
       "bringup": "allow",
       "desk-hw": "allow",
       "dispatching-parallel-agents": "allow",

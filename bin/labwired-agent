@@ -268,9 +268,9 @@ cmd_doctor() {
     printf '\033[33mwarn\033[0m brand-plugin: missing — re-run labwired agent or install\n'
   fi
 
-  # Five primary packs (ship surface). Aliases optional.
+  # Primary packs (ship surface). Aliases optional.
   local skill
-  for skill in golden-path bringup prove observe desk-hw import-circuit; do
+  for skill in develop golden-path bringup prove observe desk-hw import-circuit; do
     if [[ -f "$cfg/skills/$skill/SKILL.md" ]]; then
       say "ok  skill: $skill"
     elif [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
@@ -894,7 +894,7 @@ LabWired Agent — The easy way to build hardware
   (Playground Architect is optional / secondary — same labwired_* tools.)
 
 Usage:
-  labwired agent                 Start LabWired Agent (golden-path + MCP)
+  labwired agent                 Start LabWired Agent (develop + MCP)
   labwired agent login           Sign in with LabWired account (first start does this)
   labwired agent logout          Clear LabWired session
   labwired agent whoami          Show signed-in identity / project
@@ -918,7 +918,7 @@ Usage:
 Ship gate (CI / release):
   ./scripts/ship-gate.sh
 
-LabWired CLI. Skills: golden-path · bringup · prove · observe · desk-hw · import-circuit
+LabWired CLI. Skills: develop · golden-path · bringup · prove · observe · desk-hw · import-circuit
 (+ Superpowers process). Knowledge via MCP labwired_part / labwired_datasheet.
 
 Env:
@@ -1242,7 +1242,7 @@ case "${1:-}" in
       labwired_export_sim || true
     fi
     labwired_splash
-    echo "labwired: starting LabWired Agent — skill golden-path; packs bringup/prove/observe/desk-hw/import-circuit" >&2
+    echo "labwired: starting LabWired Agent — skill develop; guide golden-path; packs bringup/prove/observe/desk-hw/import-circuit" >&2
     echo "labwired: LabWired Agent · twin tools via MCP labwired_* · compose: labwired agent compose …" >&2
     labwired_exec_opencode "$@"
     ;;
@@ -1268,7 +1268,7 @@ case "${1:-}" in
       fi
     fi
     labwired_splash
-    echo "labwired: starting LabWired Agent — skill golden-path (firmware first)" >&2
+    echo "labwired: starting LabWired Agent — skill develop (firmware first); guide golden-path" >&2
     echo "labwired: start-here: account login → doctor → labwired agent → “blink and prove it”" >&2
     labwired_exec_opencode "$@"
     ;;

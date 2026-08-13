@@ -243,7 +243,7 @@ else
 fi
 
 # ——— skills / onboarding ———
-for skill in golden-path bringup prove observe desk-hw using-superpowers; do
+for skill in develop golden-path bringup prove observe desk-hw using-superpowers; do
   if [[ -f "$ROOT/skills/$skill/SKILL.md" ]]; then
     record "FW-SKILL-$skill" pass "SKILL.md present"
   else

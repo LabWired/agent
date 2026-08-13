@@ -1,9 +1,8 @@
 ---
 name: golden-path
 description: >-
-  Default stranger path: bringup → prove on twin (or debugger if no sim) →
-  optional observe plot → optional desk-hw. Use for "blink and prove it" or
-  first session. Loads the four packs: bringup, prove, observe, desk-hw.
+  First-session guide that delegates firmware development to develop, with
+  optional circuit import, requested plots, and physical-board evidence.
 license: MIT
 compatibility: opencode
 metadata:
@@ -14,53 +13,30 @@ metadata:
 
 # Golden path (entry)
 
-Default LabWired loop. Prefer this over loading many micro-skills.
+First-session guide. Delegate firmware work to **`develop`**.
 
 ```text
-bringup → write/scaffold → prove → optional observe → optional desk-hw
+develop → optional import-circuit / observe / desk-hw
 ```
 
 ## Hard rules
 
 1. **Do not force sim.** No twin → **debugger** (F5 / probe) is first-class.  
-2. **`model_verified` only** from `labwired_verify` (prove pack).  
+2. **`model_verified` only** from `labwired_verify`.
 3. Debugger / flash success is **never** renamed to `model_verified`.  
 4. Plots = **observe** pack (elements), not ready-made Open Plot.  
 5. HW claims only via **desk-hw** (`hardware_observed`).
 
-## Procedure
+## Routing
 
-### 0. Context (always)
-Call MCP **`labwired_context`** (or read `.labwired/import/DESIGN_CONTEXT.md`).
+- Load **`develop`** for firmware creation or modification, compilation, twin checks, repair, and reporting.
+- Load **`import-circuit`** only when an external schematic or diagram must become circuit input.
+- Load **`bringup`** only when extra board or part knowledge is needed.
+- Load **`prove`** when the development workflow needs its focused verification guidance.
+- Load **`observe`** only when the user requests plots or graphs.
+- Load **`desk-hw`** only when a physical board is available and hardware evidence is requested.
 
-- `mode=design_only` → still design FW; do **not** stall for twin.  
-- `mode=twin_ready` → proceed to bringup + prove.  
-- `mode=empty` → import / new board first (`import-circuit` or catalog board).
-
-### 1. Bringup
-Load **`bringup`**: part tools → diagram → minimal blink/UART scaffold.
-
-### 2. Prove (when twin tools available)
-Load **`prove`**: run observe → `labwired_verify` → repair ≤3 if red → evidence report.
-
-### 3. Debugger path (no sim)
-Build for target → LabWired VS Code F5 / probe-rs → serial observe → honest report.
-Optional later: when twin available, re-run **prove**.
-
-### 4. Observe (optional)
-Load **`observe`** if user wants a plot/graph:  
-`labwired agent compose job --ask "<their words>" --uart <log>|--from last-run`.
-
-### 5. Desk-hw (optional)
-Load **`desk-hw`** only if user has hardware and wants promote.
-
-## Pack map
-
-| Pack | Job |
-|------|-----|
-| `bringup` | Pins, diagram, scaffold |
-| `prove` | Verify, repair, evidence |
-| `observe` | Compose plots from elements |
-| `desk-hw` | Flash + hardware_observed |
+Keep twin and hardware claims separate. If no twin is available, use the
+debugger/probe path and report only the evidence actually observed.
 
 See `skills/README.md`.

@@ -127,15 +127,14 @@ Never invent a sim result. Never call debugger success `model_verified`.
 
 ## Default loop (firmware sessions — always)
 
-**For any firmware / board / blink / prove task, load `golden-path` first.**  
+**For any firmware creation, modification, compile, twin-check, repair, or report task, load `develop` first.**
 Do not lead with Superpowers (TDD/plans) alone — domain packs own the loop.
 
 ```text
-golden-path
-  → bringup / import-circuit   (knowledge MCP: list/describe/part/datasheet)
-  → prove     (labwired_verify → model_verified; repair ≤3)
-  → observe   (optional; labwired compose …)
-  → desk-hw   (optional; hardware_observed only)
+develop
+  → bringup / import-circuit   (only when knowledge or external circuit input is needed)
+  → prove                       (labwired_verify → model_verified)
+  → desk-hw                     (optional; available physical board only)
 ```
 
 If no twin: debugger/probe path with honest claims (not model_verified).
@@ -148,7 +147,8 @@ See `skills/README.md` · `docs/KNOWLEDGE.md`.
 
 | Pack | When |
 |------|------|
-| **`golden-path`** | Default end-to-end stranger path |
+| **`develop`** | Default inspect → ground → compile → twin-check → repair workflow |
+| **`golden-path`** | First-session guide; delegates firmware work to `develop` |
 | **`bringup`** | Knowledge + diagram + scaffold |
 | **`prove`** | Twin verify, repair ≤3, evidence report |
 | **`observe`** | Plots from **elements** (not ready-made) |
@@ -160,7 +160,7 @@ Old micro-skill names (verify-firmware, part-knowledge, …) are **removed**.
 ### Superpowers (process — prepacked, secondary for firmware)
 
 Engineering process skills ship in the kit (`using-superpowers`, TDD, plans, …).  
-**On firmware tasks: `golden-path` first; Superpowers second.**  
+**On firmware tasks: `develop` first; Superpowers second.**
 They **do not** mint `model_verified` and **do not** replace knowledge MCP.
 
 **Knowledge (one path):** `bringup` + MCP  

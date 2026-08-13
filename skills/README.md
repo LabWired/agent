@@ -9,14 +9,15 @@ Skills = how the desk agent works. Engine = **`labwired agent`**. UI does not re
 
 | Skill | Job |
 |-------|-----|
-| **golden-path** | Entry loop for a new user |
+| **develop** | Default inspect → ground → edit → compile → twin-check → repair → report workflow |
+| **golden-path** | First-session guide that delegates firmware work to **develop** |
 | **bringup** | Knowledge + diagram + scaffold |
 | **import-circuit** | External sources → twin pack |
 | **prove** | `labwired_verify` → `model_verified` |
 | **observe** | Plots from elements (not Open Plot) |
 | **desk-hw** | **Physical boards**: flash, serial/RTT → `hardware_observed` |
 
-Typical order: `golden-path` → `bringup` \| `import-circuit` → `prove` → optional `observe` / `desk-hw`.
+Typical order: `develop` → optional `import-circuit` / `observe` / `desk-hw`.
 
 ## Claims
 

@@ -14,7 +14,7 @@ need_skill() {
   fi
 }
 
-for s in golden-path bringup prove observe desk-hw; do
+for s in develop golden-path bringup prove observe desk-hw; do
   need_skill "$s"
 done
 for s in using-superpowers test-driven-development systematic-debugging \
@@ -100,7 +100,7 @@ fi
 
 for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
   "$ROOT/config/opencode.deepinfra.json" "$ROOT/config/opencode.airgap.json"; do
-  if grep -q 'golden-path' "$cfg" && grep -q 'bringup' "$cfg" \
+  if grep -q 'develop' "$cfg" && grep -q 'golden-path' "$cfg" && grep -q 'bringup' "$cfg" \
     && grep -q 'prove' "$cfg" && grep -q 'observe' "$cfg" \
     && grep -q 'desk-hw' "$cfg" && grep -q 'using-superpowers' "$cfg"; then
     echo "ok   $(basename "$cfg") allowlist"
