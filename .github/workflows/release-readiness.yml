@@ -39,6 +39,7 @@ jobs:
   hosted-release-ubuntu:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Validate required release inputs and credentials
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
@@ -47,7 +48,7 @@ jobs:
           PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_ubuntu_archive_sha256 }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/ubuntu
         run: |
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR/upgrade"
@@ -65,13 +66,12 @@ jobs:
           [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous Ubuntu archive URL must use HTTPS' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous Ubuntu archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
-      - uses: actions/checkout@v4
       - name: Install candidate and prove hosted access
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/ubuntu
         run: |
           set -euo pipefail
           session_root="$(mktemp -d)"
@@ -136,7 +136,7 @@ jobs:
           PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_ubuntu_archive_url }}
           LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
           LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_ubuntu_archive_sha256 }}
-          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/ubuntu/upgrade
+          LABWIRED_EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/ubuntu/upgrade
         run: |
           set -euo pipefail
           archive="$(mktemp "$RUNNER_TEMP/labwired-previous-ubuntu.XXXXXX")"
@@ -146,24 +146,27 @@ jobs:
           bash tests/upgrade-smoke.sh
           grep -qx PASS "$LABWIRED_EVIDENCE_DIR/result.txt"
       - name: Mark Ubuntu release evidence complete
-        run: echo PASS > evidence/release-readiness/ubuntu/result.txt
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/ubuntu
+        run: echo PASS > "$EVIDENCE_DIR/result.txt"
       - name: Upload Ubuntu release readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: labwired-agent-release-readiness-ubuntu
           path: |
-            evidence/release-readiness/ubuntu/hosted-status.txt
-            evidence/release-readiness/ubuntu/mcp-result.txt
-            evidence/release-readiness/ubuntu/upgrade
-            evidence/release-readiness/ubuntu/platform.txt
-            evidence/release-readiness/ubuntu/capabilities.txt
-            evidence/release-readiness/ubuntu/result.txt
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/hosted-status.txt
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/mcp-result.txt
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/upgrade
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/platform.txt
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/capabilities.txt
+            ${{ runner.temp }}/labwired-release-readiness/ubuntu/result.txt
           if-no-files-found: error
 
   hosted-release-macos:
     runs-on: macos-14
     steps:
+      - uses: actions/checkout@v4
       - name: Validate required release inputs and credentials
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
@@ -172,7 +175,7 @@ jobs:
           PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_macos_archive_sha256 }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/macos
         run: |
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR/upgrade"
@@ -190,13 +193,12 @@ jobs:
           [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'previous_version must be stable X.Y.Z' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_URL" == https://* ]] || { echo 'previous macOS archive URL must use HTTPS' >&2; exit 1; }
           [[ "$PREVIOUS_ARCHIVE_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'previous macOS archive SHA256 must be 64 hexadecimal characters' >&2; exit 1; }
-      - uses: actions/checkout@v4
       - name: Install candidate and prove hosted access
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/macos
         run: |
           set -euo pipefail
           session_root="$(mktemp -d)"
@@ -261,7 +263,7 @@ jobs:
           PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_macos_archive_url }}
           LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
           LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_macos_archive_sha256 }}
-          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/evidence/release-readiness/macos/upgrade
+          LABWIRED_EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/macos/upgrade
         run: |
           set -euo pipefail
           archive="$(mktemp "$RUNNER_TEMP/labwired-previous-macos.XXXXXX")"
@@ -271,24 +273,27 @@ jobs:
           bash tests/upgrade-smoke.sh
           grep -qx PASS "$LABWIRED_EVIDENCE_DIR/result.txt"
       - name: Mark macOS release evidence complete
-        run: echo PASS > evidence/release-readiness/macos/result.txt
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/macos
+        run: echo PASS > "$EVIDENCE_DIR/result.txt"
       - name: Upload macOS release readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: labwired-agent-release-readiness-macos
           path: |
-            evidence/release-readiness/macos/hosted-status.txt
-            evidence/release-readiness/macos/mcp-result.txt
-            evidence/release-readiness/macos/upgrade
-            evidence/release-readiness/macos/platform.txt
-            evidence/release-readiness/macos/capabilities.txt
-            evidence/release-readiness/macos/result.txt
+            ${{ runner.temp }}/labwired-release-readiness/macos/hosted-status.txt
+            ${{ runner.temp }}/labwired-release-readiness/macos/mcp-result.txt
+            ${{ runner.temp }}/labwired-release-readiness/macos/upgrade
+            ${{ runner.temp }}/labwired-release-readiness/macos/platform.txt
+            ${{ runner.temp }}/labwired-release-readiness/macos/capabilities.txt
+            ${{ runner.temp }}/labwired-release-readiness/macos/result.txt
           if-no-files-found: error
 
   hosted-release-windows:
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Validate required release inputs and credentials
         shell: powershell
         env:
@@ -298,7 +303,7 @@ jobs:
           PREVIOUS_ARCHIVE_SHA256: ${{ inputs.previous_windows_archive_sha256 }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/windows
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Path $env:EVIDENCE_DIR -Force | Out-Null
@@ -320,14 +325,13 @@ jobs:
           if ($env:PREVIOUS_VERSION -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'previous_version must be stable X.Y.Z' }
           if ($env:PREVIOUS_ARCHIVE_URL -notmatch '^https://') { throw 'previous Windows archive URL must use HTTPS' }
           if ($env:PREVIOUS_ARCHIVE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'previous Windows archive SHA256 must be 64 hexadecimal characters' }
-      - uses: actions/checkout@v4
       - name: Install candidate and prove hosted access with both PowerShell engines
         shell: powershell
         env:
           CANDIDATE_VERSION: ${{ inputs.candidate_version }}
           RELEASE_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
           RELEASE_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
-          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/windows
         run: |
           $ErrorActionPreference = 'Stop'
           $sessionRoot = Join-Path $env:RUNNER_TEMP ('labwired-release-hosted-' + [guid]::NewGuid().ToString('n'))
@@ -419,7 +423,7 @@ jobs:
           PREVIOUS_ARCHIVE_URL: ${{ inputs.previous_windows_archive_url }}
           LABWIRED_PREVIOUS_AGENT_VERSION: ${{ inputs.previous_version }}
           LABWIRED_PREVIOUS_AGENT_SHA256: ${{ inputs.previous_windows_archive_sha256 }}
-          EVIDENCE_DIR: ${{ github.workspace }}\evidence\release-readiness\windows
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/windows
         run: |
           $ErrorActionPreference = 'Stop'
           $archive = Join-Path $env:RUNNER_TEMP ('labwired-previous-windows-' + [guid]::NewGuid().ToString('n') + '.zip')
@@ -442,17 +446,19 @@ jobs:
           }
       - name: Mark Windows release evidence complete
         shell: powershell
-        run: Set-Content -LiteralPath evidence\release-readiness\windows\result.txt -Value PASS -Encoding ASCII
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/labwired-release-readiness/windows
+        run: Set-Content -LiteralPath (Join-Path $env:EVIDENCE_DIR 'result.txt') -Value PASS -Encoding ASCII
       - name: Upload Windows release readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: labwired-agent-release-readiness-windows
           path: |
-            evidence/release-readiness/windows/hosted-status.txt
-            evidence/release-readiness/windows/mcp-result.txt
-            evidence/release-readiness/windows/upgrade
-            evidence/release-readiness/windows/platform.txt
-            evidence/release-readiness/windows/capabilities.txt
-            evidence/release-readiness/windows/result.txt
+            ${{ runner.temp }}/labwired-release-readiness/windows/hosted-status.txt
+            ${{ runner.temp }}/labwired-release-readiness/windows/mcp-result.txt
+            ${{ runner.temp }}/labwired-release-readiness/windows/upgrade
+            ${{ runner.temp }}/labwired-release-readiness/windows/platform.txt
+            ${{ runner.temp }}/labwired-release-readiness/windows/capabilities.txt
+            ${{ runner.temp }}/labwired-release-readiness/windows/result.txt
           if-no-files-found: error

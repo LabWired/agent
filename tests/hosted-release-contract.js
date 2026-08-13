@@ -71,7 +71,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
       'inputs.previous_ubuntu_archive_sha256',
       'tests/upgrade-smoke.sh',
       'labwired-agent-release-readiness-ubuntu',
-      'evidence/release-readiness/ubuntu',
+      '${{ runner.temp }}/labwired-release-readiness/ubuntu',
     ],
     [
       'hosted-release-macos',
@@ -80,7 +80,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
       'inputs.previous_macos_archive_sha256',
       'tests/upgrade-smoke.sh',
       'labwired-agent-release-readiness-macos',
-      'evidence/release-readiness/macos',
+      '${{ runner.temp }}/labwired-release-readiness/macos',
     ],
     [
       'hosted-release-windows',
@@ -89,7 +89,7 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
       'inputs.previous_windows_archive_sha256',
       'tests/windows-upgrade-smoke.ps1',
       'labwired-agent-release-readiness-windows',
-      'evidence/release-readiness/windows',
+      '${{ runner.temp }}/labwired-release-readiness/windows',
     ],
   ]) {
     const job = workflowJobs.get(key);
@@ -101,8 +101,39 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
     requireText(job, 'Validate required release inputs and credentials', key);
     const validationIndex = job.indexOf('Validate required release inputs and credentials');
     const checkoutIndex = job.indexOf('actions/checkout@v4');
-    if (validationIndex < 0 || checkoutIndex < 0 || validationIndex > checkoutIndex) {
-      fail(`${key} must validate required inputs and credentials before checkout`);
+    const evidenceInitializationIndex = job.indexOf('FAIL', validationIndex);
+    const requiredCredentialCheckIndex = job.indexOf(
+      key === 'hosted-release-windows'
+        ? "if (-not $env:RELEASE_ACCESS_TOKEN)"
+        : '[[ -n "$RELEASE_ACCESS_TOKEN" ]]',
+      validationIndex,
+    );
+    const hostedCheckIndex = job.indexOf('Install candidate and prove hosted access');
+    if (
+      validationIndex < 0 || checkoutIndex < 0 || evidenceInitializationIndex < 0
+      || requiredCredentialCheckIndex < 0 || hostedCheckIndex < 0
+      || checkoutIndex >= validationIndex
+      || validationIndex > evidenceInitializationIndex
+      || evidenceInitializationIndex > requiredCredentialCheckIndex
+      || evidenceInitializationIndex > hostedCheckIndex
+    ) {
+      fail(`${key} must checkout, initialize FAIL evidence, validate required values, then run hosted checks`);
+    }
+    requireText(job, `EVIDENCE_DIR: ${artifactRoot}`, `${key} stable evidence root`);
+    forbidText(job, 'EVIDENCE_DIR: ${{ github.workspace }}', `${key} evidence root`);
+    forbidText(job, 'evidence/release-readiness', `${key} legacy workspace evidence root`);
+    const evidenceAssignments = [...job.matchAll(/^          (?:LABWIRED_)?EVIDENCE_DIR: (.+)$/gm)]
+      .map((match) => match[1]);
+    if (
+      evidenceAssignments.length === 0
+      || evidenceAssignments.some((value) => value !== artifactRoot && value !== `${artifactRoot}/upgrade`)
+    ) {
+      fail(`${key} must route every evidence-producing step to its runner.temp root`);
+    }
+    if (key === 'hosted-release-windows') {
+      requireText(job, '$env:LABWIRED_EVIDENCE_DIR = Join-Path $env:EVIDENCE_DIR', `${key} upgrade evidence root`);
+    } else {
+      requireText(job, `LABWIRED_EVIDENCE_DIR: ${artifactRoot}/upgrade`, `${key} upgrade evidence root`);
     }
     requireText(job, 'secrets.LABWIRED_RELEASE_ACCESS_TOKEN', key);
     requireText(job, 'secrets.LABWIRED_RELEASE_PROJECT', key);
