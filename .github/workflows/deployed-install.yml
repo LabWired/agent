@@ -1,0 +1,121 @@
+name: deployed-install-evidence
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Published LabWired Agent version, without a v prefix
+        required: true
+        type: string
+
+jobs:
+  deployed-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deployed POSIX installer
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/ubuntu
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          echo FAIL >"$EVIDENCE_DIR/result.txt"
+          trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
+          tmp="$(mktemp -d)"
+          export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
+          export OPENCODE_CONFIG_DIR="$tmp/config" LABWIRED_AGENT_CONFIG_DIR="$tmp/config"
+          mkdir -p "$HOME"
+          curl -fsSL https://labwired.com/install -o "$tmp/install"
+          sha256sum "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
+          bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
+          grep -q "version  $EXPECTED_VERSION" "$EVIDENCE_DIR/version.txt"
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
+          { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
+          echo PASS >"$EVIDENCE_DIR/result.txt"
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-deployed-ubuntu
+          path: evidence/ubuntu
+          if-no-files-found: error
+
+  deployed-macos:
+    runs-on: macos-14
+    steps:
+      - name: Verify deployed POSIX installer
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/macos
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          echo FAIL >"$EVIDENCE_DIR/result.txt"
+          trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
+          tmp="$(mktemp -d)"
+          export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
+          export OPENCODE_CONFIG_DIR="$tmp/config" LABWIRED_AGENT_CONFIG_DIR="$tmp/config"
+          mkdir -p "$HOME"
+          curl -fsSL https://labwired.com/install -o "$tmp/install"
+          shasum -a 256 "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
+          bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
+          grep -q "version  $EXPECTED_VERSION" "$EVIDENCE_DIR/version.txt"
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
+          { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
+          echo PASS >"$EVIDENCE_DIR/result.txt"
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-deployed-macos
+          path: evidence/macos
+          if-no-files-found: error
+
+  deployed-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Verify deployed Windows installer
+        shell: powershell
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path $env:EVIDENCE_DIR -Force | Out-Null
+          Set-Content "$env:EVIDENCE_DIR\result.txt" FAIL
+          $tmp = Join-Path $env:RUNNER_TEMP ('labwired-deployed-' + [guid]::NewGuid().ToString('n'))
+          $env:USERPROFILE = Join-Path $tmp 'home'
+          $env:LABWIRED_HOME = Join-Path $tmp 'prefix'
+          $env:LABWIRED_BIN_DIR = Join-Path $tmp 'bin'
+          $env:OPENCODE_CONFIG_DIR = Join-Path $tmp 'config'
+          $env:LABWIRED_AGENT_CONFIG_DIR = $env:OPENCODE_CONFIG_DIR
+          New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
+          $installer = Join-Path $tmp 'install.ps1'
+          Invoke-WebRequest https://labwired.com/install.ps1 -OutFile $installer
+          (Get-FileHash $installer -Algorithm SHA256).Hash | Set-Content "$env:EVIDENCE_DIR\installer-sha256.txt"
+          & $installer -Prefix $env:LABWIRED_HOME -UserBin $env:LABWIRED_BIN_DIR -AgentOnly -SkipPathUpdate *>&1 |
+            Tee-Object "$env:EVIDENCE_DIR\install.txt"
+          $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
+          & $dispatcher agent version *>&1 | Tee-Object "$env:EVIDENCE_DIR\version.txt"
+          if ((Get-Content "$env:EVIDENCE_DIR\version.txt" -Raw) -notmatch "version\s+$([regex]::Escape($env:EXPECTED_VERSION))") { throw 'published version mismatch' }
+          & $dispatcher agent doctor *>&1 | Tee-Object "$env:EVIDENCE_DIR\doctor.txt"
+          @(
+            "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+            "os_architecture=$([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+            "process_architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
+          ) | Set-Content "$env:EVIDENCE_DIR\platform.txt"
+          @(
+            "simulator=$(if (Test-Path (Join-Path $env:LABWIRED_HOME 'tools\sim\labwired-sim.exe')) { 'present' } else { 'absent' })"
+            'verification_fallback=hosted-or-wsl'
+          ) | Set-Content "$env:EVIDENCE_DIR\capabilities.txt"
+          Set-Content "$env:EVIDENCE_DIR\result.txt" PASS
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-deployed-windows
+          path: evidence/windows
+          if-no-files-found: error

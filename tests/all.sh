@@ -40,6 +40,14 @@ run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
 run "dispatcher"        "$ROOT/tests/dispatcher.sh"
 run "agent-lifecycle"   "$ROOT/tests/agent-lifecycle.sh"
 run "rpc-agent-resolution" "$ROOT/tests/rpc-agent-resolution.sh"
+echo ""
+echo "======== release-evidence-contract ========"
+if node "$ROOT/tests/release-evidence-contract.js"; then
+  echo "PASS release-evidence-contract"
+else
+  echo "FAIL release-evidence-contract"
+  fail=1
+fi
 run "demo"              "$ROOT/demo.sh"
 run "fw-usecase-qa"     "$ROOT/tests/fw-usecase-qa.sh"
 editor_root="${LABWIRED_EDITOR_ROOT:-$(cd "$ROOT/../labwired-cursor" 2>/dev/null && pwd || true)}"

@@ -10,6 +10,11 @@ $Prefix = Join-Path $SessionRoot "prefix"
 $UserBin = Join-Path $SessionRoot "user-bin"
 $ConfigDir = Join-Path $SessionRoot "config"
 $TestBin = Join-Path $SessionRoot "test-bin"
+$PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
+  Join-Path $PSHOME "pwsh.exe"
+} else {
+  Join-Path $PSHOME "powershell.exe"
+}
 $Original = @{
   USERPROFILE = $env:USERPROFILE
   LABWIRED_HOME = $env:LABWIRED_HOME
@@ -69,12 +74,12 @@ try {
 
   $dispatcher = Join-Path $Prefix "bin\labwired.ps1"
   $versionStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "version.txt") -Command {
-    & $dispatcher agent version
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version
   }
   if ($versionStatus -ne 0) { throw "labwired agent version failed with code $versionStatus" }
 
   $doctorStatus = Invoke-Captured -OutputPath (Join-Path $EvidenceDir "doctor.txt") -Command {
-    & $dispatcher agent doctor
+    & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor
   }
   if ($doctorStatus -ne 0) { throw "labwired agent doctor failed with code $doctorStatus" }
 

@@ -76,6 +76,60 @@ jobs:
             exit 1
           }
 
+  release-evidence-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source install evidence
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/ubuntu
+        run: bash tests/install-smoke.sh
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-source-ubuntu
+          path: artifacts/release-evidence/ubuntu
+          if-no-files-found: error
+
+  release-evidence-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source install evidence
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/macos
+        run: bash tests/install-smoke.sh
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-source-macos
+          path: artifacts/release-evidence/macos
+          if-no-files-found: error
+
+  release-evidence-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source install evidence (Windows PowerShell)
+        shell: powershell
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\powershell
+        run: ./tests/windows-install-smoke.ps1
+      - name: Source install evidence (PowerShell Core)
+        shell: pwsh
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\pwsh
+        run: ./tests/windows-install-smoke.ps1
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: labwired-agent-source-windows
+          path: artifacts/release-evidence/windows
+          if-no-files-found: error
+
   llm-deepinfra:
     runs-on: ubuntu-latest
     steps:
