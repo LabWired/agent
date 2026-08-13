@@ -98,28 +98,32 @@ else
 fi
 
 # 7 packs present
-for s in golden-path bringup prove observe desk-hw; do
+for s in develop golden-path bringup prove observe desk-hw; do
   [[ -f "$ROOT/skills/$s/SKILL.md" ]] && pass "pack $s" || bad "pack $s"
 done
 
-# 8 OpenCode present + golden-path pack (interactive chat is human; twin is automated prove)
+# 8 OpenCode present + develop-first routing (interactive chat is human; twin is automated prove)
 if command -v opencode >/dev/null 2>&1; then
   pass "opencode on PATH"
 else
   bad "opencode missing"
 fi
-if [[ -f "$ROOT/skills/golden-path/SKILL.md" ]] \
-  && grep -qi 'bringup' "$ROOT/skills/golden-path/SKILL.md"; then
-  pass "golden-path is default firmware entry"
+if [[ -f "$ROOT/skills/develop/SKILL.md" ]] \
+  && grep -qi 'labwired_compile' "$ROOT/skills/develop/SKILL.md"; then
+  pass "develop is default firmware entry"
 else
-  bad "golden-path pack"
+  bad "develop pack"
 fi
-if grep -qi 'golden-path first\|load \`golden-path\` first\|START with skill golden-path' \
-  "$ROOT/config/AGENTS.md" "$ROOT/config/opencode.hosted.json" 2>/dev/null; then
-  pass "AGENTS/opencode default golden-path first"
-else
-  bad "missing golden-path-first default in AGENTS/opencode"
-fi
+for routing_file in "$ROOT/config/AGENTS.md" "$ROOT"/config/opencode*.json; do
+  if grep -qiE 'develop.*first|first.*develop|START with skill develop' "$routing_file"; then
+    pass "develop-first routing: ${routing_file#"$ROOT/"}"
+  else
+    bad "missing develop-first routing: ${routing_file#"$ROOT/"}"
+  fi
+  if grep -qiE 'golden-path first|load `golden-path` first|START with skill golden-path' "$routing_file"; then
+    bad "stale golden-path-first mandate: ${routing_file#"$ROOT/"}"
+  fi
+done
 echo "note: full NL chat prove is interactive; automated prove = live-gate1 + assert-status" \
   >"$OUT/opencode-note.txt"
 
