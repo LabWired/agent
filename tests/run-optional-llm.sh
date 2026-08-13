@@ -14,7 +14,7 @@ fi
 
 echo ""
 echo "======== llm-deepinfra ========"
-if bash "$ROOT/tests/llm-deepinfra.sh"; then
+if bash "$ROOT/tests/llm-deepinfra.sh" --develop-acceptance; then
   echo "PASS llm-deepinfra"
 else
   echo "FAIL llm-deepinfra"

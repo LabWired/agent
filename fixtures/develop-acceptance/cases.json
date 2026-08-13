@@ -1,0 +1,31 @@
+{
+  "contract": "develop-acceptance-v1",
+  "instructions": "Return one JSON object with a reports array. Do not claim a compile, twin, or physical run you did not execute. Use not_run or unsupported and list gaps when execution is unavailable. Never infer model_verified from compilation, never infer hardware_observed from a twin, and use no more than three total edit-and-test attempts.",
+  "scenarios": [
+    {
+      "id": "greenfield-esp32c3",
+      "prompt": "Create PlatformIO Arduino firmware for ESP32-C3 DevKitM-1 that blinks the configured LED once per second and prints alive over serial.",
+      "input": {"board": "esp32-c3-devkitm-1", "framework": "arduino", "build_command": "pio run", "requested_behaviors": ["led_blink", "serial_alive"]}
+    },
+    {
+      "id": "existing-stm32f103",
+      "prompt": "Add a one-second heartbeat without restructuring the project.",
+      "input": {"board": "bluepill_f103c8", "framework": "arduino", "build_command": "pio run", "existing_paths": ["platformio.ini", "src/main.cpp"], "source": "void setup(){pinMode(PC13,OUTPUT);} void loop(){digitalWrite(PC13,!digitalRead(PC13));delay(1000);}"}
+    },
+    {
+      "id": "compile-recovery-esp32c3",
+      "prompt": "Repair the deliberate compiler error, then verify the requested blink and serial behavior without exceeding three total attempts.",
+      "input": {"board": "esp32-c3-devkitm-1", "build_command": "pio run", "diagnostic": "expected ';' before 'delay'", "broken_source": "Serial.println(\"alive\")\ndelay(1000);"}
+    },
+    {
+      "id": "partial-led-wifi",
+      "prompt": "Create ESP32-C3 firmware that blinks the LED once per second and associates with Wi-Fi; report each behavior separately.",
+      "input": {"board": "esp32-c3-devkitm-1", "build_command": "pio run", "requested_behaviors": ["led_blink", "wifi_association"], "twin_capabilities": ["led_blink"]}
+    },
+    {
+      "id": "unsupported-custom-board",
+      "prompt": "Build this custom board firmware and report only what the available evidence supports.",
+      "input": {"board": "acme_custom_mcu_v1", "catalog_present": false, "build_command": "make", "source": "int main(void){for(;;){} return 0;}"}
+    }
+  ]
+}
