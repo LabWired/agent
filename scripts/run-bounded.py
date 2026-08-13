@@ -7,6 +7,10 @@ import os
 import signal
 import subprocess
 import sys
+import time
+
+
+TERMINATION_GRACE_SECONDS = 1
 
 
 def positive_seconds(value):
@@ -36,11 +40,11 @@ def parse_args(argv):
     return options.timeout, command
 
 
-def stop_process(process):
+def send_signal(process, signum):
     if os.name == "posix":
         try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
+            os.killpg(process.pid, signum)
+        except (PermissionError, ProcessLookupError):
             pass
     else:
         try:
@@ -48,20 +52,27 @@ def stop_process(process):
         except ProcessLookupError:
             pass
 
-    try:
-        process.wait(timeout=1)
-    except subprocess.TimeoutExpired:
-        if os.name == "posix":
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        else:
+
+def stop_process(process, initial_signal=signal.SIGTERM):
+    send_signal(process, initial_signal)
+    if os.name == "posix":
+        time.sleep(TERMINATION_GRACE_SECONDS)
+        send_signal(process, signal.SIGKILL)
+    else:
+        try:
+            process.wait(timeout=TERMINATION_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
             try:
                 process.kill()
             except ProcessLookupError:
                 pass
-        process.wait()
+    process.wait()
+
+
+def shell_exit_code(returncode):
+    if returncode < 0:
+        return 128 + abs(returncode)
+    return returncode
 
 
 def main(argv):
@@ -69,16 +80,36 @@ def main(argv):
     popen_args = {}
     if os.name == "posix":
         popen_args["start_new_session"] = True
-    process = subprocess.Popen(command, **popen_args)
+    process_holder = [None]
+    stopping = False
+
+    def forward_signal(signum, _frame):
+        nonlocal stopping
+        if stopping:
+            return
+        stopping = True
+        if process_holder[0] is not None:
+            stop_process(process_holder[0], signum)
+        raise SystemExit(128 + signum)
+
+    handlers = {}
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        handlers[signum] = signal.getsignal(signum)
+        signal.signal(signum, forward_signal)
+
     try:
-        return process.wait(timeout=timeout)
+        process_holder[0] = subprocess.Popen(command, **popen_args)
+        return shell_exit_code(process_holder[0].wait(timeout=timeout))
     except subprocess.TimeoutExpired:
-        stop_process(process)
+        stop_process(process_holder[0])
         print(
             f"run-bounded: command {command[0]!r} timed out after {timeout:g} seconds",
             file=sys.stderr,
         )
         return 124
+    finally:
+        for signum, handler in handlers.items():
+            signal.signal(signum, handler)
 
 
 if __name__ == "__main__":

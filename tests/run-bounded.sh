@@ -25,7 +25,40 @@ assert_contains() {
 }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+tracked_pids=()
+cleanup() {
+  local pid
+  for pid in "${tracked_pids[@]}"; do
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+assert_process_gone() {
+  local name="$1" pid="$2" deadline
+  deadline=$((SECONDS + 3))
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( SECONDS >= deadline )); then
+      echo "FAIL $name: process $pid is still running"
+      fail=1
+      return
+    fi
+    sleep 0.05
+  done
+  echo "ok   $name"
+}
+
+wait_for_file() {
+  local file="$1" deadline
+  deadline=$((SECONDS + 3))
+  while [[ ! -s "$file" ]]; do
+    if (( SECONDS >= deadline )); then
+      return 1
+    fi
+    sleep 0.05
+  done
+}
 
 set +e
 python3 "$RUNNER" --timeout 1 -- python3 -c 'print("bounded ok")' >"$TMP/success.out" 2>"$TMP/success.err"
@@ -48,6 +81,40 @@ set -e
 assert_eq "timed out command exit" "$status" "124"
 assert_contains "timeout names command" "python3" "$TMP/timeout.err"
 assert_contains "timeout names duration" "0.1" "$TMP/timeout.err"
+
+set +e
+python3 "$RUNNER" --timeout 0.1 -- python3 -c 'import signal, subprocess, sys, time; descendant = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"]); print(descendant.pid, flush=True); time.sleep(30)' >"$TMP/descendant.out" 2>"$TMP/descendant.err"
+status=$?
+set -e
+descendant_pid="$(<"$TMP/descendant.out")"
+tracked_pids+=("$descendant_pid")
+assert_eq "stubborn descendant timeout exit" "$status" "124"
+assert_process_gone "stubborn descendant terminates with group" "$descendant_pid"
+
+interrupt_pid_file="$TMP/interrupt.pid"
+PID_FILE="$interrupt_pid_file" python3 "$RUNNER" --timeout 10 -- python3 -c 'import os, time; open(os.environ["PID_FILE"], "w").write(str(os.getpid())); time.sleep(30)' >"$TMP/interrupt.out" 2>"$TMP/interrupt.err" &
+interrupt_runner_pid=$!
+tracked_pids+=("$interrupt_runner_pid")
+if wait_for_file "$interrupt_pid_file"; then
+  interrupt_child_pid="$(<"$interrupt_pid_file")"
+  tracked_pids+=("$interrupt_child_pid")
+  kill -TERM "$interrupt_runner_pid"
+  set +e
+  wait "$interrupt_runner_pid"
+  status=$?
+  set -e
+  assert_eq "interrupted wrapper exit" "$status" "143"
+  assert_process_gone "interrupted wrapper terminates child" "$interrupt_child_pid"
+else
+  echo "FAIL interrupted wrapper starts child"
+  fail=1
+fi
+
+set +e
+python3 "$RUNNER" --timeout 1 -- python3 -c 'import os, signal; os.kill(os.getpid(), signal.SIGTERM)' >"$TMP/signaled.out" 2>"$TMP/signaled.err"
+status=$?
+set -e
+assert_eq "signaled child maps to shell status" "$status" "143"
 
 set +e
 python3 "$RUNNER" --timeout nan -- true >"$TMP/invalid-timeout.out" 2>"$TMP/invalid-timeout.err"
