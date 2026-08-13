@@ -89,6 +89,10 @@ export class RpcClient extends EventEmitter {
       this.output.appendLine(`RPC: server exited ${code}`);
       this.child = null;
       this.ready = false;
+      for (const [, p] of this.pending) {
+        p.reject(new Error(`RPC server exited (code ${code})`));
+      }
+      this.pending.clear();
       this.emit("exit", code);
     });
 
@@ -142,7 +146,7 @@ export class RpcClient extends EventEmitter {
           this.pending.delete(id);
           reject(new Error(`RPC timeout: ${method}`));
         }
-      }, 600_000);
+      }, 660_000);
     });
   }
 

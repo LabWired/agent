@@ -4,10 +4,13 @@ import { ToolRunner } from '../../tools/runner';
 function fakeRpc(tools: string[], runResult?: any) {
   const calls: { name: string; params: unknown }[] = [];
   const methods: string[] = [];
+  const handlers: Record<string, (() => void)[]> = {};
   return {
     calls,
     methods,
     isRunning: () => true,
+    on(ev: string, cb: () => void) { (handlers[ev] ||= []).push(cb); },
+    emitLocal(ev: string) { for (const cb of handlers[ev] || []) cb(); },
     request: async (method: string, params: any) => {
       methods.push(method);
       if (method === 'tool/list') return { tools: tools.map((name) => ({ name })) };
@@ -79,5 +82,21 @@ suite('ToolRunner RPC routing', () => {
     assert.match(res.output, /local debug info/);
     assert.deepStrictEqual(rpc.methods, []);
     assert.strictEqual(cliUsed, false);
+  });
+
+  test('invalidates cached tool/list on rpc exit/ready', async () => {
+    const rpc = fakeRpc(['doctor']);
+    const bridge = fakeBridge(async () => { throw new Error('CLI must not be used'); });
+    const runner = new ToolRunner(bridge as any, undefined, undefined, undefined, undefined, rpc as any);
+    const listCalls = () => rpc.methods.filter((m) => m === 'tool/list').length;
+    await runner.runNamed('doctor', {});
+    await runner.runNamed('doctor', {});
+    assert.strictEqual(listCalls(), 1);
+    rpc.emitLocal('exit');
+    await runner.runNamed('doctor', {});
+    assert.strictEqual(listCalls(), 2);
+    rpc.emitLocal('ready');
+    await runner.runNamed('doctor', {});
+    assert.strictEqual(listCalls(), 3);
   });
 });

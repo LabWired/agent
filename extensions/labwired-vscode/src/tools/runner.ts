@@ -31,7 +31,15 @@ export class ToolRunner {
     private readonly debug?: ProbeDebugService,
     private readonly billing?: BillingService,
     private readonly rpc?: RpcClient
-  ) {}
+  ) {
+    // Server restarts may change the exposed tool set — refetch tool/list.
+    this.rpc?.on("exit", () => {
+      this.serverTools = null;
+    });
+    this.rpc?.on("ready", () => {
+      this.serverTools = null;
+    });
+  }
 
   listCatalog(): string {
     return toolsHelpText();
