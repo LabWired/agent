@@ -21,6 +21,9 @@ printf '%s\n' "$@" >"$LABWIRED_TEST_LOG"
 case "${LABWIRED_TEST_PIO_RESULT:-pass}" in
   fail) exit 9 ;;
   replace) printf 'adversarial replacement' >"$PWD/.pio/build/release/firmware.bin" ;;
+  native-mutate) printf 'mutated' >>"$PWD/.pio/build/release/firmware.bin" ;;
+  native-replace) printf 'different replacement' >"$PWD/.pio/build/release/.replacement"; mv "$PWD/.pio/build/release/.replacement" "$PWD/.pio/build/release/firmware.bin" ;;
+  native-same-hash-replace) cp "$PWD/.pio/build/release/firmware.bin" "$PWD/.pio/build/release/.replacement"; mv "$PWD/.pio/build/release/.replacement" "$PWD/.pio/build/release/firmware.bin" ;;
 esac
 SH
 cat >"$TMP/bin/probe-rs" <<'SH'
@@ -52,12 +55,62 @@ labwired_resolve_probe_rs() { printf '%s\n' "$TMP/bin/probe-rs"; }
 labwired_resolve_sim() { return 1; }
 source "$ROOT/lib/probe.sh"
 
+# Portable identity selection: GNU is attempted first, BSD is the fallback,
+# malformed or ambiguously valid implementations fail closed.
+mkdir -p "$TMP/stat-bin"
+cat >"$TMP/stat-bin/stat" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >>"$LABWIRED_TEST_STAT_LOG"
+case "${LABWIRED_TEST_STAT_MODE:-}" in
+  gnu) [[ "$1" == -c ]] && { printf '11:22\n'; exit 0; } ;;
+  bsd) [[ "$1" == -f ]] && { printf '33:44\n'; exit 0; } ;;
+  ambiguous) [[ "$1" == -c ]] && printf '11:22\n' || printf '33:44\n'; exit 0 ;;
+  malformed) printf 'not-an-identity\n'; exit 0 ;;
+esac
+exit 1
+SH
+chmod +x "$TMP/stat-bin/stat"
+export LABWIRED_TEST_STAT_LOG="$TMP/stat.log"
+: >"$LABWIRED_TEST_STAT_LOG"
+[[ "$(PATH="$TMP/stat-bin:$PATH" LABWIRED_TEST_STAT_MODE=gnu labwired_file_identity "$TMP/firmware.bin")" == 11:22 ]]
+[[ "$(sed -n '1p' "$LABWIRED_TEST_STAT_LOG")" == -c ]]
+: >"$LABWIRED_TEST_STAT_LOG"
+[[ "$(PATH="$TMP/stat-bin:$PATH" LABWIRED_TEST_STAT_MODE=bsd labwired_file_identity "$TMP/firmware.bin")" == 33:44 ]]
+diff -u <(printf '%s\n' -c -f) "$LABWIRED_TEST_STAT_LOG"
+if PATH="$TMP/stat-bin:$PATH" LABWIRED_TEST_STAT_MODE=ambiguous labwired_file_identity "$TMP/firmware.bin" >/dev/null; then exit 1; fi
+if PATH="$TMP/stat-bin:$PATH" LABWIRED_TEST_STAT_MODE=malformed labwired_file_identity "$TMP/firmware.bin" >/dev/null; then exit 1; fi
+
 mkdir -p "$TMP/project/.pio/build/release"
 printf 'original firmware' >"$TMP/project/.pio/build/release/firmware.bin"
 out="$(labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project")"
 grep -q '^LABWIRED_FLASH_RECEIPT ' <<<"$out"
 diff -u <(printf '%s\n' run -e release -t nobuild -t upload --upload-port /dev/ttyACM0) "$TMP/call.log"
 [[ "$(cat "$TMP/project/.pio/build/release/firmware.bin")" == 'original firmware' ]]
+
+# Native PlatformIO artifact: upload succeeds only if exact bytes and inode are
+# unchanged. Mutation and both different/same-hash replacement attacks fail
+# without emitting a receipt; the resulting file is preserved for diagnosis.
+native="$TMP/project/.pio/build/release/firmware.bin"
+printf 'native exact firmware' >"$native"
+sha_native="$(shasum -a 256 "$native" | awk '{print $1}')"
+out="$(labwired_probe_flash "$native" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_native" --environment release --workspace "$TMP/project")"
+grep -q '^LABWIRED_FLASH_RECEIPT ' <<<"$out"
+[[ "$(cat "$native")" == 'native exact firmware' ]]
+for mode in native-mutate native-replace native-same-hash-replace; do
+  printf 'native exact firmware' >"$native"
+  set +e
+  out="$(LABWIRED_TEST_PIO_RESULT="$mode" labwired_probe_flash "$native" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_native" --environment release --workspace "$TMP/project" 2>&1)"
+  rc=$?
+  set -e
+  [[ "$rc" -ne 0 ]]
+  [[ "$out" != *LABWIRED_FLASH_RECEIPT* ]]
+  [[ -f "$native" && ! -L "$native" ]]
+  case "$mode" in
+    native-mutate) [[ "$(cat "$native")" == 'native exact firmwaremutated' ]] ;;
+    native-replace) [[ "$(cat "$native")" == 'different replacement' ]] ;;
+    native-same-hash-replace) [[ "$(cat "$native")" == 'native exact firmware' ]] ;;
+  esac
+done
 
 rm "$TMP/project/.pio/build/release/firmware.bin"
 labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project" >/dev/null

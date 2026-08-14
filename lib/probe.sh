@@ -6,6 +6,20 @@
 
 # Requires: ROOT set, resolve-probe.sh + resolve-sim.sh sourced.
 
+# Return a portable, validated device:inode identity for a regular file.
+# GNU/coreutils uses -c; BSD/macOS uses -f. Probe GNU first so GNU stat never
+# interprets the BSD format operand as a filesystem target.
+labwired_file_identity() {
+  local file="${1:-}" gnu="" bsd="" gnu_valid=0 bsd_valid=0
+  [[ -n "$file" ]] || return 1
+  gnu="$(stat -c '%d:%i' -- "$file" 2>/dev/null)" || gnu=""
+  [[ "$gnu" =~ ^[0-9]+:[0-9]+$ ]] && gnu_valid=1
+  bsd="$(stat -f '%d:%i' "$file" 2>/dev/null)" || bsd=""
+  [[ "$bsd" =~ ^[0-9]+:[0-9]+$ ]] && bsd_valid=1
+  [[ $((gnu_valid + bsd_valid)) -eq 1 ]] || return 1
+  [[ "$gnu_valid" -eq 1 ]] && printf '%s\n' "$gnu" || printf '%s\n' "$bsd"
+}
+
 labwired_probe_usage() {
   cat <<'EOF'
 labwired probe — attach boards (physical or virtual LabWired)
@@ -260,14 +274,16 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
         # Upload in place and prove the file remained the confirmed artifact;
         # moving it aside would destroy the very source we intend to flash.
         local native_before_identity native_after_identity native_after_sha upload_rc=0
-        if stat -f '%d:%i' "$stage" >/dev/null 2>&1; then native_before_identity="$(stat -f '%d:%i' "$stage")"
-        else native_before_identity="$(stat -c '%d:%i' "$stage")"; fi
+        native_before_identity="$(labwired_file_identity "$stage")" || {
+          echo "labwired probe flash: cannot establish native artifact identity" >&2; return 1;
+        }
         (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || upload_rc=$?
         [[ -f "$stage" && ! -L "$stage" ]] || { echo "labwired probe flash: PlatformIO removed or replaced the native artifact" >&2; return 1; }
         if command -v shasum >/dev/null 2>&1; then native_after_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
         else native_after_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
-        if stat -f '%d:%i' "$stage" >/dev/null 2>&1; then native_after_identity="$(stat -f '%d:%i' "$stage")"
-        else native_after_identity="$(stat -c '%d:%i' "$stage")"; fi
+        native_after_identity="$(labwired_file_identity "$stage")" || {
+          echo "labwired probe flash: cannot revalidate native artifact identity" >&2; return 1;
+        }
         [[ "$native_after_sha" == "$expected_sha" && "$native_after_identity" == "$native_before_identity" ]] || {
           echo "labwired probe flash: PlatformIO changed or replaced the native artifact" >&2; return 1;
         }
@@ -282,10 +298,12 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
         had_original=1
         if command -v shasum >/dev/null 2>&1; then backup_sha="$(shasum -a 256 -- "$backup" | awk '{print $1}')"
         else backup_sha="$(sha256sum -- "$backup" | awk '{print $1}')"; fi
-        if stat -f '%d:%i' "$backup" >/dev/null 2>&1; then backup_identity="$(stat -f '%d:%i' "$backup")"
-        else backup_identity="$(stat -c '%d:%i' "$backup")"; fi
+        backup_identity="$(labwired_file_identity "$backup")" || {
+          mv -- "$backup" "$stage" || true
+          echo "labwired probe flash: cannot establish staged backup identity" >&2; return 1;
+        }
       fi
-      local staged_temp="$stage.labwired-stage-$$-$RANDOM"
+      local staged_temp="$stage.labwired-stage-$$-$RANDOM" stage_identity="" current_stage_identity=""
       [[ ! -e "$staged_temp" ]] || { [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
       cp -- "$elf" "$staged_temp" || { rm -f -- "$staged_temp"; [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
       local stage_sha=""
@@ -299,13 +317,19 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
         echo "labwired probe flash: staged artifact hash mismatch" >&2; return 1
       fi
       mv -- "$staged_temp" "$stage" || { rm -f -- "$staged_temp"; [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
+      stage_identity="$(labwired_file_identity "$stage")" || {
+        rm -f -- "$stage"
+        [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"
+        echo "labwired probe flash: cannot establish staged artifact identity" >&2; return 1;
+      }
       local upload_rc=0 cleanup_rc=0
       (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || upload_rc=$?
       if [[ -f "$stage" && ! -L "$stage" ]]; then
         if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
         else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
+        current_stage_identity="$(labwired_file_identity "$stage")" || current_stage_identity=""
       else stage_sha=""; fi
-      if [[ "$stage_sha" != "$expected_sha" ]]; then
+      if [[ "$stage_sha" != "$expected_sha" || "$current_stage_identity" != "$stage_identity" ]]; then
         echo "labwired probe flash: PlatformIO changed or replaced the staged artifact" >&2
         cleanup_rc=1
       else
@@ -317,8 +341,7 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
         else
           if command -v shasum >/dev/null 2>&1; then current_backup_sha="$(shasum -a 256 -- "$backup" | awk '{print $1}')"
           else current_backup_sha="$(sha256sum -- "$backup" | awk '{print $1}')"; fi
-          if stat -f '%d:%i' "$backup" >/dev/null 2>&1; then current_backup_identity="$(stat -f '%d:%i' "$backup")"
-          else current_backup_identity="$(stat -c '%d:%i' "$backup")"; fi
+          current_backup_identity="$(labwired_file_identity "$backup")" || cleanup_rc=1
           if [[ "$current_backup_sha" != "$backup_sha" || "$current_backup_identity" != "$backup_identity" || -e "$stage" ]]; then cleanup_rc=1
           else mv -- "$backup" "$stage" || cleanup_rc=1
           fi
