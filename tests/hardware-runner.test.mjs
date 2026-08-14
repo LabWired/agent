@@ -3,18 +3,29 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import nodeTest from 'node:test';
 
 import { executeHardwareRun, planHardwareRun } from '../lib/hardware/runner.mjs';
 import { verifyEvidenceBundle } from '../lib/hardware/evidence.mjs';
 import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
 
-const roots = [];
-test.after(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+let activeRoots;
+function test(name, fn) {
+  return nodeTest(name, async (context) => {
+    const previous = activeRoots;
+    const owned = [];
+    activeRoots = owned;
+    try { return await fn(context); }
+    finally {
+      activeRoots = previous;
+      await Promise.all(owned.map((root) => rm(root, { recursive: true, force: true })));
+    }
+  });
+}
 
 async function fixture(overrides = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-runner-'));
-  roots.push(root);
+  activeRoots.push(root);
   await mkdir(path.join(root, '.labwired'));
   const profilePath = path.join(root, '.labwired', 'hardware.json');
   const profile = {
@@ -247,7 +258,7 @@ test('confirmation binds canonical evidence destination across cwd drift', async
   const f = await fixture(); const h = harness(f.profile);
   const first = await mkdtemp(path.join(os.tmpdir(), 'labwired-cwd-a-'));
   const second = await mkdtemp(path.join(os.tmpdir(), 'labwired-cwd-b-'));
-  roots.push(first, second);
+  activeRoots.push(first, second);
   const original = process.cwd();
   try {
     process.chdir(first);

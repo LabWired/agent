@@ -6,6 +6,7 @@
 npm test
 npm run test:unit
 npm run test:dispatcher
+npm run test:node18-min
 npm run test:agent-lifecycle
 npm run test:public-install-safety
 npm run test:install
@@ -15,6 +16,14 @@ npm run test:llm
 `npm test` runs the current matrix in `tests/all.sh`. Read that file for the
 authoritative lane list. Do not copy a test count into documentation because
 the matrix changes.
+
+Node.js 18.0 predates the `node --test` command-line flag. Its minimum-runtime
+contract therefore imports the `node:test` files directly:
+
+```bash
+npx --yes node@18.0.0 tests/hardware-cli-node.test.mjs
+npx --yes node@18.0.0 tests/hardware-runner.test.mjs
+```
 
 ## Test lanes
 

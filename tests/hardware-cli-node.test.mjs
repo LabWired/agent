@@ -2,13 +2,24 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import nodeTest from 'node:test';
 
 import { providerEnvironment, resolveHardwareIdentities } from '../scripts/hardware-runner.mjs';
 import { planHardwareRun } from '../lib/hardware/runner.mjs';
 
-const roots = [];
-test.after(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
+let activeRoots;
+function test(name, fn) {
+  return nodeTest(name, async (context) => {
+    const previous = activeRoots;
+    const owned = [];
+    activeRoots = owned;
+    try { return await fn(context); }
+    finally {
+      activeRoots = previous;
+      await Promise.all(owned.map((root) => rm(root, { recursive: true, force: true })));
+    }
+  });
+}
 
 test('direct runner rejects credential-shaped paths before dependencies or output', async () => {
   let loaded = false;
@@ -21,13 +32,15 @@ test('direct runner rejects credential-shaped paths before dependencies or outpu
 
 test('provider enumeration timeout kills its descendant process tree', async () => {
   if (process.platform === 'win32') return;
-  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-enum-')); roots.push(root);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-enum-')); activeRoots.push(root);
   const pio = path.join(root, 'pio'); const pidFile = path.join(root, 'pid');
   await writeFile(pio, `#!/usr/bin/env bash\nsleep 30 &\necho $! >${JSON.stringify(pidFile)}\nwait\n`, { mode: 0o755 });
   const oldPath = process.env.PATH; process.env.PATH = `${root}:${oldPath}`;
   const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio' }, flash: { provider: 'platformio' } };
+  const abort = new AbortController();
+  let enumeration;
   try {
-    const enumeration = resolveHardwareIdentities(profile, { timeoutMs: 5_000 });
+    enumeration = resolveHardwareIdentities(profile, { timeoutMs: 5_000, signal: abort.signal });
     const deadline = Date.now() + 4_000;
     let pid;
     while (Date.now() < deadline) {
@@ -42,7 +55,11 @@ test('provider enumeration timeout kills its descendant process tree', async () 
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     assert.fail(`provider descendant ${pid} remained alive after timeout`);
-  } finally { process.env.PATH = oldPath; }
+  } finally {
+    abort.abort();
+    await enumeration?.catch(() => {});
+    process.env.PATH = oldPath;
+  }
 });
 
 test('provider environment is an explicit secret-free cross-platform allowlist', () => {
@@ -56,7 +73,7 @@ test('provider environment is an explicit secret-free cross-platform allowlist',
 
 test('provider process receives safe runtime variables but no ambient secrets or NODE_OPTIONS', async () => {
   if (process.platform === 'win32') return;
-  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-env-')); roots.push(root);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-env-')); activeRoots.push(root);
   const envFile = path.join(root, 'provider.env');
   await writeFile(path.join(root, 'pio'), `#!/usr/bin/env bash\nenv >${JSON.stringify(envFile)}\nprintf '[]\\n'\n`, { mode: 0o755 });
   const oldPath = process.env.PATH; process.env.PATH = `${root}:${oldPath}`;
