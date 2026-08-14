@@ -432,6 +432,63 @@ test('abort during twin or between observations stops all later hardware work', 
   });
 });
 
+test('cancellation races after evidence creation always finalize authenticated FAIL', async (t) => {
+  await t.test('while createEvidence resolves', async () => {
+    const controller = new AbortController(); const f = await fixture(); const h = harness(f.profile, { realPhysical: true });
+    h.dependencies.createEvidence = async (...args) => {
+      const bundle = await (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+      controller.abort();
+      return bundle;
+    };
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.match(outcome.error, /cancel/i);
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
+    assert.equal(h.calls.includes('locks'), false);
+  });
+
+  await t.test('during final behavior persistence', async () => {
+    const controller = new AbortController(); const f = await fixture(); const h = harness(f.profile, { realPhysical: true });
+    h.dependencies.createEvidence = async (...args) => {
+      const bundle = await (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+      return {
+        recordStage: bundle.recordStage,
+        finalize: bundle.finalize,
+        async recordBehavior(id, value) {
+          const persisted = await bundle.recordBehavior(id, value);
+          if (id === 'led' && value.level === 'hardware_observed') controller.abort();
+          return persisted;
+        },
+      };
+    };
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.match(outcome.error, /cancel/i);
+    const verified = await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest });
+    assert.equal(verified.authenticity, 'verified', JSON.stringify(verified));
+  });
+
+  await t.test('during flash stage persistence', async () => {
+    const controller = new AbortController(); const f = await fixture(); const h = harness(f.profile, { realPhysical: true });
+    h.dependencies.createEvidence = async (...args) => {
+      const bundle = await (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+      return {
+        recordBehavior: bundle.recordBehavior,
+        finalize: bundle.finalize,
+        async recordStage(id, value) {
+          const persisted = await bundle.recordStage(id, value);
+          if (id === 'flash' && value.level === 'hardware_observed') controller.abort();
+          return persisted;
+        },
+      };
+    };
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.equal(h.calls.some((call) => call.startsWith('observe:')), false);
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
+  });
+});
+
 test('cancellation reaches adapters, finalizes FAIL, and releases locks; cleanup errors fail closed', async (t) => {
   await t.test('abort', async () => {
     const f = await fixture(); const controller = new AbortController();
