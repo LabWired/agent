@@ -1,6 +1,6 @@
 // Pure parsers for labwired-agent RPC server notifications.
 // Shapes pinned to server/rpc-server.mjs notify() call sites (protocol 0.5.0).
-// NO vscode import — this module is unit-testable under plain mocha.
+// NO vscode import — this module is unit-testable under plain node:test.
 
 export interface NotificationSource {
   on(event: 'notification', cb: (method: string, params: unknown) => void): void;

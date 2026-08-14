@@ -1,7 +1,7 @@
 "use strict";
 // Pure parsers for labwired-agent RPC server notifications.
 // Shapes pinned to server/rpc-server.mjs notify() call sites (protocol 0.5.0).
-// NO vscode import — this module is unit-testable under plain mocha.
+// NO vscode import — this module is unit-testable under plain node:test.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onNotification = onNotification;
 exports.tryRpc = tryRpc;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import { ToolRunner } from '../../tools/runner';
 
 function fakeRpc(tools: string[], runResult?: any) {
@@ -29,8 +29,7 @@ function fakeBridge(run: (argv: string[]) => Promise<{ code: number; stdout: str
 }
 
 // ToolRunner(bridge, catalog, datasheets, debug, billing, rpc)
-describe('ToolRunner RPC routing', () => {
-  test('routes a server-known tool through tool/run', async () => {
+test('routes a server-known tool through tool/run', async () => {
     const rpc = fakeRpc(['doctor']);
     const bridge = fakeBridge(async () => { throw new Error('CLI must not be used'); });
     const runner = new ToolRunner(bridge as any, undefined, undefined, undefined, undefined, rpc as any);
@@ -38,27 +37,27 @@ describe('ToolRunner RPC routing', () => {
     assert.strictEqual(res.code, 0);
     assert.strictEqual(res.status, 'ok');
     assert.deepStrictEqual(rpc.calls, [{ name: 'doctor', params: {} }]);
-  });
+});
 
-  test('falls back to CLI for server-unknown tool', async () => {
+test('falls back to CLI for server-unknown tool', async () => {
     const rpc = fakeRpc(['doctor']);
     let cliArgv: string[] = [];
     const bridge = fakeBridge(async (argv: string[]) => { cliArgv = argv; return { code: 0, stdout: 'cli', stderr: '' }; });
     const runner = new ToolRunner(bridge as any, undefined, undefined, undefined, undefined, rpc as any);
     await runner.runNamed('update', {});
     assert.deepStrictEqual(cliArgv, ['update']);
-  });
+});
 
-  test('falls back to CLI when server is down', async () => {
+test('falls back to CLI when server is down', async () => {
     const rpc = { ...fakeRpc(['doctor']), isRunning: () => false };
     let used = false;
     const bridge = fakeBridge(async () => { used = true; return { code: 0, stdout: 'cli', stderr: '' }; });
     const runner = new ToolRunner(bridge as any, undefined, undefined, undefined, undefined, rpc as any);
     await runner.runNamed('doctor', {});
     assert.strictEqual(used, true);
-  });
+});
 
-  test('mode-gate error surfaces as message, not crash', async () => {
+test('mode-gate error surfaces as message, not crash', async () => {
     const rpc = fakeRpc(['probe_flash']);
     rpc.request = async (m: string) => {
       if (m === 'tool/list') return { tools: [{ name: 'probe_flash' }] };
@@ -70,9 +69,9 @@ describe('ToolRunner RPC routing', () => {
     assert.strictEqual(res.code, -32000);
     assert.strictEqual(res.status, 'error');
     assert.match(res.output, /plan mode/);
-  });
+});
 
-  test('extension-local pseudo-tools stay ahead of RPC (debug_info)', async () => {
+test('extension-local pseudo-tools stay ahead of RPC (debug_info)', async () => {
     const rpc = fakeRpc(['debug_info', 'doctor']);
     let cliUsed = false;
     const bridge = fakeBridge(async () => { cliUsed = true; return { code: 0, stdout: 'cli', stderr: '' }; });
@@ -83,9 +82,9 @@ describe('ToolRunner RPC routing', () => {
     assert.match(res.output, /local debug info/);
     assert.deepStrictEqual(rpc.methods, []);
     assert.strictEqual(cliUsed, false);
-  });
+});
 
-  test('invalidates cached tool/list on rpc exit/ready', async () => {
+test('invalidates cached tool/list on rpc exit/ready', async () => {
     const rpc = fakeRpc(['doctor']);
     const bridge = fakeBridge(async () => { throw new Error('CLI must not be used'); });
     const runner = new ToolRunner(bridge as any, undefined, undefined, undefined, undefined, rpc as any);
@@ -99,5 +98,4 @@ describe('ToolRunner RPC routing', () => {
     rpc.emitLocal('ready');
     await runner.runNamed('doctor', {});
     assert.strictEqual(listCalls(), 3);
-  });
 });

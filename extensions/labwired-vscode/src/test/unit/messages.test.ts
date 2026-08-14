@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import {
   parseChatTextDelta, parseChatToolCall, parseChatToolDelta, parseChatToolResult,
   parseSerialConnectionState, parseSerialData, parsePlotUpdate,
@@ -7,68 +7,66 @@ import {
 } from '../../rpc/messages';
 
 // Fixtures mirror notify() payloads in server/rpc-server.mjs exactly.
-describe('rpc messages (server payload shapes)', () => {
-  test('chat/textDelta uses {text}', () => {
+test('chat/textDelta uses {text}', () => {
     assert.strictEqual(parseChatTextDelta({ text: 'hello' }), 'hello');
     assert.strictEqual(parseChatTextDelta({}), '');
-  });
-  test('chat/toolCall uses {name,title,params}', () => {
+});
+test('chat/toolCall uses {name,title,params}', () => {
     assert.deepStrictEqual(
       parseChatToolCall({ name: 'doctor', title: 'Doctor', params: { verbose: 1 } }),
       { name: 'doctor', title: 'Doctor', params: { verbose: 1 } });
-  });
-  test('chat/toolDelta uses {name,stream,text}', () => {
+});
+test('chat/toolDelta uses {name,stream,text}', () => {
     assert.deepStrictEqual(
       parseChatToolDelta({ name: 'smoke', stream: 'stdout', text: 'line\n' }),
       { name: 'smoke', stream: 'stdout', text: 'line\n' });
     assert.deepStrictEqual(
       parseChatToolDelta({ name: 'smoke', stream: 'stderr', text: 'warn\n' }),
       { name: 'smoke', stream: 'stderr', text: 'warn\n' });
-  });
-  test('chat/toolDelta defaults an unknown stream to stdout, missing text to empty', () => {
+});
+test('chat/toolDelta defaults an unknown stream to stdout, missing text to empty', () => {
     assert.deepStrictEqual(
       parseChatToolDelta({ name: 'smoke' }),
       { name: 'smoke', stream: 'stdout', text: '' });
-  });
-  test('chat/toolResult uses {name,code,detail,streamed}', () => {
+});
+test('chat/toolResult uses {name,code,detail,streamed}', () => {
     assert.deepStrictEqual(
       parseChatToolResult({ name: 'doctor', code: 0, detail: 'ok', streamed: true }),
       { name: 'doctor', code: 0, detail: 'ok', streamed: true });
-  });
-  test('chat/toolResult without streamed means the body was NOT sent as deltas', () => {
+});
+test('chat/toolResult without streamed means the body was NOT sent as deltas', () => {
     // In-process tools (__plot__/__hw__/__debug__) return output whole; the client
     // must render `detail` for them, so the default has to be false, never true.
     assert.strictEqual(
       parseChatToolResult({ name: 'plot_status', code: 0, detail: 'n=2' }).streamed, false);
-  });
-  test('serial/connectionState uses {open}', () => {
+});
+test('serial/connectionState uses {open}', () => {
     assert.strictEqual(parseSerialConnectionState({ open: true, port: '/dev/cu.usb1' }), true);
     assert.strictEqual(parseSerialConnectionState({ open: false }), false);
-  });
-  test('serial/data uses {data,port}', () => {
+});
+test('serial/data uses {data,port}', () => {
     assert.strictEqual(parseSerialData({ data: 'temp=23.5\n', port: 'x' }), 'temp=23.5\n');
-  });
-  test('plot/update uses {series: Record<string, number[]>}', () => {
+});
+test('plot/update uses {series: Record<string, number[]>}', () => {
     assert.deepStrictEqual(parsePlotUpdate({ series: { temp: [1, 2] } }), { temp: [1, 2] });
     assert.deepStrictEqual(parsePlotUpdate({}), {});
-  });
-  test('debug/gdbState uses {running,chip,port}', () => {
+});
+test('debug/gdbState uses {running,chip,port}', () => {
     assert.deepStrictEqual(
       parseGdbState({ running: true, chip: 'esp32c3', port: 1337 }),
       { running: true, chip: 'esp32c3', port: 1337 });
-  });
-  test('onNotification routes only the named method', () => {
+});
+test('onNotification routes only the named method', () => {
     const seen: string[] = [];
     const fake = { on(_ev: string, cb: (m: string, p: unknown) => void) {
       cb('plot/update', { series: {} }); cb('serial/data', { data: 'x' });
     } };
     onNotification(fake, 'serial/data', p => seen.push(parseSerialData(p)));
     assert.deepStrictEqual(seen, ['x']);
-  });
-  test('tryRpc resolves null on Method-not-found, rethrows transport errors', async () => {
+});
+test('tryRpc resolves null on Method-not-found, rethrows transport errors', async () => {
     const methodNotFound = { request: () => Promise.reject(Object.assign(new Error('Method not found'), { code: -32601 })) };
     assert.strictEqual(await tryRpc(methodNotFound as any, 'twin/run', {}), null);
     const appError = { request: () => Promise.reject(Object.assign(new Error('mode gate'), { code: -32000 })) };
     await assert.rejects(() => tryRpc(appError as any, 'tool/run', {}), /mode gate/);
-  });
 });
