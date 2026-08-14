@@ -487,6 +487,50 @@ test('cancellation races after evidence creation always finalize authenticated F
     assert.equal(outcome.result, 'FAIL'); assert.equal(h.calls.some((call) => call.startsWith('observe:')), false);
     assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
   });
+
+  await t.test('one microtask before the commit boundary', async () => {
+    const controller = new AbortController(); const f = await fixture(); const h = harness(f.profile, { realPhysical: true });
+    h.dependencies.createEvidence = async (...args) => {
+      const bundle = await (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+      return {
+        recordStage: bundle.recordStage,
+        finalize: bundle.finalize,
+        async recordBehavior(id, value) {
+          const persisted = await bundle.recordBehavior(id, value);
+          if (id === 'led' && value.level === 'hardware_observed') queueMicrotask(() => controller.abort());
+          return persisted;
+        },
+      };
+    };
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.match(outcome.error, /cancel/i);
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
+  });
+
+  await t.test('abort initiated by finalize is after the point of no return', async () => {
+    const controller = new AbortController(); const signal = controller.signal;
+    let adds = 0; let removes = 0;
+    const originalAdd = signal.addEventListener.bind(signal);
+    const originalRemove = signal.removeEventListener.bind(signal);
+    signal.addEventListener = (...args) => { adds += 1; return originalAdd(...args); };
+    signal.removeEventListener = (...args) => { removes += 1; return originalRemove(...args); };
+    const observations = [{ id: 'firmware', provider: 'serial', contains: 'unused', requiredLevel: 'compiled' }];
+    const f = await fixture({ twin: undefined, flash: undefined, observations }); const h = harness(f.profile, { realEvidence: true });
+    h.dependencies.createEvidence = async (...args) => {
+      const bundle = await (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+      return {
+        recordStage: bundle.recordStage,
+        recordBehavior: bundle.recordBehavior,
+        async finalize() { controller.abort(); return bundle.finalize(); },
+      };
+    };
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal });
+    assert.equal(outcome.result, 'PASS'); assert.equal(outcome.commitStarted, true);
+    assert.equal('error' in outcome, false); assert.equal(adds, removes);
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, true);
+  });
 });
 
 test('cancellation reaches adapters, finalizes FAIL, and releases locks; cleanup errors fail closed', async (t) => {
