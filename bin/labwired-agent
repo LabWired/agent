@@ -908,6 +908,8 @@ Usage:
   labwired agent version            Version
   labwired agent assert-status <expected> [file]
                            Exit 0 if verify JSON status matches
+  labwired agent claim-shape [--flashed 0|1] [--marker-matched 0|1]
+                           Hardware claim shape; exit 0 only on hardware_observed
   labwired agent score-verify [--expect STATUS] [file]
                            Score verify JSON / matrix; print score
   labwired agent serial-capture <port> <baud> <marker> <timeout>
@@ -1128,6 +1130,12 @@ EOF
   esac
 }
 
+cmd_claim_shape() {
+  # shellcheck source=lib/claim-shape.sh
+  source "$ROOT/lib/claim-shape.sh"
+  labwired_claim_shape "$@"
+}
+
 cmd_assert_status() {
   local expected="${1:-}"
   local file="${2:-}"
@@ -1209,6 +1217,10 @@ case "${1:-}" in
   assert-status)
     shift
     cmd_assert_status "$@"
+    ;;
+  claim-shape)
+    shift
+    cmd_claim_shape "$@"
     ;;
   score-verify)
     shift

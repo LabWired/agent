@@ -242,7 +242,13 @@ const TOOLS = [
   {
     name: "hw_claim_shape",
     title: "HW claim shape check",
-    argv: ["__hw__", "claim", "${status}", "${marker_matched}", "${flashed}"],
+    // Claim rules live in lib/claim-shape.sh — one engine, shared with the CLI.
+    argv: [
+      "claim-shape",
+      "--status", "${status}",
+      "--marker-matched", "${marker_matched}",
+      "--flashed", "${flashed}",
+    ],
     params: ["status", "marker_matched", "flashed"],
     group: "verify",
   },
@@ -575,35 +581,25 @@ function resolveProbeRs() {
   return probeRsCached;
 }
 
-/** Hardware claim shape — never invent model_verified from flash/serial. */
-function hwClaimShape(params = {}) {
-  const flashed = String(params.flashed || "0") === "1" || params.flashed === true;
-  const marker = String(params.marker_matched || "0") === "1" || params.marker_matched === true;
-  if (String(params.status || "") === "model_verified") {
-    return {
-      code: 1,
-      stdout: "",
-      stderr:
-        "hw_claim_shape: refused — cannot claim model_verified from flash/serial. Use twin labwired_verify only.\n",
-      extra: { status: "refused", reason: "model_verified_from_hw" },
-    };
+/** Hardware claim shape via `labwired-agent claim-shape` (lib/claim-shape.sh).
+ *  The rules are NOT duplicated here: a second claim engine is how the editor
+ *  and the terminal end up disagreeing about what counts as hardware_observed. */
+async function hwClaimShape(params = {}) {
+  const argv = [
+    "claim-shape",
+    "--status", String(params.status ?? ""),
+    "--marker-matched", String(params.marker_matched ?? "0"),
+    "--flashed", String(params.flashed ?? "0"),
+  ];
+  const r = await runLabwired(argv, { timeoutMs: 20_000 });
+  let extra = {};
+  try {
+    extra = JSON.parse(r.stdout || "{}");
+  } catch {
+    // Refusal path prints to stderr only, so there is no payload to parse.
+    extra = { status: "refused", reason: "model_verified_from_hw" };
   }
-  let status = "failed";
-  if (flashed && marker) status = "hardware_observed";
-  const payload = {
-    status,
-    path: "hardware",
-    flashed: !!flashed,
-    marker_matched: !!marker,
-    claim: status === "hardware_observed" ? "hardware_observed" : "no_hardware_claim",
-    note: "model_verified is twin-only; never upgraded from hardware_observed",
-  };
-  return {
-    code: status === "hardware_observed" ? 0 : 1,
-    stdout: JSON.stringify(payload, null, 2) + "\n",
-    stderr: "",
-    extra: payload,
-  };
+  return { code: r.code, stdout: r.stdout, stderr: r.stderr, extra };
 }
 
 async function runSpecialTool(tool, params) {
@@ -630,9 +626,8 @@ async function runSpecialTool(tool, params) {
     };
   }
 
-  if (kind === "__hw__" && op === "claim") {
-    return hwClaimShape(params);
-  }
+  // No "__hw__ claim" branch: hw_claim_shape is a plain argv tool now
+  // (`claim-shape`), so it never reaches runSpecialTool.
 
   if (kind === "__hw__" && op === "promote") {
     // Desk/virtual promote: flash → optional serial marker → claim (never model_verified)
@@ -720,7 +715,7 @@ async function runSpecialTool(tool, params) {
         "[virtual] flash does not yield hardware_observed; use twin verify for model_verified.\n";
     }
 
-    const claim = hwClaimShape({
+    const claim = await hwClaimShape({
       flashed: flashed ? "1" : "0",
       marker_matched: marker_matched ? "1" : "0",
     });
