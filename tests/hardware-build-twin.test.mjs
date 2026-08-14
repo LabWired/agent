@@ -380,6 +380,34 @@ test('malformed and oversized simulator results are rejected without raw evidenc
   });
 });
 
+test('simulator result replacement after descriptor read cannot grant or persist replacement claims', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  await writeFile(p.build.artifact, 'native');
+  const hash = await sha256File(p.build.artifact);
+  const evidenceDir = await evidenceDirectory(root, p);
+  let attacked = false;
+  const { adapters } = harness(async (descriptor) => {
+    await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(hash)));
+    return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+  }, {
+    snapshotHooks: {
+      async afterReadBeforePathValidation({ file }) {
+        if (!attacked && path.basename(file) === 'result.json' && path.dirname(file).includes('labwired-twin-')) {
+          attacked = true;
+          await rename(file, `${file}.descriptor-bound-original`);
+          await writeFile(file, JSON.stringify({ ...passingResult(hash), replacementClaim: true }));
+        }
+      },
+    },
+  });
+  const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash, evidenceDir });
+  assert.equal(result.level, 'failed');
+  assert.notEqual(result.level, 'model_observed');
+  assert.match(result.diagnostics, /replaced|changed/i);
+  await assert.rejects(readFile(path.join(evidenceDir, 'twin', 'simulator-output.json')), /ENOENT/);
+});
+
 test('evidence persistence rejects alias, replacement, and overwrite paths', async (t) => {
   for (const scenario of ['symlink-root', 'replaced-root', 'preexisting-capture']) await t.test(scenario, async () => {
     const root = await sandbox();
