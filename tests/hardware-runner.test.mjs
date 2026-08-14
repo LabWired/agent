@@ -41,10 +41,11 @@ function harness(profile, behavior = {}) {
   let artifactSha256 = 'a'.repeat(64);
   const adapters = {
     build: { platformio: {
-      async preflight() { calls.push('preflight:build'); return { toolVersion: 'pio 6' }; },
+      async preflight() { calls.push('preflight:build'); return { kind: 'build-capability', executable: '/trusted/pio', toolVersion: behavior.toolVersion ?? 'pio 6' }; },
       async execute(_profile, options) {
         calls.push('build'); behavior.onSignal?.(options.signal);
-        if (behavior.realEvidence) {
+        assert.equal(options.prepared?.kind, 'build-capability');
+        if (behavior.realEvidence || behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', 'build.json'), '{"compiled":true}\n');
           const now = new Date().toISOString();
           return result('compiled', { artifactSha256, targetIdentity: profile.target, startedAt: now, endedAt: now, toolVersion: 'pio 6', rawEvidenceRefs: ['observations/build.json'] });
@@ -53,16 +54,38 @@ function harness(profile, behavior = {}) {
       },
     } },
     twin: { 'labwired-sim': {
-      async preflight() { calls.push('preflight:twin'); return { toolVersion: 'sim 1' }; },
-      async execute() { calls.push('twin'); return behavior.twin ?? result('model_observed', { artifactSha256, rawEvidenceRefs: ['twin/result.json'] }); },
+      async preflight() { calls.push('preflight:twin'); return { kind: 'twin-capability', executable: '/trusted/sim', toolVersion: 'sim 1' }; },
+      async execute(_profile, options) {
+        calls.push('twin'); assert.equal(options.prepared?.kind, 'twin-capability');
+        if (behavior.realPhysical) {
+          await writeFile(path.join(options.evidenceDir, 'observations', 'twin-failure.json'), '{"twin":"unsupported"}\n');
+          return result('failed', { diagnostics: 'native format unsupported', rawEvidenceRefs: ['observations/twin-failure.json'] });
+        }
+        return behavior.twin ?? result('model_observed', { artifactSha256, rawEvidenceRefs: ['twin/result.json'] });
+      },
     } },
     flash: { platformio: {
-      async preflight(_profile, options) { calls.push('preflight:flash'); assert.equal(options.artifactSha256, artifactSha256); return { provider: 'platformio' }; },
-      async execute() { calls.push('flash'); return behavior.flash ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['flash.json'] }); },
+      async preflightPlan() { calls.push('preflight-plan:flash'); return { kind: 'flash-plan-capability', provider: 'platformio', executable: '/trusted/agent' }; },
+      async preflight(_profile, options) { calls.push('preflight:flash'); assert.equal(options.artifactSha256, artifactSha256); assert.equal(options.planPrepared?.kind, 'flash-plan-capability'); return { kind: 'flash-capability', provider: 'platformio' }; },
+      async execute(_profile, options) {
+        calls.push('flash'); assert.equal(options.prepared?.kind, 'flash-capability');
+        if (behavior.realPhysical) {
+          await writeFile(path.join(options.evidenceDir, 'observations', 'flash.json'), '{"flash":"exact"}\n');
+          return result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['observations/flash.json'] });
+        }
+        return behavior.flash ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['flash.json'] });
+      },
     } },
     observation: Object.fromEntries(['serial', 'logic-csv'].map((provider) => [provider, {
-      async preflight(_profile, observation) { calls.push(`preflight:${observation.id}`); return { provider }; },
-      async execute(_profile, observation) { calls.push(`observe:${observation.id}`); return behavior.observations?.[observation.id] ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] }); },
+      async preflight(_profile, observation) { calls.push(`preflight:${observation.id}`); return { kind: `observation-capability:${observation.id}`, provider }; },
+      async execute(_profile, observation, options) {
+        calls.push(`observe:${observation.id}`); assert.equal(options.prepared?.kind, `observation-capability:${observation.id}`);
+        if (behavior.realPhysical) {
+          await writeFile(path.join(options.evidenceDir, 'observations', `${observation.id}.json`), `{"behavior":"${observation.id}"}\n`);
+          return result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
+        }
+        return behavior.observations?.[observation.id] ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
+      },
     }])),
   };
   const records = new Map();
@@ -71,11 +94,11 @@ function harness(profile, behavior = {}) {
     createAdapters() { calls.push('adapters'); return adapters; },
     async resolveHardwareIdentities() {
       calls.push('resolve');
-      return behavior.identities?.shift?.() ?? { target: profile.target.id, probe: profile.target.probeSerial, serial: profile.target.serialPort };
+      return behavior.identities?.shift?.() ?? [{ target: profile.target.id, probe: profile.target.probeSerial, serial: profile.target.serialPort, stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' } }];
     },
     async acquireLocks(identities, options) {
       calls.push('locks');
-      assert.deepEqual(identities, { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0' });
+      assert.deepEqual(identities, { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' });
       behavior.lockSignal = options.signal;
       return { async release() { calls.push('release'); if (behavior.releaseError) throw new Error('release broke'); } };
     },
@@ -112,6 +135,19 @@ test('planning is read-only, stable, canonical, and secret-free', async () => {
   assert.equal(h.calls.includes('build'), false);
 });
 
+test('planning redacts configured secrets from paths and capability metadata before digesting', async () => {
+  const secret = 'actual-secret-value';
+  const f = await fixture(); const h = harness(f.profile, { toolVersion: `pio ${secret}` });
+  h.dependencies.redactValues = [secret];
+  const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: path.join(f.root, secret), dependencies: h.dependencies });
+  const serialized = JSON.stringify(planned.plan);
+  assert.equal(serialized.includes(secret), false);
+  assert.match(serialized, /\[REDACTED\]/);
+  assert.match(planned.plan.capabilities.build.fingerprint, /^[a-f0-9]{64}$/);
+  const changed = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: path.join(f.root, 'different-secret'), dependencies: { ...h.dependencies, redactValues: [secret, 'different-secret'] } });
+  assert.notEqual(changed.digest, planned.digest);
+});
+
 test('missing, malformed, or wrong confirmation refuses before evidence, locks, or mutation', async (t) => {
   for (const digest of [undefined, 'bad', '0'.repeat(64)]) await t.test(String(digest), async () => {
     const f = await fixture(); const h = harness(f.profile);
@@ -121,15 +157,30 @@ test('missing, malformed, or wrong confirmation refuses before evidence, locks, 
 });
 
 test('ambiguous or drifting identities fail closed', async (t) => {
+  await t.test('no production resolver', async () => {
+    const f = await fixture(); const h = harness(f.profile);
+    delete h.dependencies.resolveHardwareIdentities;
+    await assert.rejects(planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies }), /BLOCKED.*resolver/i);
+    assert.equal(h.calls.includes('locks'), false); assert.equal(h.calls.includes('flash'), false);
+  });
+  for (const [name, enumeration] of [['zero matches', []], ['multiple matches', [
+    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 't1', probe: 'p1', serial: 's1' } },
+    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 't2', probe: 'p2', serial: 's2' } },
+  ]]]) await t.test(name, async () => {
+    const f = await fixture(); const h = harness(f.profile, { identities: [enumeration] });
+    await assert.rejects(planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies }), /exactly one|unique/i);
+    assert.equal(h.calls.includes('locks'), false); assert.equal(h.calls.includes('flash'), false);
+  });
   await t.test('ambiguous at planning', async () => {
-    const f = await fixture(); const h = harness(f.profile, { identities: [{ target: 'desk-c3', probe: 'first', serial: '/dev/ttyACM0' }] });
+    const f = await fixture(); const h = harness(f.profile, { identities: [[{ target: 'desk-c3', probe: 'first', serial: '/dev/ttyACM0', stableIds: { target: 't', probe: 'p', serial: 's' } }]] });
     await assert.rejects(planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies }), /ambiguous|explicit/i);
   });
   await t.test('drift after flash', async () => {
+    const exact = { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' } };
     const f = await fixture(); const h = harness(f.profile, { identities: [
-      { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0' },
-      { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0' },
-      { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyUSB9' },
+      [exact],
+      [exact],
+      [{ ...exact, stableIds: { ...exact.stableIds, serial: 'usb:port-9' } }],
     ] });
     const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
     const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: planned.digest, dependencies: h.dependencies });
@@ -204,6 +255,24 @@ test('a build-only compiled requirement produces a verifiable real PASS bundle',
   assert.equal(outcome.receipt.result, 'PASS');
   const verified = await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest });
   assert.equal(verified.valid, true, JSON.stringify(verified));
+});
+
+test('physical PASS authenticates exact flash and permitted twin failure provenance', async () => {
+  const f = await fixture(); const h = harness(f.profile, { realPhysical: true });
+  h.dependencies.createEvidence = async (...args) => {
+    const { createEvidenceBundle } = await import('../lib/hardware/evidence.mjs');
+    return createEvidenceBundle(...args);
+  };
+  const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+  const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+  assert.equal(outcome.receipt.result, 'PASS');
+  const record = JSON.parse(await readFile(path.join(f.evidenceDir, 'observations', 'heartbeat', 'result.json'), 'utf8'));
+  assert.equal(record.rawEvidenceRefs.includes('observations/flash.json'), true);
+  assert.equal(record.rawEvidenceRefs.includes('observations/twin-failure.json'), true);
+  assert.match(JSON.stringify(record.diagnostics), /unsupported/);
+  assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, true);
+  await writeFile(path.join(f.evidenceDir, 'observations', 'flash.json'), '{"flash":"tampered"}\n');
+  assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, false);
 });
 
 test('cancellation reaches adapters, finalizes FAIL, and releases locks; cleanup errors fail closed', async (t) => {

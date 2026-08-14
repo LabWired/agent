@@ -109,6 +109,19 @@ test('successful build requires a freshly produced regular artifact and hashes e
   assert.equal(result.toolVersion, 'pio 1.2.3');
 });
 
+test('prepared build capability refuses a trusted executable identity swap before spawn', async () => {
+  const root = await sandbox();
+  let identity = { dev: 1, ino: 1, size: 10, mtimeMs: 1 };
+  const { adapters, calls } = harness(undefined, { async toolIdentity() { return { ...identity }; } });
+  const p = profile(root);
+  const prepared = await adapters.build.platformio.preflight(p);
+  identity = { ...identity, ino: 2 };
+  const result = await adapters.build.platformio.execute(p, { prepared });
+  assert.equal(result.level, 'failed');
+  assert.match(result.diagnostics, /identity changed/);
+  assert.equal(calls.length, 0);
+});
+
 test('build quarantines old output: no-op, touch, and chmod fail while genuine recreate passes', async (t) => {
   for (const scenario of ['noop', 'touch', 'chmod', 'recreate']) await t.test(scenario, async () => {
     const root = await sandbox();
