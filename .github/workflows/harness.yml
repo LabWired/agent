@@ -58,7 +58,16 @@ jobs:
       - name: Windows dispatcher contract (PowerShell Core)
         shell: pwsh
         run: .\tests\windows-contract.ps1
+      - name: Windows hardware helper contract
+        if: always()
+        shell: powershell
+        run: .\tests\windows-hardware-contract.ps1 -Root $PWD
+      - name: Windows hardware helper contract (PowerShell Core)
+        if: always()
+        shell: pwsh
+        run: .\tests\windows-hardware-contract.ps1 -Root $PWD
       - name: Parse Windows PowerShell sources
+        if: always()
         shell: powershell
         run: |
           $errors = @()
@@ -85,6 +94,7 @@ jobs:
             exit 1
           }
       - name: Parse Windows PowerShell sources (PowerShell Core)
+        if: always()
         shell: pwsh
         run: |
           $errors = @()

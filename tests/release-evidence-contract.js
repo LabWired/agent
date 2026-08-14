@@ -60,6 +60,14 @@ const harnessJobs = jobs(harness, harnessPath);
 const unitJob = harnessJobs.get('unit') || '';
 requireText(unitJob, 'npm ci --ignore-scripts', 'unit');
 requireText(unitJob, 'node tests/release-evidence-contract.js', 'unit');
+const hardwareGate = harnessJobs.get('windows-contract') || '';
+requireText(hardwareGate, 'tests\\windows-hardware-contract.ps1', 'windows-contract');
+requireText(hardwareGate, 'shell: powershell', 'windows-contract');
+requireText(hardwareGate, 'shell: pwsh', 'windows-contract');
+if ((hardwareGate.match(/windows-hardware-contract\.ps1/g) || []).length < 2)
+  fail('windows-contract must execute the hardware helper contract under both engines');
+if ((hardwareGate.match(/if: always\(\)/g) || []).length < 2)
+  fail('windows-contract hardware helper engines must report independently');
 for (const [key, runner, command, artifact] of [
   ['release-evidence-ubuntu', 'runs-on: ubuntu-latest', 'tests/install-smoke.sh', 'labwired-agent-source-ubuntu'],
   ['release-evidence-macos', 'runs-on: macos-14', 'tests/install-smoke.sh', 'labwired-agent-source-macos'],

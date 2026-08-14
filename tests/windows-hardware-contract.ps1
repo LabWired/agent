@@ -10,7 +10,7 @@ $pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$env:LABW
 Set-Content $pio @'
 @echo off
 if "%1 %2"=="device list" echo %LABWIRED_TEST_DEVICE_JSON%& exit /b 0
-echo upload>>"%LABWIRED_TEST_UPLOAD_LOG%"
+echo %*>>"%LABWIRED_TEST_UPLOAD_LOG%"
 exit /b 0
 '@ -Encoding ASCII
 $flashArgs=@('-Provider','platformio','-Artifact',$artifact,'-ExpectedSha256',$sha,'-Chip','esp32c3','-Port','COM7','-Environment','release','-Workspace',$workspace,'-Pio',$pio)
@@ -20,6 +20,18 @@ foreach($case in @(
   @{Probe='probe.+[1]';Json='[{"port":"COM7","hwid":"USB SER=probeZZ1"}]'},
   @{Probe='probe-1';Json='[{"port":"COM7","serialNumber":"probe-1"},{"port":"COM7","serialNumber":"probe-1"}]'}
 )){$env:LABWIRED_TEST_DEVICE_JSON=$case.Json;$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe',$case.Probe));if($r.Code -eq 0){throw 'real flash helper accepted an inexact or duplicate identity'};if(Test-Path $uploadLog){throw 'real flash helper uploaded before exact identity validation'}}
+$env:LABWIRED_TEST_DEVICE_JSON='[{"port":"COM7","serialNumber":"probe-1"}]'
+$stageDir=Join-Path $workspace '.pio\build\release';New-Item -ItemType Directory -Path $stageDir -Force|Out-Null;$stage=Join-Path $stageDir 'firmware.bin';$original=[byte[]](0,255,1,254,2,253);[IO.File]::WriteAllBytes($stage,$original)
+$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe','probe-1'));if($r.Code -ne 0){throw ('real flash success failed: '+$r.Out)}
+if((Get-Content $uploadLog -Raw).Trim() -cne 'run -e release -t nobuild -t upload --upload-port COM7'){throw 'real flash used unexpected PlatformIO argv'}
+if([Convert]::ToBase64String($original) -cne [Convert]::ToBase64String([IO.File]::ReadAllBytes($stage))){throw 'real flash did not restore preexisting staged bytes'}
+$receiptLine=@($r.Out -split "`r?`n"|Where-Object{$_.StartsWith('LABWIRED_FLASH_RECEIPT ')})
+if($receiptLine.Count -ne 1){throw 'real flash did not emit one machine receipt'};$receipt=$receiptLine[0].Substring(23)|ConvertFrom-Json
+if($receipt.provider -cne 'platformio' -or $receipt.artifactSha256 -cne $sha -or $receipt.chip -cne 'esp32c3' -or $receipt.environment -cne 'release' -or $receipt.workspace -cne (Resolve-Path $workspace).Path -or $receipt.probeSerial -cne 'probe-1' -or $receipt.observationPort -cne 'COM7' -or $receipt.identityApplied -ne $true -or $receipt.serialPortApplied -ne $true){throw 'real flash receipt was not bound to the exact transaction'}
+Remove-Item $stage -Force;Remove-Item $uploadLog -Force
+$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe','probe-1'));if($r.Code -ne 0){throw ('real flash without prior stage failed: '+$r.Out)}
+if(Test-Path $stage){throw 'real flash left a staged artifact when none existed before'}
+if((Get-Content $uploadLog -Raw).Trim() -cne 'run -e release -t nobuild -t upload --upload-port COM7'){throw 'real flash without prior stage used unexpected argv'}
 $r=Run-Real 'serial-capture.ps1' @('-Port','COM7','-Baud','0','-Marker','ready','-TimeoutSeconds','1');if($r.Code -ne 3){throw 'real serial validation exit classification failed'}
 $r=Run-Real 'serial-challenge.ps1' @('-Port','COM7','-Baud','115200','-Nonce','bad','-Marker','ready','-AddressKey','IP','-TimeoutSeconds','1');if($r.Code -ne 3){throw 'real challenge validation exit classification failed'}
 $r=Run-Real 'rtt-capture.ps1' @('-ProbeRs',(Join-Path $temp 'missing.exe'),'-Chip','chip','-Probe','probe','-Elf',$artifact,'-Marker','ready','-TimeoutSeconds','1');if($r.Code -ne 2){throw 'real RTT missing-tool classification failed'}
