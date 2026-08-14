@@ -197,6 +197,35 @@ compare "virtual flash yields no hardware claim" \
   --target virtual --elf "$TMP/missing.elf"
 assert_has 'flash does not yield hardware_observed'
 assert_claim_has '"status": "failed"'
+
+# 8b. A virtual flash that SUCCEEDS still yields no hardware claim.
+#
+# Case 8 alone does NOT prove the virtual rule: its ELF is missing, so the flash
+# fails and the claim reads "failed" whatever the capture step decided. Setting
+# marker_matched=1 in the virtual branch passes case 8 untouched. Stub the nested
+# CLI so the flash succeeds — then the ONLY thing keeping this off
+# hardware_observed is the rule under test.
+cat >"$TMP/fake-agent" <<'SH'
+#!/usr/bin/env bash
+# Nested steps only. `probe flash` succeeds; nothing else should be reached.
+case "${1:-}" in
+  probe) echo "[fake] flashed ok"; exit 0 ;;
+  *) echo "[fake] unexpected nested call: $*" >&2; exit 1 ;;
+esac
+SH
+chmod +x "$TMP/fake-agent"
+: >"$TMP/present.elf"
+export LABWIRED_AGENT_BIN="$TMP/fake-agent"
+compare "virtual flash SUCCEEDS — still no hardware claim" \
+  '{"target":"virtual","elf":"'"$TMP"'/present.elf"}' \
+  --target virtual --elf "$TMP/present.elf"
+assert_has 'flashed ok'
+assert_claim_has '"flashed": true'
+assert_claim_has '"marker_matched": false'
+assert_claim_has '"status": "failed"'
+assert_claim_lacks '"status": "hardware_observed"'
+assert_exit 1
+unset LABWIRED_AGENT_BIN
 assert_claim_lacks '"status": "hardware_observed"'
 assert_claim_lacks '"claim": "hardware_observed"'
 assert_exit 1
