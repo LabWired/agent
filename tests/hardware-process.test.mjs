@@ -43,6 +43,25 @@ test('classifies a missing executable as spawn_error', async () => {
   assert.match(result.error, /ENOENT|not found/i);
 });
 
+test('redacts secrets from spawn-error diagnostics and streamed deltas', async () => {
+  const secret = 'spawn-error-secret';
+  const deltas = [];
+  const descriptor = resolveLaunch({
+    executable: path.join(os.tmpdir(), `${secret}-missing`),
+    args: [],
+    cwd: process.cwd(),
+    env: {},
+  });
+  const result = await runLaunch(descriptor, {
+    timeoutMs: 500,
+    redact: [secret],
+    onDelta: (delta) => deltas.push(delta),
+  });
+  assert.equal(result.classification, 'spawn_error');
+  assert.equal(JSON.stringify({ result, deltas }).includes(secret), false);
+  assert.match(result.error, /\[REDACTED\]/);
+});
+
 test('passes only explicitly allowlisted environment entries', async () => {
   const descriptor = nodeLaunch("process.stdout.write(JSON.stringify({ kept: process.env.LABWIRED_ALLOWED, leaked: process.env.LABWIRED_UNLISTED }))", { LABWIRED_ALLOWED: 'yes' });
   process.env.LABWIRED_UNLISTED = 'no';
@@ -72,6 +91,13 @@ test('retains bounded evidence while reporting truncation', async () => {
   assert.equal(result.truncated.stdout, true);
 });
 
+test('retention cap does not split a multibyte UTF-8 code point', async () => {
+  const result = await runLaunch(nodeLaunch("process.stdout.write('€'.repeat(400_000))"), { timeoutMs: 2_000 });
+  assert.ok(Buffer.byteLength(result.stdout) <= 1024 * 1024);
+  assert.equal(result.stdout.includes('\uFFFD'), false);
+  assert.equal(result.truncated.stdout, true);
+});
+
 test('terminates descendants when timing out on POSIX', { skip: process.platform === 'win32' }, async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'labwired-process-'));
   const marker = path.join(temporary, 'descendant-survived');
@@ -93,4 +119,3 @@ test('normalizes win32 PowerShell scripts and rejects command shims', () => {
   assert.equal(ps.spawnOptions.shell, false);
   assert.throws(() => resolveLaunch({ executable: 'flash.cmd', args: [], cwd: 'C:\\kit', env: {} }, { platform: 'win32', pathEnv: '' }), /\.cmd/i);
 });
-
