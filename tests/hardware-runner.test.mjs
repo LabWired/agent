@@ -57,12 +57,16 @@ function harness(profile, behavior = {}) {
     twin: { 'labwired-sim': {
       async preflight() { calls.push('preflight:twin'); return { kind: 'twin-capability', executable: '/trusted/sim', toolVersion: 'sim 1' }; },
       async execute(_profile, options) {
-        calls.push('twin'); assert.equal(options.prepared?.kind, 'twin-capability');
+        calls.push('twin'); behavior.onTwin?.(options.signal); assert.equal(options.prepared?.kind, 'twin-capability');
         if (behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', 'twin-failure.json'), '{"twin":"unsupported"}\n');
           return result('failed', { diagnostics: 'native format unsupported', rawEvidenceRefs: ['observations/twin-failure.json'] });
         }
-        return behavior.twin ?? result('model_observed', { artifactSha256, rawEvidenceRefs: ['twin/result.json'] });
+        if (behavior.realEvidence) {
+          await writeFile(path.join(options.evidenceDir, 'observations', 'twin.json'), '{"twin":"observed"}\n');
+          return behavior.twin ?? result('model_observed', { artifactSha256, nativeArtifactSha256: artifactSha256, rawEvidenceRefs: ['observations/twin.json'] });
+        }
+        return behavior.twin ?? result('model_observed', { artifactSha256, nativeArtifactSha256: artifactSha256, rawEvidenceRefs: ['twin/result.json'] });
       },
     } },
     flash: { platformio: {
@@ -72,7 +76,7 @@ function harness(profile, behavior = {}) {
         calls.push('flash'); assert.equal(options.prepared?.kind, 'flash-capability');
         if (behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', 'flash.json'), '{"flash":"exact"}\n');
-          return result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['observations/flash.json'] });
+          return behavior.flash ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['observations/flash.json'] });
         }
         return behavior.flash ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: ['flash.json'] });
       },
@@ -80,7 +84,7 @@ function harness(profile, behavior = {}) {
     observation: Object.fromEntries(['serial', 'logic-csv'].map((provider) => [provider, {
       async preflight(_profile, observation) { calls.push(`preflight:${observation.id}`); return { kind: `observation-capability:${observation.id}`, provider }; },
       async execute(_profile, observation, options) {
-        calls.push(`observe:${observation.id}`); assert.equal(options.prepared?.kind, `observation-capability:${observation.id}`);
+        calls.push(`observe:${observation.id}`); behavior.onObservation?.(observation, options.signal); assert.equal(options.prepared?.kind, `observation-capability:${observation.id}`);
         if (behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', `${observation.id}.json`), `{"behavior":"${observation.id}"}\n`);
           return behavior.observations?.[observation.id] ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
@@ -230,6 +234,39 @@ test('execution supplies an absolute user-scoped lock root by default', async ()
   assert.equal(suppliedRoot.startsWith(f.root), false);
 });
 
+test('confirmation binds canonical evidence destination across cwd drift', async () => {
+  const f = await fixture(); const h = harness(f.profile);
+  const first = await mkdtemp(path.join(os.tmpdir(), 'labwired-cwd-a-'));
+  const second = await mkdtemp(path.join(os.tmpdir(), 'labwired-cwd-b-'));
+  roots.push(first, second);
+  const original = process.cwd();
+  try {
+    process.chdir(first);
+    const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: 'relative-evidence', dependencies: h.dependencies });
+    process.chdir(second);
+    await assert.rejects(executeHardwareRun({ profilePath: f.profilePath, evidenceDir: 'relative-evidence', confirmDigest: planned.digest, dependencies: h.dependencies }), /confirmation digest/);
+    assert.equal(h.calls.includes('evidence'), false);
+    await assert.rejects(readFile(path.join(second, 'relative-evidence', 'result.json')));
+  } finally { process.chdir(original); }
+});
+
+test('confirmation binds the effective default lock root across environment drift', async () => {
+  const f = await fixture(); const h = harness(f.profile); delete h.dependencies.lockRoot;
+  const variable = process.platform === 'win32' ? 'LOCALAPPDATA' : 'XDG_RUNTIME_DIR';
+  const original = process.env[variable];
+  const first = path.join(f.root, 'runtime-a'); const second = path.join(f.root, 'runtime-b');
+  try {
+    process.env[variable] = first;
+    const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    process.env[variable] = second;
+    await assert.rejects(executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: planned.digest, dependencies: h.dependencies }), /confirmation digest/);
+    assert.equal(h.calls.includes('locks'), false);
+    await assert.rejects(readdir(second));
+  } finally {
+    if (original === undefined) delete process.env[variable]; else process.env[variable] = original;
+  }
+});
+
 test('approved plan continues past twin failure, flash failure blocks physical observations', async (t) => {
   await t.test('twin', async () => {
     const f = await fixture(); const h = harness(f.profile, { twin: result('failed') });
@@ -326,6 +363,73 @@ test('compiled-only behavior after flash still authenticates flash stage', async
   assert.equal(JSON.parse(await readFile(path.join(f.evidenceDir, 'stages', 'flash', 'result.json'), 'utf8')).level, 'hardware_observed');
   await writeFile(path.join(f.evidenceDir, 'observations', 'flash.json'), '{"tampered":true}\n');
   assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, false);
+});
+
+test('unrelated but coherent artifact claims finalize authenticated FAIL', async (t) => {
+  const unrelated = 'b'.repeat(64);
+  for (const [name, requiredLevel, twin] of [
+    ['model observation', 'model_observed', result('model_observed', { artifactSha256: unrelated, nativeArtifactSha256: unrelated, rawEvidenceRefs: ['observations/twin.json'] })],
+    ['surrogate observation', 'surrogate_model_observed', result('surrogate_model_observed', { artifactSha256: unrelated, surrogateArtifactSha256: 'c'.repeat(64), sharedSourcePaths: ['src/main.cpp'], rawEvidenceRefs: ['observations/twin.json'] })],
+  ]) await t.test(name, async () => {
+    const observations = [{ id: 'firmware', provider: 'serial', contains: 'ready', requiredLevel }];
+    const f = await fixture({ flash: undefined, observations }); const h = harness(f.profile, { realEvidence: true, twin });
+    h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+    assert.equal(outcome.result, 'FAIL');
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
+  });
+  await t.test('hardware observation', async () => {
+    const f = await fixture();
+    const h = harness(f.profile, { realPhysical: true, observations: {
+      heartbeat: result('hardware_observed', { artifactSha256: unrelated, flashedArtifactSha256: unrelated, rawEvidenceRefs: ['observations/heartbeat.json'] }),
+    } });
+    h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+    assert.equal(outcome.result, 'FAIL');
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).authenticity, 'verified');
+  });
+  await t.test('flash receipt', async () => {
+    const f = await fixture(); const h = harness(f.profile, { realPhysical: true, flash: result('hardware_observed', { artifactSha256: unrelated, flashedArtifactSha256: unrelated, rawEvidenceRefs: ['observations/flash.json'] }) });
+    h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+    assert.equal(outcome.result, 'FAIL'); assert.equal(h.calls.some((call) => call.startsWith('observe:')), false);
+  });
+});
+
+test('exact model and surrogate artifact provenance can produce authenticated PASS', async (t) => {
+  const exact = 'a'.repeat(64);
+  for (const [name, requiredLevel, twin] of [
+    ['model', 'model_observed', result('model_observed', { artifactSha256: exact, nativeArtifactSha256: exact, rawEvidenceRefs: ['observations/twin.json'] })],
+    ['surrogate', 'surrogate_model_observed', result('surrogate_model_observed', { artifactSha256: exact, surrogateArtifactSha256: 'c'.repeat(64), sharedSourcePaths: ['src/main.cpp'], rawEvidenceRefs: ['observations/twin.json'] })],
+  ]) await t.test(name, async () => {
+    const observations = [{ id: 'firmware', provider: 'serial', contains: 'ready', requiredLevel }];
+    const f = await fixture({ flash: undefined, observations }); const h = harness(f.profile, { realEvidence: true, twin });
+    h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+    assert.equal(outcome.result, 'PASS');
+    assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, true);
+  });
+});
+
+test('abort during twin or between observations stops all later hardware work', async (t) => {
+  await t.test('during twin', async () => {
+    const controller = new AbortController(); const f = await fixture();
+    const h = harness(f.profile, { onTwin() { controller.abort(); } });
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.equal(h.calls.includes('flash'), false); assert.equal(h.calls.some((call) => call.startsWith('observe:')), false);
+  });
+  await t.test('between observations', async () => {
+    const controller = new AbortController(); const f = await fixture();
+    const h = harness(f.profile, { onObservation(observation) { if (observation.id === 'heartbeat') controller.abort(); } });
+    const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies, signal: controller.signal });
+    assert.equal(outcome.result, 'FAIL'); assert.equal(h.calls.includes('observe:led'), false);
+  });
 });
 
 test('cancellation reaches adapters, finalizes FAIL, and releases locks; cleanup errors fail closed', async (t) => {
