@@ -252,6 +252,27 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
       workspace_real="$(cd -P "$workspace" && pwd)" || return 2
       stage_parent_real="$(cd -P "$(dirname "$stage")" && pwd)" || return 2
       case "$stage_parent_real/" in "$workspace_real/"*) ;; *) echo "labwired probe flash: staging path escapes workspace" >&2; return 2 ;; esac
+      local elf_real stage_real
+      elf_real="$(cd -P "$(dirname "$elf")" && pwd)/$(basename "$elf")" || return 2
+      stage_real="$stage_parent_real/$(basename "$stage")"
+      if [[ "$elf_real" == "$stage_real" ]]; then
+        # Native PlatformIO builds already live at the uploader's exact path.
+        # Upload in place and prove the file remained the confirmed artifact;
+        # moving it aside would destroy the very source we intend to flash.
+        local native_before_identity native_after_identity native_after_sha upload_rc=0
+        if stat -f '%d:%i' "$stage" >/dev/null 2>&1; then native_before_identity="$(stat -f '%d:%i' "$stage")"
+        else native_before_identity="$(stat -c '%d:%i' "$stage")"; fi
+        (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || upload_rc=$?
+        [[ -f "$stage" && ! -L "$stage" ]] || { echo "labwired probe flash: PlatformIO removed or replaced the native artifact" >&2; return 1; }
+        if command -v shasum >/dev/null 2>&1; then native_after_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
+        else native_after_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
+        if stat -f '%d:%i' "$stage" >/dev/null 2>&1; then native_after_identity="$(stat -f '%d:%i' "$stage")"
+        else native_after_identity="$(stat -c '%d:%i' "$stage")"; fi
+        [[ "$native_after_sha" == "$expected_sha" && "$native_after_identity" == "$native_before_identity" ]] || {
+          echo "labwired probe flash: PlatformIO changed or replaced the native artifact" >&2; return 1;
+        }
+        [[ "$upload_rc" -eq 0 ]] || return "$upload_rc"
+      else
       local backup="" backup_sha="" backup_identity="" had_original=0
       if [[ -e "$stage" ]]; then
         [[ -f "$stage" && ! -L "$stage" ]] || { echo "labwired probe flash: existing upload artifact is not a regular file" >&2; return 2; }
@@ -305,6 +326,7 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
       fi
       [[ "$cleanup_rc" -eq 0 ]] || { echo "labwired probe flash: staging cleanup ownership failure; recovery may be required" >&2; return 1; }
       [[ "$upload_rc" -eq 0 ]] || return "$upload_rc"
+      fi
       ;;
     probe-rs)
       [[ "$elf" == *.elf ]] || { echo "labwired probe flash: probe-rs exact flash requires an ELF artifact" >&2; return 2; }

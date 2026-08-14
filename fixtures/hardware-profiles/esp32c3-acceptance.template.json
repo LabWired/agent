@@ -10,7 +10,7 @@
     "provider": "platformio",
     "workspace": ".",
     "environment": "esp32-c3-devkitm-1",
-    "artifact": "dist/firmware.bin",
+    "artifact": ".pio/build/esp32-c3-devkitm-1/firmware.bin",
     "timeoutSeconds": 30
   },
   "twin": {
@@ -25,14 +25,14 @@
   },
   "observations": [
     {
-      "id": "serial-heartbeat",
+      "id": "heartbeat",
       "provider": "serial",
       "contains": "alive",
       "timeoutSeconds": 5,
       "requiredLevel": "hardware_observed"
     },
     {
-      "id": "led-blink",
+      "id": "led",
       "provider": "logic-csv",
       "file": "logic.csv",
       "channel": 0,
@@ -44,7 +44,7 @@
       "requiredLevel": "hardware_observed"
     },
     {
-      "id": "wifi-health",
+      "id": "wifi",
       "provider": "network",
       "deviceMarker": "WIFI_READY",
       "hostProbeUrlFromMarker": "DEVICE_ADDR",
