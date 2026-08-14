@@ -7,8 +7,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/server"
+mkdir -p "$TMP/server" "$TMP/share"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
+# share/tools.json is the server's tool table and mode policy, not an optional
+# extra: without it the server exits loudly instead of serving an empty tool list.
+# A copied server therefore has to bring the manifest with it.
+cp "$ROOT/share/tools.json" "$TMP/share/tools.json"
 
 cat >"$TMP/fake-agent" <<'SH'
 #!/usr/bin/env bash

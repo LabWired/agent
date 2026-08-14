@@ -129,160 +129,56 @@ function findLabwiredAgent() {
 }
 
 /**
- * Tool registry — argv after `labwired`. Keep in sync with extension tools/registry.
- * Params use ${name} placeholders.
+ * Tool registry — share/tools.json is the ONE home for the tool table AND the
+ * mode policy. It used to be an inline array here plus two inline Sets
+ * (`destructive`, `verifyOnly`), which is three descriptions of the same tools
+ * once the extension registry is counted; they drift silently.
+ *
+ * A missing or malformed manifest is a LOUD, fatal failure on purpose. Never
+ * degrade to `[]`: an empty tool list looks like a healthy server with no tools,
+ * so tool/list returns nothing, every tool/run answers "Unknown tool", and the
+ * mode gates vanish with the data that defined them. Dying on stderr with a
+ * non-zero exit is the only honest failure — the client sees the process go,
+ * not a server that quietly forgot how to flash.
  */
-const TOOLS = [
-  { name: "doctor", title: "Doctor", argv: ["doctor"], group: "install" },
-  {
-    name: "doctor_strict",
-    title: "Doctor (strict)",
-    argv: ["doctor", "--strict"],
-    group: "install",
-  },
-  { name: "version", title: "Version", argv: ["version"], group: "install" },
-  {
-    name: "smoke",
-    title: "Smoke",
-    argv: ["smoke"],
-    group: "install",
-    timeoutMs: 180_000,
-  },
-  {
-    name: "install_deps",
-    title: "Install deps",
-    argv: ["install-deps"],
-    group: "install",
-    timeoutMs: 600_000,
-  },
-  { name: "help", title: "Help", argv: ["help"], group: "project" },
-  { name: "probe_list", title: "Probe list", argv: ["probe", "list"], group: "hardware" },
-  {
-    name: "probe_doctor",
-    title: "Probe doctor",
-    argv: ["probe", "doctor"],
-    group: "hardware",
-  },
-  {
-    name: "probe_chips",
-    title: "Probe chips",
-    argv: ["probe", "chips", "${query}"],
-    params: ["query"],
-    group: "hardware",
-  },
-  {
-    name: "probe_flash",
-    title: "Flash",
-    argv: ["probe", "flash", "${elf}", "--chip", "${chip}", "--target", "${target}"],
-    params: ["elf", "chip", "target", "confirm"],
-    group: "hardware",
-    timeoutMs: 120_000,
-  },
-  {
-    name: "serial_capture",
-    title: "Serial capture",
-    argv: ["serial-capture", "${port}", "${baud}", "${marker}", "${timeout}"],
-    params: ["port", "baud", "marker", "timeout"],
-    group: "hardware",
-    timeoutMs: 60_000,
-  },
-  {
-    name: "score_verify",
-    title: "Score verify",
-    argv: ["score-verify", "${file}"],
-    params: ["file"],
-    group: "verify",
-  },
-  {
-    name: "assert_status",
-    title: "Assert status",
-    argv: ["assert-status", "${expected}", "${file}"],
-    params: ["expected", "file"],
-    group: "verify",
-  },
-  // —— debug / GDB (handled in-process, not labwired argv) ——
-  {
-    name: "debug_info",
-    title: "Debug info",
-    argv: ["__debug__", "info"],
-    group: "debug",
-  },
-  {
-    name: "debug_gdb_start",
-    title: "GDB server start",
-    argv: ["__debug__", "gdb_start", "${chip}", "${port}"],
-    params: ["chip", "port"],
-    group: "debug",
-  },
-  {
-    name: "debug_gdb_stop",
-    title: "GDB server stop",
-    argv: ["__debug__", "gdb_stop"],
-    group: "debug",
-  },
-  {
-    name: "debug_read",
-    title: "Memory read",
-    argv: ["__debug__", "read", "${addr}", "${len}", "${chip}"],
-    params: ["addr", "len", "chip"],
-    group: "debug",
-  },
-  {
-    name: "plot_status",
-    title: "Serial plot status",
-    argv: ["__plot__", "status"],
-    group: "hardware",
-  },
-  {
-    name: "plot_clear",
-    title: "Serial plot clear",
-    argv: ["__plot__", "clear"],
-    group: "hardware",
-  },
-  {
-    name: "hw_claim_shape",
-    title: "HW claim shape check",
-    // Claim rules live in lib/claim-shape.sh — one engine, shared with the CLI.
-    argv: [
-      "claim-shape",
-      "--status", "${status}",
-      "--marker-matched", "${marker_matched}",
-      "--flashed", "${flashed}",
-    ],
-    params: ["status", "marker_matched", "flashed"],
-    group: "verify",
-  },
-  {
-    name: "hw_promote",
-    title: "HW promote (flash + marker → claim)",
-    // Orchestration lives in lib/promote.sh — one promote engine, shared with the
-    // CLI. `defaults: {}` opts out of PARAM_DEFAULTS below: promote's own
-    // defaults (chip esp32c3, target virtual, no port, timeout 8) belong to the
-    // lib, and the shared editor defaults (target auto, port 1337) would silently
-    // turn an unqualified promote into a physical one.
-    argv: [
-      "promote",
-      "--elf", "${elf}",
-      "--chip", "${chip}",
-      "--target", "${target}",
-      "--port", "${port}",
-      "--marker", "${marker}",
-      "--baud", "${baud}",
-      "--timeout", "${timeout}",
-      "--confirm", "${confirm}",
-      "--dry-run", "${dry_run}",
-      "--flashed", "${flashed}",
-      "--marker-matched", "${marker_matched}",
-    ],
-    params: [
-      "elf", "chip", "target", "port", "marker", "confirm", "baud", "timeout",
-      "dry_run", "flashed", "marker_matched",
-    ],
-    defaults: {},
-    group: "verify",
-    timeoutMs: 180_000,
-  },
-];
+const MANIFEST_PATH = join(AGENT_ROOT, "share", "tools.json");
+const MANIFEST = loadToolManifest(MANIFEST_PATH);
+const TOOLS = MANIFEST.tools;
+/** argv[0] values handled in-process by this server, never handed to the CLI. */
+const SENTINELS = new Set(MANIFEST.sentinels);
+/** mode -> { message }. Modes absent here are ungated (act, debug, anything else). */
+const MODE_POLICY = MANIFEST.modePolicy;
+
+function loadToolManifest(path) {
+  let raw;
+  try {
+    raw = fs.readFileSync(path, "utf8");
+  } catch (e) {
+    fatalManifest(`cannot read ${path}: ${e?.message || e}`);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch (e) {
+    fatalManifest(`${path} is not valid JSON: ${e?.message || e}`);
+  }
+  if (!Array.isArray(doc?.tools) || doc.tools.length === 0) {
+    fatalManifest(`${path} has no tools[] — refusing to serve an empty tool list`);
+  }
+  if (!Array.isArray(doc?.sentinels) || !doc?.modePolicy) {
+    fatalManifest(`${path} is missing sentinels[] or modePolicy{} — mode gates would silently vanish`);
+  }
+  return doc;
+}
+
+function fatalManifest(reason) {
+  process.stderr.write(
+    `labwired rpc-server: FATAL — tool manifest unusable: ${reason}\n` +
+      "The tool table and the mode gates live in share/tools.json. Without it this\n" +
+      "server has no tools and no gates, so it exits instead of pretending to work.\n",
+  );
+  process.exit(78); // EX_CONFIG
+}
 
 /** Editor-side placeholder defaults, applied when a tool does not declare its
  *  own `defaults`. A tool whose defaults belong to the CLI sets `defaults: {}`. */
@@ -453,41 +349,16 @@ async function toolRun(params) {
     throw new Error(`Unknown tool: ${name}. Use tool/list.`);
   }
   // Mode gates — Plan/Verify never flash, promote-to-desk, install deps, or GDB attach.
-  // hw_promote nests probe_flash; it MUST be in the Plan denylist (not only probe_flash).
-  const destructive = new Set([
-    "probe_flash",
-    "probe_reset",
-    "install_deps",
-    "probe_install_backend",
-    "debug_gdb_start",
-    "hw_promote",
-  ]);
-  const verifyOnly = new Set([
-    "score_verify",
-    "assert_status",
-    "doctor",
-    "doctor_strict",
-    "version",
-    "help",
-    "probe_list",
-    "probe_doctor",
-    "probe_chips",
-    "serial_capture",
-    "smoke",
-    "plot_status",
-    "plot_clear",
-    "hw_claim_shape",
-    "debug_info",
-  ]);
-  if (state.mode === "plan" && destructive.has(name)) {
-    throw new Error(
-      `Plan mode: tool \`${name}\` disabled (no flash/promote/install/GDB attach). Switch to Act or Debug.`,
-    );
-  }
-  if (state.mode === "verify" && !verifyOnly.has(name)) {
-    throw new Error(
-      `Verify mode: only doctor/score/assert/probe-list/serial-capture tools. \`${name}\` blocked.`,
-    );
+  // hw_promote nests probe_flash; it MUST be denied in Plan in its own right
+  // (denying only probe_flash would leave the nested flash reachable).
+  //
+  // The policy is data: share/tools.json names the gated modes and gives each
+  // tool the list of modes allowed to run it. Modes absent from modePolicy stay
+  // ungated — act, debug, and any string a client invents — which is exactly what
+  // the old `mode === "plan"` / `mode === "verify"` tests did.
+  const policy = MODE_POLICY[state.mode];
+  if (policy && !(tool.modes || []).includes(state.mode)) {
+    throw new Error(String(policy.message).replace(/\$\{name\}/g, name));
   }
   if (state.mode === "verify" && name === "probe_flash") {
     throw new Error("Verify mode: flash disabled. Use score/assert tools.");
@@ -520,9 +391,10 @@ async function toolRun(params) {
 
   notify("chat/toolCall", { name: tool.name, title: tool.title, params: toolParams });
 
-  // In-process special tools. No "__hw__": hw_claim_shape and hw_promote are
-  // plain argv rows onto the CLI (lib/claim-shape.sh, lib/promote.sh).
-  if (tool.argv[0] === "__debug__" || tool.argv[0] === "__plot__") {
+  // In-process special tools — sentinel argv[0] values, listed in share/tools.json
+  // so the drift gate exempts exactly these from the "is it a real CLI subcommand"
+  // check, and nothing else.
+  if (SENTINELS.has(tool.argv[0])) {
     const special = await runSpecialTool(tool, toolParams);
     notify("chat/toolResult", {
       name: tool.name,

@@ -51,6 +51,7 @@
     "config/tui.json",
     "lib/*.sh",
     "server/rpc-server.mjs",
+    "share/tools.json",
     "server/cloud-auth.mjs",
     "server/catalog-facts.json",
     "share/catalog/README.md",

@@ -11,6 +11,15 @@ const agentRoot = join(extRoot, '..', '..');
 const outDir = join(extRoot, 'server');
 mkdirSync(outDir, { recursive: true });
 copyFileSync(join(agentRoot, 'server', 'rpc-server.mjs'), join(outDir, 'rpc-server.mjs'));
+
+// share/tools.json is the server's tool table AND its mode policy. The server
+// resolves it at <agentRoot>/share/tools.json, where agentRoot is the extension
+// root in a packaged install, and it EXITS when the file is missing. Shipping
+// the server without it produces a VSIX whose server dies on first spawn.
+const shareDir = join(extRoot, 'share');
+mkdirSync(shareDir, { recursive: true });
+copyFileSync(join(agentRoot, 'share', 'tools.json'), join(shareDir, 'tools.json'));
+
 const version = readFileSync(join(agentRoot, 'VERSION'), 'utf8').trim();
 writeFileSync(join(outDir, 'AGENT_VERSION'), version + '\n');
-console.log(`sync-server: bundled rpc-server.mjs (agent ${version})`);
+console.log(`sync-server: bundled rpc-server.mjs + share/tools.json (agent ${version})`);
