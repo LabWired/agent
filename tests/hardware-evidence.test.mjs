@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -27,14 +37,16 @@ async function temporaryDirectory() {
 
 function verifiedResult(level, behaviorId, overrides = {}) {
   const artifactSha256 = 'a'.repeat(64);
+  const startedAt = new Date(Date.now() - 1_000).toISOString();
+  const endedAt = new Date().toISOString();
   const result = {
     behaviorId,
     provider: profile.observations.find(({ id }) => id === behaviorId)?.provider ?? 'serial',
     level,
     artifactSha256,
     targetIdentity: { ...profile.target },
-    startedAt: '2026-08-14T10:00:00.000Z',
-    endedAt: '2026-08-14T10:00:01.000Z',
+    startedAt,
+    endedAt,
     toolVersion: 'fixture-tool 1.0.0',
     rawEvidenceRefs: [`captures/${behaviorId}.txt`],
     diagnostics: { message: 'verified' },
@@ -46,6 +58,15 @@ function verifiedResult(level, behaviorId, overrides = {}) {
   }
   if (level === 'hardware_observed') result.flashedArtifactSha256 = artifactSha256;
   return { ...result, ...overrides };
+}
+
+async function createReadyEvidence(directory, selectedProfile = profile, options = { redactValues: [] }) {
+  const evidence = await createEvidenceBundle(directory, selectedProfile, options);
+  await mkdir(path.join(directory, 'captures'), { recursive: true });
+  for (const { id } of selectedProfile.observations) {
+    await writeFile(path.join(directory, 'captures', `${id}.txt`), `capture for ${id}\n`);
+  }
+  return evidence;
 }
 
 test('initialization persists complete fail-first behavior records before returning', async () => {
@@ -65,7 +86,7 @@ test('initialization persists complete fail-first behavior records before return
 
 test('a rejected record leaves the fail-first bundle intact', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   await assert.rejects(evidence.recordBehavior('unknown', { level: 'hardware_observed' }), /unknown behavior/);
   assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
   assert.equal(JSON.parse(await readFile(path.join(directory, 'observations/led/result.json'), 'utf8')).level, 'not-run');
@@ -73,7 +94,7 @@ test('a rejected record leaves the fail-first bundle intact', async () => {
 
 test('atomic replacement never exposes truncated JSON or leftover temporary files', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   const target = path.join(directory, 'observations/led/result.json');
   const readers = Array.from({ length: 40 }, async (_, index) => {
     await evidence.recordBehavior('led', {
@@ -102,7 +123,10 @@ test('behavior persistence redacts secrets before writing them', async () => {
   const directory = await temporaryDirectory();
   const evidence = await createEvidenceBundle(directory, profile, { redactValues: ['wireless-password'] });
   await evidence.recordBehavior('led', {
+    behaviorId: 'led',
+    provider: 'logic-csv',
     level: 'failed',
+    rawEvidenceRefs: [],
     diagnostics: { message: 'bad wireless-password', 'wireless-password-key': 'wireless-password' },
   });
   assert.equal((await readFile(path.join(directory, 'observations/led/result.json'), 'utf8')).includes('wireless-password'), false);
@@ -147,7 +171,7 @@ test('level satisfaction uses an explicit non-ordinal evidence lattice', () => {
 
 test('evidence stays behavior-bound and incomplete observations finalize FAIL with reasons', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   await assert.rejects(
     evidence.recordBehavior('led', verifiedResult('hardware_observed', 'wifi')),
     /does not match/,
@@ -160,7 +184,7 @@ test('evidence stays behavior-bound and incomplete observations finalize FAIL wi
 
 test('finalize passes only when every behavior meets its declared level', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
   await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
   assert.deepEqual(await evidence.finalize(), { result: 'PASS', reasons: [] });
@@ -173,7 +197,7 @@ test('compiled evidence preserves compiled-only semantics', async () => {
     ...profile,
     observations: [{ id: 'firmware', provider: 'serial', requiredLevel: 'model_observed' }],
   };
-  const evidence = await createEvidenceBundle(directory, compiledProfile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory, compiledProfile);
   await evidence.recordBehavior('firmware', verifiedResult('compiled', 'firmware', {
     provider: 'serial',
     claim: 'compiled_only',
@@ -185,7 +209,7 @@ test('compiled evidence preserves compiled-only semantics', async () => {
 
 test('finalize freezes the bundle so a persisted PASS cannot become stale', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
   await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
   await evidence.finalize();
@@ -211,7 +235,7 @@ test('verified evidence rejects absent, malformed, and mismatched provenance', a
   ];
   for (const [candidate, pattern] of cases) {
     const directory = await temporaryDirectory();
-    const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+    const evidence = await createReadyEvidence(directory);
     await assert.rejects(evidence.recordBehavior('led', candidate), pattern, `candidate should reject: ${pattern}`);
     assert.equal(JSON.parse(await readFile(path.join(directory, 'observations/led/result.json'), 'utf8')).level, 'not-run');
   }
@@ -220,20 +244,20 @@ test('verified evidence rejects absent, malformed, and mismatched provenance', a
 test('model and surrogate claims require artifact-specific provenance', async () => {
   const modelProfile = { ...profile, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'model_observed' }] };
   let directory = await temporaryDirectory();
-  let evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  let evidence = await createReadyEvidence(directory, modelProfile);
   await assert.rejects(
     evidence.recordBehavior('led', verifiedResult('model_observed', 'led', { nativeArtifactSha256: 'b'.repeat(64) })),
     /nativeArtifactSha256/,
   );
 
   directory = await temporaryDirectory();
-  evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  evidence = await createReadyEvidence(directory, modelProfile);
   const surrogate = verifiedResult('surrogate_model_observed', 'led');
   delete surrogate.sharedSourcePaths;
   await assert.rejects(evidence.recordBehavior('led', surrogate), /sharedSourcePaths/);
 
   directory = await temporaryDirectory();
-  evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  evidence = await createReadyEvidence(directory, modelProfile);
   await assert.rejects(evidence.recordBehavior('led', verifiedResult('surrogate_model_observed', 'led', {
     surrogateArtifactSha256: 'a'.repeat(64),
   })), /must differ/);
@@ -241,7 +265,7 @@ test('model and surrogate claims require artifact-specific provenance', async ()
 
 test('verified SHA-256 fields are accepted case-insensitively and persisted lowercase', async () => {
   const directory = await temporaryDirectory();
-  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const evidence = await createReadyEvidence(directory);
   const uppercase = 'A'.repeat(64);
   const record = await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
     artifactSha256: uppercase,
@@ -282,4 +306,111 @@ test('a preexisting target bundle is never reused by another handle', async () =
   const directory = await temporaryDirectory();
   await createEvidenceBundle(directory, profile, { redactValues: [] });
   await assert.rejects(createEvidenceBundle(directory, profile, { redactValues: [] }), /already exists/);
+});
+
+test('rejects unsafe behavior IDs before creating any bundle path', async () => {
+  for (const id of ['../escape', '/absolute', 'nested/child', 'nested\\child', '.', '..', '%2e%2e']) {
+    const directory = await temporaryDirectory();
+    const unsafeProfile = { ...profile, observations: [{ ...profile.observations[0], id }] };
+    await assert.rejects(createEvidenceBundle(directory, unsafeProfile, { redactValues: [] }), /safe behavior ID/);
+    await assert.rejects(access(directory));
+  }
+});
+
+test('rejects a renamed bundle root replaced by an external symlink before writing', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  const original = `${directory}.original`;
+  const external = await mkdtemp(path.join(os.tmpdir(), 'labwired-external-'));
+  const sentinel = path.join(external, 'sentinel.txt');
+  await writeFile(sentinel, 'untouched');
+  await rename(directory, original);
+  await symlink(external, directory, process.platform === 'win32' ? 'junction' : 'dir');
+
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led', provider: 'logic-csv', level: 'failed', rawEvidenceRefs: [], diagnostics: {},
+  }), /ownership|symlink|replaced/);
+  assert.equal(await readFile(sentinel, 'utf8'), 'untouched');
+});
+
+test('rejects a behavior directory replaced by an external symlink before writing', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  const behaviorDirectory = path.join(directory, 'observations', 'led');
+  const external = await mkdtemp(path.join(os.tmpdir(), 'labwired-external-'));
+  const sentinel = path.join(external, 'sentinel.txt');
+  await writeFile(sentinel, 'untouched');
+  await rm(behaviorDirectory, { recursive: true });
+  await symlink(external, behaviorDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led', provider: 'logic-csv', level: 'failed', rawEvidenceRefs: [], diagnostics: {},
+  }), /ownership|symlink|replaced/);
+  assert.equal(await readFile(sentinel, 'utf8'), 'untouched');
+});
+
+test('failed and untrusted records share binding, redaction, and bounds validation', async () => {
+  let directory = await temporaryDirectory();
+  let evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led', provider: 'logic-csv', level: 'failed', rawEvidenceRefs: ['../outside'], diagnostics: {},
+  }), /rawEvidenceRefs/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led', provider: 'logic-csv', level: 'failed', rawEvidenceRefs: [], diagnostics: 'x'.repeat(65_537),
+  }), /diagnostics/);
+
+  const untrustedProfile = {
+    ...profile,
+    observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'untrusted_observation' }],
+  };
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory, untrustedProfile);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('untrusted_observation', 'led', {
+    rawEvidenceRefs: ['../outside'],
+  })), /rawEvidenceRefs/);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('untrusted_observation', 'led', {
+    diagnostics: 'x'.repeat(65_537),
+  })), /diagnostics/);
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led', provider: 'logic-csv', level: 'not-run', rawEvidenceRefs: [], diagnostics: {},
+  }), /not-run/);
+});
+
+test('satisfying claims require real contained non-symlink evidence files and sane times', async () => {
+  let directory = await temporaryDirectory();
+  let evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    rawEvidenceRefs: ['captures/missing.txt'],
+  })), /does not exist/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  const external = path.join(path.dirname(directory), 'external.txt');
+  await writeFile(external, 'external');
+  await symlink(external, path.join(directory, 'captures', 'linked.txt'));
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    rawEvidenceRefs: ['captures/linked.txt'],
+  })), /symlink/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    startedAt: '9999-01-01T00:00:00.000Z',
+    endedAt: '9999-01-01T00:00:01.000Z',
+  })), /run window|future/);
+});
+
+test('finalize rehashes evidence so mutated captures cannot produce stale PASS', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  const led = await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+  assert.equal(led.rawEvidence[0].size > 0, true);
+  assert.match(led.rawEvidence[0].sha256, /^[0-9a-f]{64}$/);
+  await writeFile(path.join(directory, 'captures', 'led.txt'), 'tampered\n');
+  await assert.rejects(evidence.finalize(), /changed|hash/);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
 });
