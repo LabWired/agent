@@ -73,10 +73,8 @@ function Invoke-NativeComponent {
   $startInfo.FileName = $Path
   $startInfo.UseShellExecute = $false
   $startInfo.CreateNoWindow = $true
-  # Inherit stdout/stderr. Redirecting and replaying them from this nested
-  # dispatcher duplicates output under Windows PowerShell capture pipelines.
-  $startInfo.RedirectStandardOutput = $false
-  $startInfo.RedirectStandardError = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
   # Prefer ArgumentList for .exe (preserves empty argv on pwsh/.NET Core).
   # Always use a quoted Arguments string for .cmd/.bat - ArgumentList + cmd is flaky.
   $ext = [IO.Path]::GetExtension($Path)
@@ -93,9 +91,21 @@ function Invoke-NativeComponent {
   }
   $process = New-Object Diagnostics.Process
   $process.StartInfo = $startInfo
-  if (-not $process.Start()) { return 1 }
+  if (-not $process.Start()) { return [pscustomobject]@{ Status = 1; Stdout = ""; Stderr = "" } }
+  $stdout = $process.StandardOutput.ReadToEndAsync()
+  $stderr = $process.StandardError.ReadToEndAsync()
   $process.WaitForExit()
-  return $process.ExitCode
+  return [pscustomobject]@{
+    Status = $process.ExitCode
+    Stdout = $stdout.Result
+    Stderr = $stderr.Result
+  }
+}
+
+function Complete-NativeComponent([object]$Result) {
+  if ($Result.Stdout) { Write-Output -NoEnumerate $Result.Stdout }
+  if ($Result.Stderr) { [Console]::Error.Write($Result.Stderr) }
+  exit ([int]$Result.Status)
 }
 
 function Invoke-Component {
@@ -115,7 +125,7 @@ function Invoke-Component {
   # Native launch preserves empty args and cmd metacharacters. PowerShell splat
   # drops "" and mishandles some quote edges when calling another .ps1.
   if ($ext -ieq ".exe" -or $ext -ieq ".cmd" -or $ext -ieq ".bat") {
-    exit (Invoke-NativeComponent -Path $Path -Arguments $argv)
+    Complete-NativeComponent (Invoke-NativeComponent -Path $Path -Arguments $argv)
   }
   if ($ext -ieq ".ps1") {
     $psExe = if ($PSVersionTable.PSEdition -eq "Core") {
@@ -140,7 +150,7 @@ if (-not `$?) { exit 1 }
 exit 0
 "@
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    exit (Invoke-NativeComponent -Path $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
+    Complete-NativeComponent (Invoke-NativeComponent -Path $psExe -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand))
   }
   & $Path @argv
   if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
