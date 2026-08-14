@@ -903,6 +903,8 @@ Usage:
   labwired agent update             Self-update Agent kit + config
   labwired agent smoke              Prove install works (claim gate + sim)
   labwired agent compose …          Assemble plot elements (uart | capture)
+  labwired agent hardware plan --profile FILE --out DIR
+  labwired agent hardware run --profile FILE --out DIR --confirm DIGEST
   labwired agent install-deps       Install sim + probe-rs into prefix
   labwired agent package …          Portable prefix: info | path | env | uninstall
   labwired agent version            Version
@@ -1182,6 +1184,15 @@ cmd_serial_challenge() {
   labwired_serial_challenge "$@"
 }
 
+cmd_hardware() {
+  local runner="$ROOT/scripts/hardware-runner.mjs"
+  [[ -f "$runner" ]] || fail "hardware runner missing at $runner"
+  local node_bin=""
+  node_bin="$(command -v node 2>/dev/null || true)"
+  [[ -n "$node_bin" ]] || { echo 'labwired: Node.js 18+ is required for hardware commands' >&2; return 2; }
+  "$node_bin" "$runner" "$@"
+}
+
 case "${1:-}" in
   server)
     shift
@@ -1256,6 +1267,10 @@ case "${1:-}" in
   serial-challenge)
     shift
     cmd_serial_challenge "$@"
+    ;;
+  hardware)
+    shift
+    cmd_hardware "$@"
     ;;
   compose)
     shift

@@ -338,6 +338,10 @@ import json, os, select, subprocess, sys, time
 server, node = sys.argv[1:3]
 # (mode, tool, params, expect) — expect "refused" or "allowed"
 cases = [
+    ("plan",   "hardware_run", {"profile": "/tmp/p.json", "out": "/tmp/e", "confirm": "0" * 64}, "refused"),
+    ("verify", "hardware_run", {"profile": "/tmp/p.json", "out": "/tmp/e", "confirm": "0" * 64}, "refused"),
+    ("act",    "hardware_run", {"profile": "/tmp/p.json", "out": "/tmp/e", "confirm": "0" * 64}, "allowed"),
+    ("debug",  "hardware_run", {"profile": "/tmp/p.json", "out": "/tmp/e", "confirm": "0" * 64}, "allowed"),
     ("plan",   "probe_flash",  {"elf": "/nonexistent.elf", "chip": "C", "target": "virtual"}, "refused"),
     ("plan",   "hw_promote",   {"dry_run": "1", "target": "virtual"},                          "refused"),
     ("verify", "hw_promote",   {"dry_run": "1", "target": "virtual"},                          "refused"),

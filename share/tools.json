@@ -221,6 +221,54 @@
       ]
     },
     {
+      "name": "hardware_plan",
+      "title": "Hardware plan",
+      "argv": [
+        "hardware",
+        "plan",
+        "--profile",
+        "${profile}",
+        "--out",
+        "${out}"
+      ],
+      "params": [
+        "profile",
+        "out"
+      ],
+      "group": "hardware",
+      "modes": [
+        "act",
+        "debug",
+        "plan",
+        "verify"
+      ]
+    },
+    {
+      "name": "hardware_run",
+      "title": "Hardware run (confirmed)",
+      "argv": [
+        "hardware",
+        "run",
+        "--profile",
+        "${profile}",
+        "--out",
+        "${out}",
+        "--confirm",
+        "${confirm}"
+      ],
+      "params": [
+        "profile",
+        "out",
+        "confirm"
+      ],
+      "group": "hardware",
+      "timeoutMs": 600000,
+      "modes": [
+        "act",
+        "debug"
+      ]
+    },
+    {
       "name": "score_verify",
       "title": "Score verify",
       "argv": [

@@ -96,6 +96,8 @@ Usage:
   labwired agent install-deps    Refresh tools into prefix
   labwired agent serial-challenge PORT BAUD NONCE MARKER ADDRESS_KEY TIMEOUT
                                  Send a bounded hardware nonce challenge
+  labwired agent hardware plan --profile FILE --out DIR
+  labwired agent hardware run --profile FILE --out DIR --confirm DIGEST
   labwired agent help
 
 
@@ -146,6 +148,16 @@ function Cmd-Probe {
     & $helper -ProbeRs $probeRs -Chip $flags['chip'] -Probe $flags['probe'] -Elf $flags['elf'] -Marker $flags['marker'] -TimeoutSeconds ([int]$flags['timeout']);exit $LASTEXITCODE
   }
   Fail "unknown probe command $sub"
+}
+
+function Cmd-Hardware {
+  $runner = Join-Path $AgentHome 'scripts\hardware-runner.mjs'
+  if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { [Console]::Error.WriteLine('labwired: hardware runner missing'); exit 2 }
+  Assert-SafePath $runner
+  $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $nodeCommand) { [Console]::Error.WriteLine('labwired: Node.js 18+ is required for hardware commands'); exit 2 }
+  & $nodeCommand.Source $runner @argsRest
+  exit $LASTEXITCODE
 }
 
 function Get-LabWiredAgentConfigDir {
@@ -677,6 +689,7 @@ switch ($cmd) {
   "serial-challenge" { Cmd-SerialChallenge }
   "serial-capture" { Cmd-SerialCapture }
   "probe" { Cmd-Probe }
+  "hardware" { Cmd-Hardware }
   "rtt-capture" { $script:argsRest=@('rtt-capture')+@($argsRest); Cmd-Probe }
   "opencode" {
     # Internal engine alias - same product start as bare labwired agent.
