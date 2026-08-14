@@ -917,6 +917,8 @@ Usage:
                            Score verify JSON / matrix; print score
   labwired agent serial-capture <port> <baud> <marker> <timeout>
                            UART capture; exit 0 if marker observed
+  labwired agent serial-challenge <port> <baud> <nonce> <marker> <address-key> <timeout>
+                           Send nonce then capture correlated device response
   labwired agent probe …         Boards: physical probes + virtual LabWired
   labwired agent help            This help
 
@@ -1174,6 +1176,12 @@ cmd_serial_capture() {
   labwired_serial_capture "$@"
 }
 
+cmd_serial_challenge() {
+  # shellcheck source=lib/serial-capture.sh
+  source "$ROOT/lib/serial-capture.sh"
+  labwired_serial_challenge "$@"
+}
+
 case "${1:-}" in
   server)
     shift
@@ -1244,6 +1252,10 @@ case "${1:-}" in
   serial-capture)
     shift
     cmd_serial_capture "$@"
+    ;;
+  serial-challenge)
+    shift
+    cmd_serial_challenge "$@"
     ;;
   compose)
     shift

@@ -12,10 +12,15 @@ labwired probe — attach boards (physical or virtual LabWired)
 
   labwired probe list              List probes + virtual devices
   labwired probe chips [query]     Search chip names (probe-rs)
-  labwired probe flash <elf>       Flash firmware
+  labwired probe flash <artifact>  Flash exact firmware bytes
+      --provider platformio|probe-rs  Required for physical flash
       --chip <name>                Chip/board id (required for physical)
       --target virtual|auto|probe  Default: auto
       --probe <selector>           probe-rs probe selector (optional)
+      --port <path>                Explicit serial/upload port
+      --expected-sha256 <digest>   Required exact artifact digest
+      --environment <name>         PlatformIO environment
+      --workspace <path>           PlatformIO project workspace
   labwired probe reset             Reset target
       --chip <name>
       --target virtual|auto|probe
@@ -129,12 +134,17 @@ labwired_probe_resolve_target() {
 }
 
 labwired_probe_flash() {
-  local elf="" chip="" target="auto" probe_sel=""
+  local elf="" chip="" target="auto" probe_sel="" provider="" port="" expected_sha="" environment="" workspace=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --chip) chip="${2:-}"; shift 2 ;;
       --target) target="${2:-}"; shift 2 ;;
       --probe) probe_sel="${2:-}"; shift 2 ;;
+      --provider) provider="${2:-}"; shift 2 ;;
+      --port) port="${2:-}"; shift 2 ;;
+      --expected-sha256) expected_sha="${2:-}"; shift 2 ;;
+      --environment) environment="${2:-}"; shift 2 ;;
+      --workspace) workspace="${2:-}"; shift 2 ;;
       -h|--help) labwired_probe_usage; return 0 ;;
       -*)
         echo "labwired probe flash: unknown flag $1" >&2
@@ -151,9 +161,11 @@ labwired_probe_flash() {
     echo "usage: labwired probe flash <elf> --chip <name> [--target virtual|probe|auto]" >&2
     return 2
   fi
+  [[ ! -L "$elf" ]] || { echo "labwired probe flash: artifact must not be a symlink" >&2; return 2; }
 
   local mode=""
-  if ! mode="$(labwired_probe_resolve_target "$target")"; then
+  if [[ "$target" == "probe" && -n "$provider" ]]; then mode="probe"
+  elif ! mode="$(labwired_probe_resolve_target "$target")"; then
     echo "labwired probe flash: no backend (install probe-rs and/or LabWired sim)" >&2
     return 1
   fi
@@ -194,73 +206,54 @@ labwired_probe_flash() {
     return 0
   fi
 
-  # Physical: ESP32* often uses esptool/PIO (USB-Serial/JTAG), not probe-rs alone.
-  local chip_lc
-  chip_lc="$(printf '%s' "$chip" | tr '[:upper:]' '[:lower:]')"
-  if [[ -z "$chip" ]]; then
-    echo "labwired probe flash: --chip required for physical flash" >&2
+  if [[ -z "$chip" || -z "$provider" || -z "$probe_sel" || -z "$port" || -z "$expected_sha" ]]; then
+    echo "labwired probe flash: physical flash requires --provider, --chip, --probe, --port, and --expected-sha256" >&2
     return 2
   fi
-  if [[ "$chip_lc" == *esp32* ]] || [[ "$chip_lc" == *esp8266* ]]; then
-    if command -v pio >/dev/null 2>&1 && [[ -f "platformio.ini" ]]; then
-      echo "==> physical flash via PlatformIO (ESP family — USB-CDC path)"
-      echo "    chip: $chip"
-      echo "    elf:  $elf  (pio rebuilds from project; prefer project dir)"
-      pio run -t upload
-      echo "claim: flashed via PIO — capture serial before hardware_observed"
-      return 0
-    fi
-    local bin=""
-    # Accept .bin next to .elf or same stem
-    if [[ "$elf" == *.elf && -f "${elf%.elf}.bin" ]]; then
-      bin="${elf%.elf}.bin"
-    elif [[ -f "$elf" && "$elf" == *.bin ]]; then
-      bin="$elf"
-    fi
-    if [[ -n "$bin" ]] && command -v esptool >/dev/null 2>&1; then
-      local port="${LABWIRED_HW_PORT:-${LABWIRED_C3_PORT:-}}"
-      [[ -n "$port" ]] || port="$(ls /dev/cu.usbmodem* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | head -1 || true)"
-      [[ -n "$port" ]] || {
-        echo "labwired probe flash: set LABWIRED_HW_PORT for esptool" >&2
-        return 1
-      }
-      # Map free-form chip id → esptool --chip (generic ESP family backend)
-      local chip_arg="esp32"
-      case "$chip_lc" in
-        *esp32c3*) chip_arg="esp32c3" ;;
-        *esp32c6*) chip_arg="esp32c6" ;;
-        *esp32s3*) chip_arg="esp32s3" ;;
-        *esp32s2*) chip_arg="esp32s2" ;;
-        *esp32h2*) chip_arg="esp32h2" ;;
-        *esp8266*) chip_arg="esp8266" ;;
-        *esp32*)   chip_arg="esp32" ;;
-      esac
-      echo "==> physical flash via esptool ($chip_arg)"
-      esptool --chip "$chip_arg" -p "$port" -b 460800 write_flash 0x10000 "$bin" \
-        || esptool --chip "$chip_arg" -p "$port" write_flash 0x0 "$bin"
-      echo "claim: flashed via esptool — capture serial before hardware_observed"
-      return 0
-    fi
-    echo "labwired probe flash: ESP chip needs PlatformIO project or esptool + .bin" >&2
-    echo "    tip: cd project && pio run -t upload && labwired serial-capture …" >&2
+  [[ "$expected_sha" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "labwired probe flash: invalid expected SHA-256" >&2; return 2; }
+  local actual_sha=""
+  if command -v shasum >/dev/null 2>&1; then actual_sha="$(shasum -a 256 -- "$elf" | awk '{print $1}')"
+  elif command -v sha256sum >/dev/null 2>&1; then actual_sha="$(sha256sum -- "$elf" | awk '{print $1}')"
+  else echo "labwired probe flash: SHA-256 tool unavailable" >&2; return 2
   fi
+  actual_sha="$(printf '%s' "$actual_sha" | tr '[:upper:]' '[:lower:]')"
+  expected_sha="$(printf '%s' "$expected_sha" | tr '[:upper:]' '[:lower:]')"
+  [[ "$actual_sha" == "$expected_sha" ]] || { echo "labwired probe flash: artifact SHA-256 mismatch" >&2; return 2; }
 
-  # Physical: probe-rs (STM32, nRF, …)
-  local prs
-  prs="$(labwired_resolve_probe_rs)" || {
-    echo "labwired probe flash: probe-rs not found (labwired probe install-backend)" >&2
-    return 1
-  }
-  echo "==> physical flash via probe-rs (not OpenOCD)"
-  echo "    probe-rs: $prs"
-  echo "    chip:     $chip"
-  echo "    elf:      $elf"
-  local args=(download --chip "$chip" --binary-format elf "$elf")
-  if [[ -n "$probe_sel" ]]; then
-    args+=(--probe "$probe_sel")
-  fi
-  "$prs" "${args[@]}"
-  echo "claim: flashed via probe — still verify UART/behavior before hardware-confirmed"
+  case "$provider" in
+    platformio)
+      [[ "$elf" == *.bin ]] || { echo "labwired probe flash: PlatformIO exact flash requires a .bin artifact" >&2; return 2; }
+      [[ "$environment" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "labwired probe flash: invalid PlatformIO environment" >&2; return 2; }
+      [[ -n "$workspace" && -f "$workspace/platformio.ini" ]] || { echo "labwired probe flash: explicit PlatformIO workspace is invalid" >&2; return 2; }
+      command -v pio >/dev/null 2>&1 || { echo "labwired probe flash: pio not found" >&2; return 2; }
+      local stage="$workspace/.pio/build/$environment/firmware.bin"
+      [[ ! -L "$workspace" && ! -L "$workspace/.pio" && ! -L "$workspace/.pio/build" && ! -L "$workspace/.pio/build/$environment" && ! -L "$stage" ]] || {
+        echo "labwired probe flash: PlatformIO staging path must not contain symlinks" >&2; return 2;
+      }
+      mkdir -p -- "$(dirname "$stage")"
+      local workspace_real stage_parent_real
+      workspace_real="$(cd -P "$workspace" && pwd)" || return 2
+      stage_parent_real="$(cd -P "$(dirname "$stage")" && pwd)" || return 2
+      case "$stage_parent_real/" in "$workspace_real/"*) ;; *) echo "labwired probe flash: staging path escapes workspace" >&2; return 2 ;; esac
+      cp -- "$elf" "$stage"
+      local stage_sha=""
+      if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
+      else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
+      [[ "$stage_sha" == "$expected_sha" ]] || { echo "labwired probe flash: staged artifact hash mismatch" >&2; return 1; }
+      (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || return $?
+      if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
+      else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
+      [[ "$stage_sha" == "$expected_sha" ]] || { echo "labwired probe flash: PlatformIO changed the staged artifact" >&2; return 1; }
+      ;;
+    probe-rs)
+      [[ "$elf" == *.elf ]] || { echo "labwired probe flash: probe-rs exact flash requires an ELF artifact" >&2; return 2; }
+      local prs
+      prs="$(labwired_resolve_probe_rs)" || { echo "labwired probe flash: probe-rs not found" >&2; return 2; }
+      "$prs" download --chip "$chip" --probe "$probe_sel" --binary-format elf "$elf" || return $?
+      ;;
+    *) echo "labwired probe flash: unsupported explicit provider $provider" >&2; return 2 ;;
+  esac
+  node -e 'const [provider,artifactSha256,chip,probeSerial,serialPort]=process.argv.slice(1); console.log("LABWIRED_FLASH_RECEIPT "+JSON.stringify({provider,artifactSha256:artifactSha256.toLowerCase(),chip,probeSerial,serialPort}))' "$provider" "$expected_sha" "$chip" "$probe_sel" "$port"
 }
 
 labwired_probe_reset() {

@@ -294,6 +294,44 @@ PY
   return "$rc"
 }
 
+# Send a per-run challenge and capture the device's nonce/address response.
+labwired_serial_challenge() {
+  local port="${1:-}" baud="${2:-}" nonce="${3:-}" marker="${4:-}" address_key="${5:-}" timeout="${6:-8}"
+  [[ -n "$port" && "$baud" =~ ^[0-9]+$ && "$nonce" =~ ^[0-9a-f]{32}$ && -n "$marker" && -n "$address_key" && "$timeout" =~ ^[0-9]+$ ]] || {
+    echo "usage: labwired serial-challenge <port> <baud> <32-hex-nonce> <marker> <address-key> <timeout>" >&2; return 2;
+  }
+  LABWIRED_SC_PORT="$port" LABWIRED_SC_BAUD="$baud" LABWIRED_SC_NONCE="$nonce" LABWIRED_SC_MARKER="$marker" LABWIRED_SC_ADDRESS="$address_key" LABWIRED_SC_TIMEOUT="$timeout" python3 - <<'PY'
+import os, sys, time, select, termios
+port=os.environ['LABWIRED_SC_PORT']; baud=int(os.environ['LABWIRED_SC_BAUD']); nonce=os.environ['LABWIRED_SC_NONCE']
+marker=os.environ['LABWIRED_SC_MARKER']; address=os.environ['LABWIRED_SC_ADDRESS']; timeout=int(os.environ['LABWIRED_SC_TIMEOUT'])
+fixture=os.environ.get('LABWIRED_SERIAL_CHALLENGE_FIXTURE')
+if fixture:
+    text=open(fixture, encoding='utf-8').read().replace('{nonce}', nonce)
+    sys.stdout.write(text[:65536]); sys.exit(0 if marker in text and ('nonce='+nonce) in text and (address+'=') in text else 1)
+speeds={9600:termios.B9600,19200:termios.B19200,38400:termios.B38400,57600:termios.B57600,115200:termios.B115200}
+if baud not in speeds: sys.stderr.write('serial-challenge: unsupported baud\n'); sys.exit(2)
+fd=None
+try:
+    fd=os.open(port, os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK)
+    attrs=termios.tcgetattr(fd); attrs[0]=0; attrs[1]=0; attrs[2]=termios.CS8|termios.CREAD|termios.CLOCAL; attrs[3]=0
+    attrs[4]=speeds[baud]; attrs[5]=speeds[baud]; termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    os.write(fd, ('LABWIRED_CHALLENGE '+nonce+'\n').encode())
+    end=time.monotonic()+timeout; data=bytearray()
+    while time.monotonic()<end and len(data)<65536:
+        ready,_,_=select.select([fd],[],[],min(.25,max(0,end-time.monotonic())))
+        if ready:
+            try: data.extend(os.read(fd,4096))
+            except BlockingIOError: pass
+            text=data.decode('utf-8','replace')
+            if marker in text and ('nonce='+nonce) in text and (address+'=') in text: sys.stdout.write(text); sys.exit(0)
+    sys.stdout.write(data.decode('utf-8','replace')); sys.stderr.write('serial-challenge: correlated response not observed\n'); sys.exit(1)
+except OSError as error:
+    sys.stderr.write('serial-challenge: '+str(error)+'\n'); sys.exit(1)
+finally:
+    if fd is not None: os.close(fd)
+PY
+}
+
 if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
   labwired_serial_capture "$@"
 fi

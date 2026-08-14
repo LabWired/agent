@@ -152,6 +152,22 @@ test('resolves logic CSV files under the workspace', async () => {
   });
 });
 
+test('normalizes and freezes optional positive logic frequency bounds', async () => {
+  const value = minimal();
+  value.observations = [{ id: 'led', provider: 'logic-csv', file: 'logic.csv', channel: 0, timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 1, frequencyMinHz: 0.5, frequencyMaxHz: 2, requiredLevel: 'hardware_observed' }];
+  value.target.probeSerial = 'probe-1'; value.target.serialPort = '/dev/ttyACM0';
+  await withProfile(value, async ({ profilePath }) => {
+    const normalized = validateHardwareProfile(value, profilePath);
+    assert.equal(normalized.observations[0].frequencyMinHz, 0.5);
+    assert.equal(normalized.observations[0].frequencyMaxHz, 2);
+    assert.equal(Object.isFrozen(normalized.observations[0]), true);
+    for (const [minimum, maximum] of [[0, 2], [Number.NaN, 2], [3, 2]]) {
+      value.observations[0].frequencyMinHz = minimum; value.observations[0].frequencyMaxHz = maximum;
+      assert.throws(() => validateHardwareProfile(value, profilePath), /frequency/);
+    }
+  });
+});
+
 test('rejects traversal and symlink escapes from the workspace', async () => {
   await withProfile(minimal({ build: { ...minimal().build, artifact: '../outside.elf' } }), async ({ profilePath }) => {
     await assert.rejects(loadHardwareProfile(profilePath, { realpath: true }), /escape|outside|contain/i);

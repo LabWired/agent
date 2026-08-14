@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { rmSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
@@ -9,6 +10,7 @@ import test from 'node:test';
 import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
 import { createEvidenceBundle, sha256File } from '../lib/hardware/evidence.mjs';
 import { resolveLaunch } from '../lib/hardware/process.mjs';
+import { validateHardwareProfile } from '../lib/hardware/profile.mjs';
 
 const roots = new Set();
 process.once('exit', () => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -17,7 +19,7 @@ async function sandbox() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-observe-'));
   roots.add(root);
   await mkdir(path.join(root, 'build'));
-  await writeFile(path.join(root, 'build', 'firmware.elf'), 'exact firmware');
+  await writeFile(path.join(root, 'build', 'firmware.bin'), 'exact firmware');
   return root;
 }
 
@@ -25,7 +27,7 @@ function profile(root, flash = 'platformio') {
   return {
     schema: 1,
     target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0' },
-    build: { provider: 'platformio', workspace: root, environment: 'release', artifact: path.join(root, 'build', 'firmware.elf') },
+    build: { provider: 'platformio', workspace: root, environment: 'release', artifact: path.join(root, 'build', 'firmware.bin') },
     flash: { provider: flash, timeoutSeconds: 2 },
     observations: [],
   };
@@ -57,15 +59,17 @@ test('flash adapters delegate exact identities and artifact to the existing shel
   for (const provider of ['platformio', 'probe-rs']) await t.test(provider, async () => {
     const root = await sandbox();
     const p = profile(root, provider);
+    if (provider === 'probe-rs') {
+      p.build.artifact = path.join(root, 'build', 'firmware.elf');
+      await writeFile(p.build.artifact, 'exact firmware');
+    }
     const hash = await sha256File(p.build.artifact);
     const { adapters } = harness();
     const ready = await adapters.flash[provider].preflight(p, { artifactSha256: hash });
     const descriptor = adapters.flash[provider].plan(p, ready);
     assert.equal(descriptor.executable, '/trusted/labwired-agent');
     assert.equal(descriptor.shell, false);
-    assert.deepEqual(descriptor.args, ['probe', 'flash', p.build.artifact, '--chip', 'esp32c3', '--target', 'probe', '--probe', 'probe-123']);
-    assert.equal(descriptor.env.LABWIRED_HW_PORT, '/dev/ttyACM0');
-    assert.equal(descriptor.env.LABWIRED_FLASH_PROVIDER, provider);
+    assert.deepEqual(descriptor.args, ['probe', 'flash', p.build.artifact, '--provider', provider, '--chip', 'esp32c3', '--target', 'probe', '--probe', 'probe-123', '--port', '/dev/ttyACM0', '--expected-sha256', hash, '--environment', 'release', '--workspace', root]);
     assert.throws(() => adapters.flash[provider].plan(p, {}), /capability/);
   });
 });
@@ -75,12 +79,25 @@ test('flash revalidates the exact artifact before and after execution and redact
   const p = profile(root);
   const hash = await sha256File(p.build.artifact);
   const bundle = await evidence(root, p);
-  const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: 'ok secret-value', stderr: '', truncated: { stdout: false, stderr: false } }));
+  const receipt = { provider: 'platformio', artifactSha256: hash, chip: p.target.chip, probeSerial: p.target.probeSerial, serialPort: p.target.serialPort };
+  const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: `secret-value\nLABWIRED_FLASH_RECEIPT ${JSON.stringify(receipt)}\n`, stderr: 'secret-value', truncated: { stdout: false, stderr: false } }));
   const result = await adapters.flash.platformio.execute(p, { artifactSha256: hash, evidenceDir: bundle, redact: ['secret-value'] });
   assert.equal(result.level, 'hardware_observed');
   assert.equal(result.artifactSha256, hash);
   assert.equal(JSON.stringify(result).includes('secret-value'), false);
   assert.equal((await readFile(path.join(bundle, result.rawEvidenceRefs[0]), 'utf8')).includes('secret-value'), false);
+});
+
+test('flash refuses a success exit with a missing or mismatched exact receipt', async (t) => {
+  const root = await sandbox(); const p = profile(root); const hash = await sha256File(p.build.artifact);
+  for (const [name, stdout] of [
+    ['missing', 'claim: flashed'],
+    ['wrong chip', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ provider: 'platformio', artifactSha256: hash, chip: 'wrong-chip', probeSerial: p.target.probeSerial, serialPort: p.target.serialPort })}`],
+  ]) await t.test(name, async () => {
+    const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 0, stdout, stderr: '', truncated: { stdout: false, stderr: false } }));
+    const result = await adapters.flash.platformio.execute(p, { artifactSha256: hash });
+    assert.equal(result.level, 'failed'); assert.match(result.diagnostics, /receipt/);
+  });
 });
 
 test('flash fails closed on an artifact mutation race', async () => {
@@ -143,7 +160,24 @@ test('logic CSV proves real transitions and frequency independently of serial te
   assert.equal(result.level, 'hardware_observed');
   assert.equal(result.transitions, 3);
   assert.equal(result.frequencyHz, 1);
-  assert.deepEqual(result.rawEvidenceRefs, ['observations/led.json']);
+  assert.deepEqual(result.rawEvidenceRefs, ['observations/led.csv', 'observations/led.json']);
+  const rawLogic = await readFile(path.join(bundle, result.rawEvidenceRefs[0]), 'utf8');
+  assert.match(rawLogic, /0\.5,1/);
+  const logicSummary = JSON.parse(await readFile(path.join(bundle, result.rawEvidenceRefs[1]), 'utf8'));
+  assert.equal(logicSummary.captureSha256, createHash('sha256').update(rawLogic).digest('hex'));
+});
+
+test('validated profile frequency bounds flow unchanged into the logic adapter', async () => {
+  const root = await sandbox(); await writeFile(path.join(root, 'logic.csv'), 'time,v\n0,0\n0.5,1\n1,0\n');
+  const normalized = validateHardwareProfile({
+    schema: 1,
+    target: { id: 'desk', chip: 'esp32c3', probeSerial: 'probe-1', serialPort: '/dev/ttyACM0' },
+    build: { provider: 'platformio', workspace: '.', environment: 'release', artifact: 'build/firmware.bin' },
+    observations: [{ id: 'led', provider: 'logic-csv', file: 'logic.csv', channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 2, frequencyMinHz: 0.9, frequencyMaxHz: 1.1, requiredLevel: 'hardware_observed' }],
+  }, path.join(root, 'hardware.json'));
+  const hash = await sha256File(normalized.build.artifact);
+  const result = await harness().adapters.observation['logic-csv'].execute(normalized, normalized.observations[0], { flashedArtifactSha256: hash });
+  assert.equal(result.level, 'hardware_observed'); assert.equal(result.frequencyHz, 1);
 });
 
 test('logic CSV rejects static, malformed, non-monotonic, symlinked, and raced captures', async (t) => {
@@ -191,27 +225,49 @@ test('network correlates a cryptographic nonce across serial marker and bounded 
     const port = server.address().port;
     const hash = await sha256File(p.build.artifact);
     const observation = { id: 'wifi', provider: 'network', deviceMarker: 'WIFI_CONNECTED', hostProbeUrlFromMarker: 'DEVICE_IP', hostProbePath: '/health', requiredLevel: 'hardware_observed' };
-    const { adapters } = harness(undefined, { randomBytes: () => Buffer.from(nonce, 'hex') });
-    const result = await adapters.observation.network.execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash, deviceCapture: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=127.0.0.1:${port}` });
+    const { adapters, calls } = harness(async (descriptor) => {
+      assert.equal(descriptor.args[0], 'serial-challenge');
+      return { classification: 'exit', exitCode: 0, stdout: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=127.0.0.1:${port}\n`, stderr: '', truncated: { stdout: false, stderr: false } };
+    }, { randomBytes: () => Buffer.from(nonce, 'hex') });
+    const result = await adapters.observation.network.execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash });
     assert.equal(result.level, 'hardware_observed');
     assert.equal(result.nonce, nonce);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].descriptor.args.slice(0, 4), ['serial-challenge', '/dev/ttyACM0', '115200', nonce]);
+    assert.deepEqual(result.rawEvidenceRefs, ['observations/wifi-device.txt', 'observations/wifi-host.txt', 'observations/wifi.json']);
+    const rawDevice = await readFile(path.join(bundle, result.rawEvidenceRefs[0]), 'utf8');
+    const rawHost = await readFile(path.join(bundle, result.rawEvidenceRefs[1]), 'utf8');
+    const summary = JSON.parse(await readFile(path.join(bundle, result.rawEvidenceRefs[2]), 'utf8'));
+    assert.match(rawDevice, new RegExp(nonce));
+    assert.equal(summary.deviceCaptureSha256, createHash('sha256').update(rawDevice).digest('hex'));
+    assert.equal(summary.hostResponseSha256, createHash('sha256').update(rawHost).digest('hex'));
   } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test('network cannot accept a preconstructed marker without a successful trusted challenge', async () => {
+  const nonce = '0123456789abcdef0123456789abcdef'; const root = await sandbox(); const p = profile(root);
+  const observation = { id: 'wifi', provider: 'network', deviceMarker: 'WIFI_CONNECTED', hostProbeUrlFromMarker: 'DEVICE_IP', hostProbePath: '/health', requiredLevel: 'hardware_observed' };
+  const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 1, stdout: '', stderr: 'challenge failed', truncated: { stdout: false, stderr: false } }), { randomBytes: () => Buffer.from(nonce, 'hex') });
+  const result = await adapters.observation.network.execute(p, observation, { deviceCapture: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=127.0.0.1` });
+  assert.equal(result.level, 'failed'); assert.match(result.diagnostics, /challenge/);
 });
 
 test('network rejects wrong nonce, public addresses, redirects, and oversized responses', async (t) => {
   const nonce = '0123456789abcdef0123456789abcdef';
   const observation = { id: 'wifi', provider: 'network', deviceMarker: 'WIFI_CONNECTED', hostProbeUrlFromMarker: 'DEVICE_IP', hostProbePath: '/health', requiredLevel: 'hardware_observed' };
   const root = await sandbox(); const p = profile(root);
-  const adapter = harness(undefined, { randomBytes: () => Buffer.from(nonce, 'hex') }).adapters.observation.network;
-  assert.equal((await adapter.execute(p, observation, { deviceCapture: `WIFI_CONNECTED nonce=wrong DEVICE_IP=127.0.0.1` })).level, 'failed');
-  assert.equal((await adapter.execute(p, observation, { deviceCapture: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=8.8.8.8` })).level, 'failed');
+  let adapter = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: 'WIFI_CONNECTED nonce=wrong DEVICE_IP=127.0.0.1', stderr: '', truncated: {} }), { randomBytes: () => Buffer.from(nonce, 'hex') }).adapters.observation.network;
+  assert.equal((await adapter.execute(p, observation)).level, 'failed');
+  adapter = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=8.8.8.8`, stderr: '', truncated: {} }), { randomBytes: () => Buffer.from(nonce, 'hex') }).adapters.observation.network;
+  assert.equal((await adapter.execute(p, observation)).level, 'failed');
   for (const [name, handler, pattern] of [
     ['redirect', (_q, r) => { r.writeHead(302, { location: '/health' }); r.end(); }, /redirect/],
     ['oversize', (_q, r) => r.end('x'.repeat(70_000)), /size/],
   ]) await t.test(name, async () => {
     const server = createServer(handler); await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
-      const result = await adapter.execute(p, observation, { deviceCapture: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=127.0.0.1:${server.address().port}` });
+      const challengeAdapter = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: `WIFI_CONNECTED nonce=${nonce} DEVICE_IP=127.0.0.1:${server.address().port}`, stderr: '', truncated: {} }), { randomBytes: () => Buffer.from(nonce, 'hex') }).adapters.observation.network;
+      const result = await challengeAdapter.execute(p, observation);
       assert.equal(result.level, 'failed'); assert.match(result.diagnostics, pattern);
     } finally { await new Promise((resolve) => server.close(resolve)); }
   });
