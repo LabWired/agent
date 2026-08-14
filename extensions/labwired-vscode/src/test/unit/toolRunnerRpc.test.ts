@@ -1,4 +1,5 @@
-import * as assert from 'assert';
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
 import { ToolRunner } from '../../tools/runner';
 
 function fakeRpc(tools: string[], runResult?: any) {
@@ -28,7 +29,7 @@ function fakeBridge(run: (argv: string[]) => Promise<{ code: number; stdout: str
 }
 
 // ToolRunner(bridge, catalog, datasheets, debug, billing, rpc)
-suite('ToolRunner RPC routing', () => {
+describe('ToolRunner RPC routing', () => {
   test('routes a server-known tool through tool/run', async () => {
     const rpc = fakeRpc(['doctor']);
     const bridge = fakeBridge(async () => { throw new Error('CLI must not be used'); });

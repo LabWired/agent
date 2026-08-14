@@ -1,4 +1,5 @@
-import * as assert from 'assert';
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
 import {
   parseChatTextDelta, parseChatToolCall, parseChatToolDelta, parseChatToolResult,
   parseSerialConnectionState, parseSerialData, parsePlotUpdate,
@@ -6,7 +7,7 @@ import {
 } from '../../rpc/messages';
 
 // Fixtures mirror notify() payloads in server/rpc-server.mjs exactly.
-suite('rpc messages (server payload shapes)', () => {
+describe('rpc messages (server payload shapes)', () => {
   test('chat/textDelta uses {text}', () => {
     assert.strictEqual(parseChatTextDelta({ text: 'hello' }), 'hello');
     assert.strictEqual(parseChatTextDelta({}), '');
