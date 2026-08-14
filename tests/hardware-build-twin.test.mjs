@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -102,6 +102,40 @@ test('successful build requires a freshly produced regular artifact and hashes e
   assert.equal(result.toolVersion, 'pio 1.2.3');
 });
 
+test('build quarantines old output: no-op, touch, and chmod fail while genuine recreate passes', async (t) => {
+  for (const scenario of ['noop', 'touch', 'chmod', 'recreate']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'identical');
+    const { adapters } = harness(async () => {
+      if (scenario === 'touch') await utimes(p.build.artifact, new Date(), new Date()).catch(() => {});
+      if (scenario === 'chmod') await chmod(p.build.artifact, 0o600).catch(() => {});
+      if (scenario === 'recreate') await writeFile(p.build.artifact, 'identical');
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.build.platformio.execute(p);
+    assert.equal(result.level, scenario === 'recreate' ? 'compiled' : 'failed');
+    assert.equal(await readFile(p.build.artifact, 'utf8'), 'identical');
+  });
+});
+
+test('failed build restores quarantine only when destination is absent and never overwrites replacement', async (t) => {
+  for (const replacement of [false, true]) await t.test(replacement ? 'replacement preserved' : 'old artifact restored', async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'old');
+    const { adapters } = harness(async () => {
+      if (replacement) await writeFile(p.build.artifact, 'new-partial');
+      return { classification: 'exit', exitCode: 2, stdout: '', stderr: 'failed', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.build.platformio.execute(p);
+    assert.equal(result.level, 'failed');
+    assert.equal(await readFile(p.build.artifact, 'utf8'), replacement ? 'new-partial' : 'old');
+    const names = await readdir(path.dirname(p.build.artifact));
+    assert.equal(names.some((name) => name.includes('labwired-quarantine')), replacement);
+  });
+});
+
 test('nonzero, timeout, absent, stale, symlink, and escaped artifacts never compile', async (t) => {
   for (const scenario of ['nonzero', 'timeout', 'absent', 'stale', 'symlink', 'escape']) await t.test(scenario, async () => {
     const root = await sandbox();
@@ -164,10 +198,14 @@ test('twin uses test-file contract with selected system and exact artifact', asy
   const nativeHash = await sha256File(p.build.artifact);
   let script;
   let stagedArtifact;
+  let stagedSystem;
+  let stagedSystemHash;
   let stagedHash;
   const { adapters, calls } = harness(async (descriptor) => {
     script = await readFile(descriptor.args[2], 'utf8');
     stagedArtifact = firmwareFromScript(script);
+    stagedSystem = JSON.parse(script.split('\n').find((entry) => entry.startsWith('  system: ')).slice('  system: '.length));
+    stagedSystemHash = await sha256File(stagedSystem);
     stagedHash = await sha256File(stagedArtifact);
     const output = descriptor.args[4];
     await mkdir(output, { recursive: true });
@@ -178,8 +216,9 @@ test('twin uses test-file contract with selected system and exact artifact', asy
   assert.equal(result.level, 'model_observed');
   assert.equal(result.nativeArtifactSha256, nativeHash);
   assert.notEqual(stagedArtifact, p.build.artifact);
+  assert.notEqual(stagedSystem, p.twin.system);
   assert.equal(stagedHash, nativeHash);
-  assert.match(script, new RegExp(`system: ${JSON.stringify(p.twin.system)}`));
+  assert.equal(stagedSystemHash, await sha256File(p.twin.system));
   assert.deepEqual(calls[0].descriptor.args.slice(0, 2), ['test', '--script']);
   assert.equal(calls[0].descriptor.shell, false);
 });
@@ -191,6 +230,8 @@ test('different supported artifact is labeled surrogate with both hashes and pro
   await writeFile(p.build.artifact, 'native');
   const surrogate = path.join(root, 'build', 'surrogate.elf');
   await writeFile(surrogate, 'surrogate');
+  await mkdir(path.join(root, 'src'));
+  await writeFile(path.join(root, 'src', 'main.cpp'), 'shared source');
   const nativeHash = await sha256File(p.build.artifact);
   const surrogateHash = await sha256File(surrogate);
   const { adapters } = harness(async (descriptor) => {
@@ -207,7 +248,9 @@ test('different supported artifact is labeled surrogate with both hashes and pro
   assert.equal(result.level, 'surrogate_model_observed');
   assert.equal(result.nativeArtifactSha256, nativeHash);
   assert.equal(result.surrogateArtifactSha256, surrogateHash);
-  assert.deepEqual(result.sharedSourcePaths, ['src/main.cpp']);
+  assert.equal(result.sharedSources[0].path, 'src/main.cpp');
+  assert.equal(result.sharedSources[0].sha256, await sha256File(path.join(root, 'src', 'main.cpp')));
+  assert.equal(result.sharedSources[0].size, 13);
 });
 
 test('unsupported native twin execution is blocked and never upgrades compilation', async (t) => {
@@ -230,6 +273,19 @@ test('a passing exit without genuine simulator result cannot yield model evidenc
   const { adapters } = harness();
   const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
   assert.equal(result.level, 'failed');
+});
+
+test('twin requires an exact well-formed native build hash before launching', async (t) => {
+  for (const supplied of [undefined, 'bad', '0'.repeat(64)]) await t.test(String(supplied), async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    let runs = 0;
+    const { adapters } = harness(async () => { runs += 1; return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } }; });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: supplied });
+    assert.equal(result.level, 'failed');
+    assert.equal(runs, 0);
+  });
 });
 
 test('twin result assertions must exactly match requested kind, value, count, and pass state', async (t) => {
@@ -278,5 +334,67 @@ test('mutation or replacement of original or staged firmware invalidates model e
     });
     const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
     assert.equal(result.level, 'failed');
+  });
+});
+
+test('mutation or replacement of original or staged twin system invalidates model evidence', async (t) => {
+  for (const scenario of ['original-mutate', 'original-replace', 'staged-mutate', 'staged-replace']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    const hash = await sha256File(p.build.artifact);
+    const { adapters } = harness(async (descriptor) => {
+      const script = await readFile(descriptor.args[2], 'utf8');
+      const staged = JSON.parse(script.split('\n').find((entry) => entry.startsWith('  system: ')).slice('  system: '.length));
+      const target = scenario.startsWith('original') ? p.twin.system : staged;
+      if (scenario.endsWith('replace')) await unlink(target);
+      await writeFile(target, 'mutated system');
+      await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(hash)));
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    assert.equal(result.level, 'failed');
+  });
+});
+
+test('surrogate shared sources must be unique existing contained regular files and remain unchanged', async (t) => {
+  for (const scenario of ['missing', 'symlink', 'duplicate', 'alias', 'mutate', 'replace']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    p.twin.artifactRelation = 'surrogate';
+    await writeFile(p.build.artifact, 'native');
+    const surrogate = path.join(root, 'build', 'surrogate.elf');
+    await writeFile(surrogate, 'surrogate');
+    await mkdir(path.join(root, 'src'));
+    await writeFile(path.join(root, 'src', 'main.cpp'), 'shared');
+    if (scenario === 'symlink') {
+      await writeFile(path.join(root, 'outside.cpp'), 'outside');
+      await symlink(path.join(root, 'outside.cpp'), path.join(root, 'src', 'link.cpp'));
+    }
+    const sources = scenario === 'missing' ? ['src/missing.cpp']
+      : scenario === 'symlink' ? ['src/link.cpp']
+        : scenario === 'duplicate' ? ['src/main.cpp', 'src/main.cpp']
+          : scenario === 'alias' ? ['src/main.cpp', 'SRC/MAIN.CPP']
+            : ['src/main.cpp'];
+    let runs = 0;
+    const nativeHash = await sha256File(p.build.artifact);
+    const surrogateHash = await sha256File(surrogate);
+    const { adapters } = harness(async (descriptor) => {
+      runs += 1;
+      if (scenario === 'mutate' || scenario === 'replace') {
+        const source = path.join(root, 'src', 'main.cpp');
+        if (scenario === 'replace') await unlink(source);
+        await writeFile(source, 'changed');
+      }
+      await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(surrogateHash)));
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, {
+      nativeArtifactSha256: nativeHash,
+      twinArtifact: surrogate,
+      sharedSourcePaths: sources,
+    });
+    assert.equal(result.level, 'failed');
+    assert.equal(runs, ['mutate', 'replace'].includes(scenario) ? 1 : 0);
   });
 });
