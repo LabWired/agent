@@ -69,6 +69,13 @@ if LABWIRED_TEST_PIO_RESULT=replace labwired_probe_flash "$TMP/firmware.bin" --p
 [[ "$(cat "$TMP/project/.pio/build/release/firmware.bin")" == 'adversarial replacement' ]]
 if LABWIRED_TEST_DEVICE_JSON='[{"port":"/dev/ttyACM0","serialNumber":"other-probe"}]' labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project" >/dev/null 2>&1; then exit 1; fi
 if LABWIRED_TEST_DEVICE_JSON='[{"port":"/dev/ttyACM0","serialNumber":"probe-1"},{"port":"/dev/ttyACM0","serialNumber":"probe-1"}]' labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project" >/dev/null 2>&1; then exit 1; fi
+for collision in \
+  '[{"port":"/dev/ttyACM0","hwid":"USB VID:PID=1 SER=probe-10 LOCATION=1"}]' \
+  '[{"port":"/dev/ttyACM0","description":"adapter SERIAL=xprobe-1"}]' \
+  '[{"port":"/dev/ttyACM0","description":"friendly probe-1 adapter"}]'; do
+  if LABWIRED_TEST_DEVICE_JSON="$collision" labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe probe-1 --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project" >/dev/null 2>&1; then exit 1; fi
+done
+LABWIRED_TEST_DEVICE_JSON='[{"port":"/dev/ttyACM0","hwid":"USB SER=probe.+[1] LOCATION=1"}]' labwired_probe_flash "$TMP/firmware.bin" --provider platformio --chip esp32c3 --target probe --probe 'probe.+[1]' --port /dev/ttyACM0 --expected-sha256 "$sha_bin" --environment release --workspace "$TMP/project" >/dev/null
 
 out="$(labwired_probe_flash "$TMP/firmware.elf" --provider probe-rs --chip STM32L476RGTx --target probe --probe 0483:374b:SERIAL --port /dev/ttyACM0 --expected-sha256 "$sha_elf" --environment release --workspace "$TMP/project")"
 grep -q '^LABWIRED_FLASH_RECEIPT ' <<<"$out"

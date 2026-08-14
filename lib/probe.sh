@@ -230,7 +230,18 @@ labwired_probe_flash() {
       device_json="$(pio device list --json-output)" || { echo "labwired probe flash: cannot enumerate PlatformIO devices" >&2; return 2; }
       LABWIRED_PIO_DEVICE_JSON="$device_json" node -e '
 const devices=JSON.parse(process.env.LABWIRED_PIO_DEVICE_JSON); const [port,serial]=process.argv.slice(1);
-const matches=devices.filter(d=>d && d.port===port && (d.serialNumber===serial || d.serial_number===serial || [d.hwid,d.description].filter(v=>typeof v==="string").some(v=>v===serial || v.includes("SER="+serial) || v.includes("SERIAL="+serial))));
+// Provider serial identifiers are compared ordinally and case-sensitively. Prefer
+// structured fields; only fall back to complete SER=/SERIAL= metadata tokens.
+function serials(d){
+  const explicit=[d.serialNumber,d.serial_number].filter(v=>typeof v==="string");
+  if(explicit.length) return explicit;
+  const found=[]; const token=/(?:^|[\s,;])(?:SER|SERIAL)=([^\s,;]+)/g;
+  for(const value of [d.hwid,d.description]) if(typeof value==="string"){
+    let match; while((match=token.exec(value))!==null) found.push(match[1]); token.lastIndex=0;
+  }
+  return found;
+}
+const matches=devices.filter(d=>d && d.port===port && serials(d).some(v=>v===serial));
 if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwired probe flash: explicit port does not map uniquely to requested serial identity" >&2; return 2; }
       local stage="$workspace/.pio/build/$environment/firmware.bin"
       [[ ! -L "$workspace" && ! -L "$workspace/.pio" && ! -L "$workspace/.pio/build" && ! -L "$workspace/.pio/build/$environment" && ! -L "$stage" ]] || {

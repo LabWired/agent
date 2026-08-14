@@ -65,9 +65,14 @@ jobs:
           foreach ($file in @(
             ".\bin\labwired.ps1",
             ".\bin\labwired-agent.ps1",
+            ".\lib\probe-flash.ps1",
+            ".\lib\serial-capture.ps1",
+            ".\lib\rtt-capture.ps1",
+            ".\lib\serial-challenge.ps1",
             ".\scripts\install.ps1",
             ".\scripts\public\install.ps1",
             ".\tests\windows-contract.ps1",
+            ".\tests\windows-hardware-contract.ps1",
             ".\tests\windows-upgrade-smoke.ps1"
           )) {
             $tokens = $null
@@ -79,6 +84,23 @@ jobs:
             $errors | Format-List
             exit 1
           }
+      - name: Parse Windows PowerShell sources (PowerShell Core)
+        shell: pwsh
+        run: |
+          $errors = @()
+          foreach ($file in @(
+            ".\bin\labwired.ps1", ".\bin\labwired-agent.ps1",
+            ".\lib\probe-flash.ps1", ".\lib\serial-capture.ps1",
+            ".\lib\rtt-capture.ps1", ".\lib\serial-challenge.ps1",
+            ".\scripts\install.ps1", ".\scripts\public\install.ps1",
+            ".\tests\windows-contract.ps1", ".\tests\windows-hardware-contract.ps1",
+            ".\tests\windows-upgrade-smoke.ps1"
+          )) {
+            $tokens = $null; $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
+            $errors += @($parseErrors)
+          }
+          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
 
   release-evidence-ubuntu:
     runs-on: ubuntu-latest
