@@ -9,6 +9,7 @@ CORE="${LABWIRED_CORE_SRC:-$HOME/Projects/labwired/core}"
 export LABWIRED_HW_WS="${LABWIRED_HW_WS:-$ROOT/examples/esp32c3-serial}"
 export LABWIRED_HW_MARKER="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
 export LABWIRED_HW_CHIP="${LABWIRED_HW_CHIP:-esp32c3}"
+export LABWIRED_HW_ENV="${LABWIRED_HW_ENV:-esp32-c3-devkitm-1}"
 # Prefer agent catalog (no monorepo); fall back to core arduino-matrix
 if [[ -z "${LABWIRED_HW_SYSTEM:-}" ]]; then
   # shellcheck source=lib/resolve-catalog.sh

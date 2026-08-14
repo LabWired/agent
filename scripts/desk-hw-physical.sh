@@ -1,94 +1,57 @@
 #!/usr/bin/env bash
-# Physical desk E2E (product depth Task 9) — no soft pass without probe.
-#
-# Exit codes:
-#   0  — flash + serial marker → hardware_observed (real probe path)
-#   2  — NEED_PROBE (no physical probe listed)
-#   1  — probe present but flash/capture/assert failed
+# Legacy physical-desk translator. Exit 0=observed, 2=NEED_PROBE/confirmation, 1=failure.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export LABWIRED_AGENT_HOME="${LABWIRED_AGENT_HOME:-$ROOT}"
-# shellcheck source=lib/assert-status.sh
-source "$ROOT/lib/assert-status.sh"
-# shellcheck source=lib/serial-capture.sh
-source "$ROOT/lib/serial-capture.sh"
-# shellcheck source=lib/probe.sh
-source "$ROOT/lib/probe.sh" 2>/dev/null || true
-
-export PATH="${ROOT}/bin:${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
-
+LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
 ELF="${LABWIRED_HW_ELF:-}"
 CHIP="${LABWIRED_HW_CHIP:-}"
 PORT="${LABWIRED_HW_PORT:-}"
+PROBE_SERIAL="${LABWIRED_HW_PROBE_SERIAL:-}"
 MARKER="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
 BAUD="${LABWIRED_HW_BAUD:-115200}"
 TIMEOUT="${LABWIRED_HW_TIMEOUT:-8}"
 OUT="${LABWIRED_HW_OUT:-$ROOT/fixtures/coverage/smoke/desk-hw-physical}"
-mkdir -p "$OUT"
+CONFIRM="${LABWIRED_HW_CONFIRM:-}"
 
-# --- probe presence (hard fail closed) ---
-PROBE_LIST_OUT="$OUT/probe-list.txt"
-if [[ "${LABWIRED_HW_FORCE_NEED_PROBE:-0}" == "1" ]]; then
-  echo "NEED_PROBE" >&2
-  echo "desk-hw-physical: forced NEED_PROBE (LABWIRED_HW_FORCE_NEED_PROBE=1)" >&2
-  exit 2
+if [[ "${LABWIRED_HW_FORCE_NEED_PROBE:-0}" == 1 ]]; then
+  echo 'NEED_PROBE' >&2; echo 'desk-hw-physical: forced NEED_PROBE' >&2; exit 2
 fi
-set +e
-if command -v probe-rs >/dev/null 2>&1; then
-  probe-rs list >"$PROBE_LIST_OUT" 2>&1
-  prs_rc=$?
-else
-  echo "probe-rs not on PATH" >"$PROBE_LIST_OUT"
-  prs_rc=1
-fi
-set -e
+[[ -n "$ELF" && -n "$CHIP" && -n "$PORT" && -n "$PROBE_SERIAL" ]] || {
+  echo 'desk-hw-physical: set LABWIRED_HW_ELF, LABWIRED_HW_CHIP, LABWIRED_HW_PORT, and LABWIRED_HW_PROBE_SERIAL' >&2; exit 1;
+}
+[[ -f "$ELF" ]] || { echo "desk-hw-physical: ELF not found: $ELF" >&2; exit 1; }
+[[ "$BAUD" == 115200 ]] || { echo 'desk-hw-physical: generic serial provider currently supports LABWIRED_HW_BAUD=115200 only' >&2; exit 1; }
+[[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo 'desk-hw-physical: LABWIRED_HW_TIMEOUT must be a positive integer' >&2; exit 1; }
 
-# probe-rs list prints "No probes found" or empty when none attached
-if [[ "$prs_rc" -ne 0 ]] \
-  || grep -Eiq 'no probes? found|0 probes|none found' "$PROBE_LIST_OUT" \
-  || ! grep -Eiq 'probe|cmsis|jlink|stlink|dap|vid:|pid:' "$PROBE_LIST_OUT"; then
-  echo "NEED_PROBE" >&2
-  echo "desk-hw-physical: no physical probe (probe-rs list empty). Attach a probe or use UART-only serial-capture fixture." >&2
-  cat "$PROBE_LIST_OUT" >&2 || true
-  exit 2
-fi
+WORKSPACE="$(cd "$(dirname "$ELF")" && pwd)"
+ARTIFACT="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1],sys.argv[2]))' "$ELF" "$WORKSPACE")"
+PROFILE="$(mktemp "$WORKSPACE/.labwired-legacy-profile.XXXXXX.json")"
+PLAN_OUTPUT="$(mktemp "$WORKSPACE/.labwired-legacy-plan.XXXXXX.json")"
+CHILD_PID=""
+cleanup() {
+  [[ -z "$CHILD_PID" ]] || kill -TERM "$CHILD_PID" 2>/dev/null || true
+  rm -f "$PROFILE" "$PLAN_OUTPUT"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+python3 - "$PROFILE" "$CHIP" "$PORT" "$PROBE_SERIAL" "$MARKER" "$TIMEOUT" "$ARTIFACT" <<'PY'
+import json,sys
+profile,chip,port,probe,marker,timeout,artifact=sys.argv[1:]
+doc={"schema":1,"target":{"id":"legacy-desk","chip":chip,"probeSerial":probe,"serialPort":port},
+ "build":{"provider":"cmake","workspace":".","environment":".","artifact":artifact},
+ "flash":{"provider":"probe-rs","timeoutSeconds":int(timeout)},
+ "observations":[{"id":"legacy-hardware-serial","provider":"serial","contains":marker,
+                  "timeoutSeconds":int(timeout),"requiredLevel":"hardware_observed"}]}
+with open(profile,"w",encoding="utf-8") as f: json.dump(doc,f,separators=(",",":")); f.write("\n")
+PY
 
-if [[ -z "$ELF" || -z "$CHIP" || -z "$PORT" ]]; then
-  echo "usage: LABWIRED_HW_ELF=… LABWIRED_HW_CHIP=… LABWIRED_HW_PORT=… $0" >&2
-  echo "  probe is present but flash env incomplete" >&2
-  exit 1
-fi
-if [[ ! -f "$ELF" ]]; then
-  echo "desk-hw-physical: ELF not found: $ELF" >&2
-  exit 1
-fi
-
-LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
-echo "==> physical flash $ELF chip=$CHIP"
-if ! "$LABWIRED" probe flash "$ELF" --chip "$CHIP" >"$OUT/flash.txt" 2>&1; then
-  echo "desk-hw-physical: flash failed" >&2
-  cat "$OUT/flash.txt" >&2
-  exit 1
-fi
-
-echo "==> serial-capture port=$PORT marker=$MARKER"
-if ! labwired_serial_capture "$PORT" "$BAUD" "$MARKER" "$TIMEOUT" \
-  >"$OUT/serial-capture.json" 2>"$OUT/serial-capture.err"; then
-  echo "desk-hw-physical: serial-capture failed" >&2
-  cat "$OUT/serial-capture.err" >&2 || true
-  exit 1
-fi
-
-# Dual claim: must be hardware_observed, never model_verified
-if ! labwired_assert_status hardware_observed <"$OUT/serial-capture.json"; then
-  echo "desk-hw-physical: expected hardware_observed" >&2
-  cat "$OUT/serial-capture.json" >&2
-  exit 1
-fi
-if labwired_assert_status model_verified <"$OUT/serial-capture.json" 2>/dev/null; then
-  echo "desk-hw-physical: refuse model_verified on desk path" >&2
-  exit 1
-fi
-
-echo "ok   desk-hw-physical → hardware_observed (not twin green)"
-exit 0
+"$LABWIRED" hardware plan --profile "$PROFILE" --out "$OUT" >"$PLAN_OUTPUT" & CHILD_PID=$!
+set +e; wait "$CHILD_PID"; PLAN_RC=$?; set -e; CHILD_PID=""
+[[ "$PLAN_RC" -eq 0 ]] || exit "$PLAN_RC"
+PLAN="$(<"$PLAN_OUTPUT")"
+printf '%s\n' "$PLAN"
+DIGEST="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' <<<"$PLAN")" || { echo 'desk-hw-physical: invalid plan response' >&2; exit 1; }
+[[ -n "$CONFIRM" ]] || { echo "desk-hw-physical: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the plan" >&2; exit 2; }
+[[ "$CONFIRM" == "$DIGEST" ]] || { echo 'desk-hw-physical: LABWIRED_HW_CONFIRM does not match the current plan digest' >&2; exit 2; }
+"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM"
