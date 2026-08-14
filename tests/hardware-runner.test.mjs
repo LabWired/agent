@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import { executeHardwareRun, planHardwareRun } from '../lib/hardware/runner.mjs';
 import { verifyEvidenceBundle } from '../lib/hardware/evidence.mjs';
+import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
 
 const roots = [];
 test.after(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -82,7 +83,7 @@ function harness(profile, behavior = {}) {
         calls.push(`observe:${observation.id}`); assert.equal(options.prepared?.kind, `observation-capability:${observation.id}`);
         if (behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', `${observation.id}.json`), `{"behavior":"${observation.id}"}\n`);
-          return result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
+          return behavior.observations?.[observation.id] ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
         }
         return behavior.observations?.[observation.id] ?? result('hardware_observed', { artifactSha256, flashedArtifactSha256: artifactSha256, rawEvidenceRefs: [`observations/${observation.id}.json`] });
       },
@@ -106,6 +107,7 @@ function harness(profile, behavior = {}) {
       calls.push('evidence');
       for (const observation of p.observations) records.set(observation.id, result('not-run'));
       return {
+        async recordStage(id, value) { calls.push(`stage:${id}:${value.level}`); },
         async recordBehavior(id, value) { calls.push(`record:${id}:${value.level}`); records.set(id, value); },
         async finalize() {
           calls.push('finalize');
@@ -146,6 +148,25 @@ test('planning redacts configured secrets from paths and capability metadata bef
   assert.match(planned.plan.capabilities.build.fingerprint, /^[a-f0-9]{64}$/);
   const changed = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: path.join(f.root, 'different-secret'), dependencies: { ...h.dependencies, redactValues: [secret, 'different-secret'] } });
   assert.notEqual(changed.digest, planned.digest);
+});
+
+test('plan then same-path tool replacement changes the digest before evidence or build', async () => {
+  const observations = [{ id: 'firmware', provider: 'serial', contains: 'unused', requiredLevel: 'compiled' }];
+  const f = await fixture({ twin: undefined, flash: undefined, observations });
+  const tool = path.join(f.root, 'pio'); await writeFile(tool, 'same tool bytes');
+  let ran = false; let evidenceCreated = false;
+  const dependencies = {
+    async loadProfile() { return structuredClone(f.profile); },
+    createAdapters() { return createTrustedAdapters({
+      async resolveTool() { return tool; }, async toolVersion() { return 'pio unchanged'; },
+      async run() { ran = true; return { classification: 'exit', exitCode: 1, stdout: '', stderr: '' }; },
+    }); },
+    async createEvidence() { evidenceCreated = true; throw new Error('must not create evidence'); },
+  };
+  const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies });
+  await rm(tool); await writeFile(tool, 'same tool bytes');
+  await assert.rejects(executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies }), /confirmation digest/);
+  assert.equal(evidenceCreated, false); assert.equal(ran, false);
 });
 
 test('missing, malformed, or wrong confirmation refuses before evidence, locks, or mutation', async (t) => {
@@ -270,8 +291,40 @@ test('physical PASS authenticates exact flash and permitted twin failure provena
   assert.equal(record.rawEvidenceRefs.includes('observations/flash.json'), true);
   assert.equal(record.rawEvidenceRefs.includes('observations/twin-failure.json'), true);
   assert.match(JSON.stringify(record.diagnostics), /unsupported/);
-  assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, true);
+  const twinStage = JSON.parse(await readFile(path.join(f.evidenceDir, 'stages', 'twin', 'result.json'), 'utf8'));
+  const flashStage = JSON.parse(await readFile(path.join(f.evidenceDir, 'stages', 'flash', 'result.json'), 'utf8'));
+  assert.equal(twinStage.level, 'failed'); assert.match(JSON.stringify(twinStage.diagnostics), /unsupported/);
+  assert.equal(flashStage.level, 'hardware_observed'); assert.equal(flashStage.rawEvidenceRefs.includes('observations/flash.json'), true);
+  const verifiedFail = await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest });
+  assert.equal(verifiedFail.authenticity, 'verified');
+  assert.equal(verifiedFail.valid, true);
   await writeFile(path.join(f.evidenceDir, 'observations', 'flash.json'), '{"flash":"tampered"}\n');
+  assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, false);
+});
+
+test('run stages remain authenticated when every observation fails', async () => {
+  const f = await fixture();
+  const failed = (id) => result('failed', { diagnostics: `${id} failed`, rawEvidenceRefs: [`observations/${id}.json`] });
+  const h = harness(f.profile, { realPhysical: true, observations: { heartbeat: failed('heartbeat'), led: failed('led') } });
+  h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+  const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+  const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+  assert.equal(outcome.receipt.result, 'FAIL');
+  const verifiedFailure = await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest });
+  assert.equal(verifiedFailure.authenticity, 'verified', JSON.stringify(verifiedFailure));
+  await writeFile(path.join(f.evidenceDir, 'observations', 'twin-failure.json'), '{"tampered":true}\n');
+  assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, false);
+});
+
+test('compiled-only behavior after flash still authenticates flash stage', async () => {
+  const observations = [{ id: 'firmware', provider: 'serial', contains: 'unused', requiredLevel: 'compiled' }];
+  const f = await fixture({ twin: undefined, observations }); const h = harness(f.profile, { realPhysical: true });
+  h.dependencies.createEvidence = async (...args) => (await import('../lib/hardware/evidence.mjs')).createEvidenceBundle(...args);
+  const p = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+  const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
+  assert.equal(outcome.receipt.result, 'PASS');
+  assert.equal(JSON.parse(await readFile(path.join(f.evidenceDir, 'stages', 'flash', 'result.json'), 'utf8')).level, 'hardware_observed');
+  await writeFile(path.join(f.evidenceDir, 'observations', 'flash.json'), '{"tampered":true}\n');
   assert.equal((await verifyEvidenceBundle(f.evidenceDir, { expectedManifestSha256: outcome.receiptDigest })).valid, false);
 });
 

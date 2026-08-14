@@ -85,6 +85,21 @@ test('initialization persists complete fail-first behavior records before return
   }
 });
 
+test('run stages are fail-first, receipt-bound, and policy-neutral to behavior PASS', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory, profile, { stages: [{ id: 'twin', provider: 'labwired-sim' }] });
+  assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'stages', 'twin', 'result.json'), 'utf8')), { stageId: 'twin', provider: 'labwired-sim', level: 'not-run' });
+  await writeFile(path.join(directory, 'observations', 'twin-failure.json'), '{"unsupported":true}\n');
+  const now = new Date().toISOString();
+  await evidence.recordStage('twin', { stageId: 'twin', provider: 'labwired-sim', level: 'failed', rawEvidenceRefs: ['observations/twin-failure.json'], diagnostics: 'unsupported', startedAt: now, endedAt: now });
+  for (const observation of profile.observations) await evidence.recordBehavior(observation.id, verifiedResult('hardware_observed', observation.id));
+  const receipt = await evidence.finalize();
+  assert.equal(receipt.result, 'PASS');
+  assert.equal((await verifyEvidenceBundle(directory, { expectedManifestSha256: receipt.manifestSha256 })).valid, true);
+  await writeFile(path.join(directory, 'observations', 'twin-failure.json'), '{"unsupported":false}\n');
+  assert.equal((await verifyEvidenceBundle(directory, { expectedManifestSha256: receipt.manifestSha256 })).valid, false);
+});
+
 test('a rejected record leaves the fail-first bundle intact', async () => {
   const directory = await temporaryDirectory();
   const evidence = await createReadyEvidence(directory);
