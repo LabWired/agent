@@ -93,6 +93,21 @@ jobs:
           foreach ($file in @('install.txt', 'version.txt', 'doctor.txt', 'version-pwsh.txt', 'doctor-pwsh.txt', 'capabilities.txt', 'platform.txt')) {
             Set-Content (Join-Path $env:EVIDENCE_DIR $file) 'not-run'
           }
+          function Invoke-Captured([string]$Path, [string[]]$Arguments, [string]$OutputPath) {
+            $previousPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+              $raw = & $Path @Arguments 2>&1
+              $succeeded = $?
+              $status = $LASTEXITCODE
+              if ($null -eq $status) { $status = if ($succeeded) { 0 } else { 1 } }
+            } finally {
+              $ErrorActionPreference = $previousPreference
+            }
+            @($raw | ForEach-Object { $_.ToString() }) | Set-Content -LiteralPath $OutputPath
+            @($raw | ForEach-Object { Write-Host $_.ToString() })
+            return [int]$status
+          }
           $tmp = Join-Path $env:RUNNER_TEMP ('labwired-deployed-' + [guid]::NewGuid().ToString('n'))
           $env:USERPROFILE = Join-Path $tmp 'home'
           $env:LABWIRED_HOME = Join-Path $tmp 'prefix'
@@ -103,27 +118,23 @@ jobs:
           $installer = Join-Path $tmp 'install.ps1'
           Invoke-WebRequest https://labwired.com/install.ps1 -OutFile $installer
           (Get-FileHash $installer -Algorithm SHA256).Hash | Set-Content "$env:EVIDENCE_DIR\installer-sha256.txt"
-          & $installer -Prefix $env:LABWIRED_HOME -UserBin $env:LABWIRED_BIN_DIR -AgentOnly -SkipPathUpdate *>&1 |
-            Tee-Object "$env:EVIDENCE_DIR\install.txt"
+          $installStatus = Invoke-Captured -Path $installer -Arguments @('-Prefix', $env:LABWIRED_HOME, '-UserBin', $env:LABWIRED_BIN_DIR, '-AgentOnly', '-SkipPathUpdate') -OutputPath "$env:EVIDENCE_DIR\install.txt"
+          if ($installStatus -ne 0) { throw "published Windows installer failed with code $installStatus" }
           $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
           $powershellExe = Join-Path $PSHOME 'powershell.exe'
           $dispatchFailed = $false
-          & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent version *>&1 |
-            Tee-Object "$env:EVIDENCE_DIR\version.txt"
-          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version command failed' }
+          $versionStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $dispatcher, 'agent', 'version') -OutputPath "$env:EVIDENCE_DIR\version.txt"
+          if ($versionStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version command failed' }
           $versionLines = @(Get-Content "$env:EVIDENCE_DIR\version.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
           if ($versionLines.Count -ne 1 -or $versionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version mismatch' }
-          & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $dispatcher agent doctor *>&1 |
-            Tee-Object "$env:EVIDENCE_DIR\doctor.txt"
-          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor.txt" 'ERROR: published doctor command failed' }
-          & pwsh.exe -NoProfile -File $dispatcher agent version *>&1 |
-            Tee-Object "$env:EVIDENCE_DIR\version-pwsh.txt"
-          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version command failed' }
+          $doctorStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $dispatcher, 'agent', 'doctor') -OutputPath "$env:EVIDENCE_DIR\doctor.txt"
+          if ($doctorStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor.txt" 'ERROR: published doctor command failed' }
+          $pwshVersionStatus = Invoke-Captured -Path 'pwsh.exe' -Arguments @('-NoProfile', '-File', $dispatcher, 'agent', 'version') -OutputPath "$env:EVIDENCE_DIR\version-pwsh.txt"
+          if ($pwshVersionStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version command failed' }
           $pwshVersionLines = @(Get-Content "$env:EVIDENCE_DIR\version-pwsh.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
           if ($pwshVersionLines.Count -ne 1 -or $pwshVersionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version mismatch' }
-          & pwsh.exe -NoProfile -File $dispatcher agent doctor *>&1 |
-            Tee-Object "$env:EVIDENCE_DIR\doctor-pwsh.txt"
-          if ($LASTEXITCODE -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor-pwsh.txt" 'ERROR: published pwsh doctor command failed' }
+          $pwshDoctorStatus = Invoke-Captured -Path 'pwsh.exe' -Arguments @('-NoProfile', '-File', $dispatcher, 'agent', 'doctor') -OutputPath "$env:EVIDENCE_DIR\doctor-pwsh.txt"
+          if ($pwshDoctorStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor-pwsh.txt" 'ERROR: published pwsh doctor command failed' }
           if ($dispatchFailed) { throw 'one or more deployed Windows dispatcher checks failed' }
           @(
             "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
