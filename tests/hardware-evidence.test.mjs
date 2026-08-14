@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -21,7 +21,31 @@ const profile = {
 };
 
 async function temporaryDirectory() {
-  return mkdtemp(path.join(os.tmpdir(), 'labwired-evidence-'));
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'labwired-evidence-'));
+  return path.join(parent, 'bundle');
+}
+
+function verifiedResult(level, behaviorId, overrides = {}) {
+  const artifactSha256 = 'a'.repeat(64);
+  const result = {
+    behaviorId,
+    provider: profile.observations.find(({ id }) => id === behaviorId)?.provider ?? 'serial',
+    level,
+    artifactSha256,
+    targetIdentity: { ...profile.target },
+    startedAt: '2026-08-14T10:00:00.000Z',
+    endedAt: '2026-08-14T10:00:01.000Z',
+    toolVersion: 'fixture-tool 1.0.0',
+    rawEvidenceRefs: [`captures/${behaviorId}.txt`],
+    diagnostics: { message: 'verified' },
+  };
+  if (level === 'model_observed') result.nativeArtifactSha256 = artifactSha256;
+  if (level === 'surrogate_model_observed') {
+    result.surrogateArtifactSha256 = 'b'.repeat(64);
+    result.sharedSourcePaths = ['src/main.cpp'];
+  }
+  if (level === 'hardware_observed') result.flashedArtifactSha256 = artifactSha256;
+  return { ...result, ...overrides };
 }
 
 test('initialization persists complete fail-first behavior records before returning', async () => {
@@ -53,7 +77,7 @@ test('atomic replacement never exposes truncated JSON or leftover temporary file
   const target = path.join(directory, 'observations/led/result.json');
   const readers = Array.from({ length: 40 }, async (_, index) => {
     await evidence.recordBehavior('led', {
-      level: 'hardware_observed',
+      ...verifiedResult('hardware_observed', 'led'),
       diagnostics: `record-${index}-${'x'.repeat(index * 79)}`,
     });
     JSON.parse(await readFile(target, 'utf8'));
@@ -98,6 +122,7 @@ test('fail-first records are redacted during initialization', async () => {
 
 test('sha256File hashes the exact artifact bytes', async () => {
   const directory = await temporaryDirectory();
+  await mkdir(directory);
   const artifact = path.join(directory, 'firmware.bin');
   const bytes = Buffer.from([0, 1, 2, 3, 255, 128, 64]);
   await writeFile(artifact, bytes);
@@ -124,10 +149,10 @@ test('evidence stays behavior-bound and incomplete observations finalize FAIL wi
   const directory = await temporaryDirectory();
   const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
   await assert.rejects(
-    evidence.recordBehavior('led', { behaviorId: 'wifi', level: 'hardware_observed' }),
+    evidence.recordBehavior('led', verifiedResult('hardware_observed', 'wifi')),
     /does not match/,
   );
-  await evidence.recordBehavior('led', { level: 'hardware_observed', artifactSha256: 'a'.repeat(64) });
+  await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
   const summary = await evidence.finalize();
   assert.equal(summary.result, 'FAIL');
   assert.deepEqual(summary.reasons.map(({ behaviorId }) => behaviorId), ['wifi']);
@@ -136,8 +161,8 @@ test('evidence stays behavior-bound and incomplete observations finalize FAIL wi
 test('finalize passes only when every behavior meets its declared level', async () => {
   const directory = await temporaryDirectory();
   const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
-  await evidence.recordBehavior('led', { level: 'hardware_observed' });
-  await evidence.recordBehavior('wifi', { level: 'hardware_observed' });
+  await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
   assert.deepEqual(await evidence.finalize(), { result: 'PASS', reasons: [] });
   assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')), { result: 'PASS', reasons: [] });
 });
@@ -149,8 +174,112 @@ test('compiled evidence preserves compiled-only semantics', async () => {
     observations: [{ id: 'firmware', provider: 'serial', requiredLevel: 'model_observed' }],
   };
   const evidence = await createEvidenceBundle(directory, compiledProfile, { redactValues: [] });
-  await evidence.recordBehavior('firmware', { level: 'compiled', claim: 'compiled_only' });
+  await evidence.recordBehavior('firmware', verifiedResult('compiled', 'firmware', {
+    provider: 'serial',
+    claim: 'compiled_only',
+  }));
   const summary = await evidence.finalize();
   assert.equal(summary.result, 'FAIL');
   assert.equal(summary.reasons[0].actualLevel, 'compiled');
+});
+
+test('finalize freezes the bundle so a persisted PASS cannot become stale', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+  await evidence.finalize();
+  await assert.rejects(evidence.recordBehavior('led', { level: 'failed' }), /finalized/);
+  await assert.rejects(evidence.finalize(), /finalized/);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'PASS');
+});
+
+test('verified evidence rejects absent, malformed, and mismatched provenance', async () => {
+  const cases = [
+    [{ level: 'hardware_observed' }, /provider/],
+    [verifiedResult('hardware_observed', 'led', { behaviorId: undefined }), /behaviorId/],
+    [verifiedResult('hardware_observed', 'led', { provider: 'network' }), /provider/],
+    [verifiedResult('hardware_observed', 'led', { artifactSha256: 'nope' }), /artifactSha256/],
+    [verifiedResult('hardware_observed', 'led', { targetIdentity: { id: 'other-target' } }), /target identity/],
+    [verifiedResult('hardware_observed', 'led', { startedAt: 'invalid' }), /startedAt/],
+    [verifiedResult('hardware_observed', 'led', { endedAt: '2026-08-14T09:59:59.000Z' }), /precedes/],
+    [verifiedResult('hardware_observed', 'led', { toolVersion: '' }), /toolVersion/],
+    [verifiedResult('hardware_observed', 'led', { rawEvidenceRefs: ['../escape.txt'] }), /rawEvidenceRefs/],
+    [verifiedResult('hardware_observed', 'led', { rawEvidenceRefs: Array(33).fill('capture.txt') }), /rawEvidenceRefs/],
+    [verifiedResult('hardware_observed', 'led', { diagnostics: 'x'.repeat(65_537) }), /diagnostics/],
+    [verifiedResult('hardware_observed', 'led', { flashedArtifactSha256: 'b'.repeat(64) }), /flashedArtifactSha256/],
+  ];
+  for (const [candidate, pattern] of cases) {
+    const directory = await temporaryDirectory();
+    const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+    await assert.rejects(evidence.recordBehavior('led', candidate), pattern, `candidate should reject: ${pattern}`);
+    assert.equal(JSON.parse(await readFile(path.join(directory, 'observations/led/result.json'), 'utf8')).level, 'not-run');
+  }
+});
+
+test('model and surrogate claims require artifact-specific provenance', async () => {
+  const modelProfile = { ...profile, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'model_observed' }] };
+  let directory = await temporaryDirectory();
+  let evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  await assert.rejects(
+    evidence.recordBehavior('led', verifiedResult('model_observed', 'led', { nativeArtifactSha256: 'b'.repeat(64) })),
+    /nativeArtifactSha256/,
+  );
+
+  directory = await temporaryDirectory();
+  evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  const surrogate = verifiedResult('surrogate_model_observed', 'led');
+  delete surrogate.sharedSourcePaths;
+  await assert.rejects(evidence.recordBehavior('led', surrogate), /sharedSourcePaths/);
+
+  directory = await temporaryDirectory();
+  evidence = await createEvidenceBundle(directory, modelProfile, { redactValues: [] });
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('surrogate_model_observed', 'led', {
+    surrogateArtifactSha256: 'a'.repeat(64),
+  })), /must differ/);
+});
+
+test('verified SHA-256 fields are accepted case-insensitively and persisted lowercase', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createEvidenceBundle(directory, profile, { redactValues: [] });
+  const uppercase = 'A'.repeat(64);
+  const record = await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    artifactSha256: uppercase,
+    flashedArtifactSha256: uppercase,
+  }));
+  assert.equal(record.artifactSha256, 'a'.repeat(64));
+  assert.equal(record.flashedArtifactSha256, 'a'.repeat(64));
+});
+
+test('whole-bundle staging failure never exposes a partial target', async () => {
+  const directory = await temporaryDirectory();
+  const brokenProfile = {
+    ...profile,
+    observations: [...profile.observations, { id: 'broken\u0000id', provider: 'serial', requiredLevel: 'compiled' }],
+  };
+  await assert.rejects(createEvidenceBundle(directory, brokenProfile, { redactValues: [] }));
+  await assert.rejects(access(directory));
+  const leftovers = (await readdir(path.dirname(directory))).filter((name) => name.includes('.staging-'));
+  assert.deepEqual(leftovers, []);
+});
+
+test('simultaneous creators produce exactly one owner and one complete bundle', async () => {
+  const directory = await temporaryDirectory();
+  const results = await Promise.allSettled([
+    createEvidenceBundle(directory, profile, { redactValues: [] }),
+    createEvidenceBundle(directory, profile, { redactValues: [] }),
+  ]);
+  assert.equal(results.filter(({ status }) => status === 'fulfilled').length, 1);
+  assert.equal(results.filter(({ status }) => status === 'rejected').length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
+  for (const { id } of profile.observations) {
+    assert.equal(JSON.parse(await readFile(path.join(directory, 'observations', id, 'result.json'), 'utf8')).level, 'not-run');
+  }
+  await access(path.join(directory, '.owner.json'));
+});
+
+test('a preexisting target bundle is never reused by another handle', async () => {
+  const directory = await temporaryDirectory();
+  await createEvidenceBundle(directory, profile, { redactValues: [] });
+  await assert.rejects(createEvidenceBundle(directory, profile, { redactValues: [] }), /already exists/);
 });
