@@ -34,3 +34,15 @@ written. Do not weaken a check to make it pass.
 
 If a model key, twin, probe, or board is missing, the related optional test is
 not run. It must not be reported as passed.
+
+## Legacy hardware profiles
+
+The legacy hardware wrappers only translate `LABWIRED_HW_*` inputs into a
+version 1 hardware profile. A physical plan requires its exact digest in
+`LABWIRED_HW_CONFIRM`; build/twin-only plans reuse their own digest because
+they contain no flash or `hardware_observed` action. `desk-hw-physical.sh`
+imports `LABWIRED_HW_ELF` with the trusted `prebuilt` provider, which hashes
+and receipts the existing artifact without claiming it was compiled. Serial
+capture is currently fixed at 115200 baud, and custom
+`LABWIRED_HW_TWIN_STEPS` is not representable in profile v1; both unsupported
+overrides fail closed instead of being ignored.

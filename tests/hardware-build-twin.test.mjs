@@ -109,6 +109,22 @@ test('successful build requires a freshly produced regular artifact and hashes e
   assert.equal(result.toolVersion, 'pio 1.2.3');
 });
 
+test('prebuilt imports an existing exact artifact without launching a compiler', async () => {
+  const root = await sandbox();
+  const p = profile(root, 'prebuilt');
+  await writeFile(p.build.artifact, Buffer.from([0, 1, 2, 255]));
+  const { adapters, calls } = harness();
+  const evidenceDir = await evidenceDirectory(root, p);
+  const prepared = await adapters.build.prebuilt.preflight(p);
+  assert.equal(prepared.provider, 'prebuilt');
+  assert.equal(adapters.build.prebuilt.plan(p, prepared), null);
+  const result = await adapters.build.prebuilt.execute(p, { prepared, evidenceDir });
+  assert.equal(result.level, 'imported');
+  assert.equal(result.artifactSha256, await sha256File(p.build.artifact));
+  assert.deepEqual(result.rawEvidenceRefs, ['observations/import-fixture.json']);
+  assert.equal(calls.length, 0);
+});
+
 test('prepared build capability refuses a trusted executable identity swap before spawn', async () => {
   const root = await sandbox();
   let identity = { dev: 1, ino: 1, size: 10, mtimeMs: 1 };

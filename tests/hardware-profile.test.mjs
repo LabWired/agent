@@ -55,7 +55,7 @@ test('loads and deeply freezes the minimal profile with trusted providers', asyn
   assert.equal(Object.isFrozen(profile.observations[0]), true);
   assert.throws(() => { profile.build.provider = 'make'; }, TypeError);
   assert.deepEqual(TRUSTED_PROVIDERS, {
-    build: ['platformio', 'make', 'cmake'],
+    build: ['platformio', 'make', 'cmake', 'prebuilt'],
     twin: ['labwired-sim'],
     flash: ['platformio', 'probe-rs'],
     observation: ['serial', 'rtt', 'logic-csv', 'network'],

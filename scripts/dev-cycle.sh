@@ -79,14 +79,23 @@ doc={
 }
 if physical:
   doc["target"].update(probeSerial=probe,serialPort=port)
-  doc["flash"]={"provider":"platformio","timeoutSeconds":int(timeout)}
+  doc["flash"]={"provider":"platformio"}
   doc["observations"].append({"id":"legacy-hardware-serial","provider":"serial","contains":marker,
                               "timeoutSeconds":int(timeout),"requiredLevel":"hardware_observed"})
 else:
   doc["observations"].append({"id":"legacy-build","provider":"serial","contains":marker,"requiredLevel":"compiled"})
 if skip_twin == "0" and system:
-  doc["twin"]={"provider":"labwired-sim","system":os.path.basename(system),"artifactRelation":"exact",
-               "timeoutSeconds":int(timeout)}
+  if physical:
+    shared=[]
+    for base,dirs,files in os.walk(os.path.join(ws,"src")):
+      dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(base,d))]
+      shared += [os.path.relpath(os.path.join(base,f),ws) for f in files if not os.path.islink(os.path.join(base,f))]
+    if not shared: raise SystemExit("dev-cycle: physical twin requires at least one regular shared source under src/")
+    doc["twin"]={"provider":"labwired-sim","system":os.path.basename(system),"artifactRelation":"surrogate",
+                 "artifact":f".pio/build/{environment}/firmware.elf","sharedSources":shared}
+  else:
+    doc["build"]["artifact"]=f".pio/build/{environment}/firmware.elf"
+    doc["twin"]={"provider":"labwired-sim","system":os.path.basename(system),"artifactRelation":"exact"}
   if not physical:
     doc["observations"]=[{"id":"legacy-twin-serial","provider":"serial","contains":marker,
                           "timeoutSeconds":int(timeout),"requiredLevel":"model_observed"}]
@@ -95,10 +104,18 @@ PY
 
 "$LABWIRED" hardware plan --profile "$PROFILE" --out "$OUT" >"$PLAN_OUTPUT" & CHILD_PID=$!
 set +e; wait "$CHILD_PID"; PLAN_RC=$?; set -e; CHILD_PID=""
-[[ "$PLAN_RC" -eq 0 ]] || exit "$PLAN_RC"
+if [[ "$PLAN_RC" -ne 0 ]]; then [[ "$PLAN_RC" -eq 2 ]] && exit 2; exit 1; fi
 PLAN="$(<"$PLAN_OUTPUT")"
 printf '%s\n' "$PLAN"
 DIGEST="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' <<<"$PLAN")" || { echo 'dev-cycle: invalid plan response' >&2; exit 1; }
-[[ -n "$CONFIRM" ]] || { echo "dev-cycle: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the plan" >&2; exit 2; }
+PHYSICAL="$(python3 -c 'import json,sys; p=json.load(sys.stdin)["plan"]["profile"]; print("1" if p.get("flash") or any(x.get("requiredLevel")=="hardware_observed" for x in p.get("observations",[])) else "0")' <<<"$PLAN")" || { echo 'dev-cycle: invalid plan profile' >&2; exit 1; }
+if [[ "$PHYSICAL" == 0 && -z "$CONFIRM" ]]; then CONFIRM="$DIGEST"; fi
+[[ -n "$CONFIRM" ]] || { echo "dev-cycle: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the physical plan" >&2; exit 2; }
 [[ "$CONFIRM" == "$DIGEST" ]] || { echo 'dev-cycle: LABWIRED_HW_CONFIRM does not match the current plan digest' >&2; exit 2; }
+set +e
 "$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM"
+RUN_RC=$?
+set -e
+[[ "$RUN_RC" -eq 0 ]] && exit 0
+[[ "$RUN_RC" -eq 2 ]] && exit 2
+exit 1

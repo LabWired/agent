@@ -21,9 +21,14 @@ if [[ "$1 $2" == 'hardware plan' ]]; then
     printf '%s\n' "$2" >"$LEGACY_BLOCK_PROFILE"
     sleep 30
   fi
-  printf '{"command":"hardware plan","digest":"%064d","plan":{"ok":true}}\n' 0
+  python3 - "$LEGACY_PROFILE" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1]))
+print(json.dumps({"command":"hardware plan","digest":"0"*64,"plan":{"profile":p}},separators=(",",":")))
+PY
   exit "${LEGACY_PLAN_EXIT:-0}"
 fi
+printf '%s\n' "${LEGACY_RUN_OUTPUT:-}"
 exit "${LEGACY_RUN_EXIT:-0}"
 SH
 chmod +x "$TMP/bin/labwired-agent"
@@ -41,7 +46,7 @@ if kind == "dev":
     assert p["build"]["environment"] == "env-one"
     assert p["build"]["artifact"] == ".pio/build/env-one/firmware.bin"
 else:
-    assert p["build"]["provider"] == "cmake"
+    assert p["build"]["provider"] == "prebuilt"
     assert p["build"]["artifact"] == "firm ware.elf"
 PY
 }
@@ -67,6 +72,15 @@ assert calls[1][0:2] == ['hardware','run']
 assert calls[1][-2:] == ['--confirm',sys.argv[2]]
 PY
 [[ ! -e "$LEGACY_PROFILE" || -s "$LEGACY_PROFILE" ]] # fake CLI copy survives; wrapper temp does not
+
+# Non-physical build/twin plans use their own exact digest unattended.
+: >"$LEGACY_ARGV"; unset LABWIRED_HW_CONFIRM
+bash "$ROOT/scripts/dev-cycle.sh" >/dev/null
+python3 - "$LEGACY_ARGV" "$DIGEST_ZERO" <<'PY'
+import sys
+calls=[[a for a in x.split('\0') if a] for x in open(sys.argv[1]).read().splitlines()]
+assert calls[-1][-2:] == ['--confirm',sys.argv[2]]
+PY
 
 : >"$LEGACY_ARGV"
 export LABWIRED_HW_ELF="$TMP/desk/build dir/firm ware.elf" LABWIRED_HW_CHIP='esp test' LABWIRED_HW_PORT='/dev/tty test'
@@ -100,8 +114,26 @@ export LABWIRED_HW_CONFIRM="$DIGEST_ZERO" LEGACY_RUN_EXIT=1
 set +e; bash "$ROOT/scripts/desk-hw-physical.sh" >/dev/null 2>&1; rc=$?; set -e
 [[ "$rc" -eq 1 ]]
 
+export LEGACY_RUN_EXIT=3 LEGACY_RUN_OUTPUT='{"result":"BLOCKED"}'
+set +e; bash "$ROOT/scripts/desk-hw-physical.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 2 ]]
+export LEGACY_RUN_OUTPUT='{"result":"FAIL"}'
+set +e; bash "$ROOT/scripts/desk-hw-physical.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 1 ]]
+
+unset LEGACY_RUN_EXIT LEGACY_RUN_OUTPUT
+export LEGACY_PLAN_EXIT=3
+set +e; bash "$ROOT/scripts/desk-hw-physical.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 2 ]]
+export LABWIRED_HW_WS="$TMP/project" LABWIRED_HW_SKIP_FLASH=1 LABWIRED_HW_SKIP_TWIN=1
+set +e; bash "$ROOT/scripts/dev-cycle.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 1 ]]
+export LEGACY_PLAN_EXIT=2
+set +e; bash "$ROOT/scripts/dev-cycle.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 2 ]]
+unset LEGACY_PLAN_EXIT
+
 # Termination cleans the generated profile and never advances to run.
-unset LEGACY_RUN_EXIT
 export LABWIRED_HW_WS="$TMP/project" LABWIRED_HW_SKIP_FLASH=1 LABWIRED_HW_SKIP_TWIN=1
 export LABWIRED_HW_CONFIRM="$DIGEST_ZERO" LEGACY_PLAN_BLOCK=1 LEGACY_BLOCK_PROFILE="$TMP/block-profile"
 : >"$LEGACY_ARGV"

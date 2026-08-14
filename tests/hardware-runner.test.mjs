@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import nodeTest from 'node:test';
@@ -71,7 +71,7 @@ function harness(profile, behavior = {}) {
         calls.push('twin'); behavior.onTwin?.(options.signal); assert.equal(options.prepared?.kind, 'twin-capability');
         if (behavior.realPhysical) {
           await writeFile(path.join(options.evidenceDir, 'observations', 'twin-failure.json'), '{"twin":"unsupported"}\n');
-          return result('failed', { diagnostics: 'native format unsupported', rawEvidenceRefs: ['observations/twin-failure.json'] });
+          return behavior.twin ?? result('failed', { diagnostics: 'native format unsupported', rawEvidenceRefs: ['observations/twin-failure.json'] });
         }
         if (behavior.realEvidence) {
           await writeFile(path.join(options.evidenceDir, 'observations', 'twin.json'), '{"twin":"observed"}\n');
@@ -567,4 +567,74 @@ test('cancellation reaches adapters, finalizes FAIL, and releases locks; cleanup
     const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: p.digest, dependencies: h.dependencies });
     assert.equal(outcome.receipt.result, 'FAIL'); assert.match(outcome.error, /release broke/); assert.equal(h.calls.includes('finalize'), true);
   });
+});
+
+test('real runner imports a supplied ELF and flashes that exact artifact without CMake', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-prebuilt-runner-'));
+  activeRoots.push(root);
+  const artifact = path.join(root, 'firmware.elf');
+  const agent = path.join(root, 'agent');
+  await writeFile(artifact, 'supplied-elf-bytes');
+  await writeFile(agent, '#!/bin/sh\nexit 0\n'); await chmod(agent, 0o755);
+  const hash = createHash('sha256').update('supplied-elf-bytes').digest('hex');
+  const profile = {
+    schema: 1,
+    target: { id: 'import-desk', chip: 'chip-x', probeSerial: 'probe-x', serialPort: '/dev/ttyX' },
+    build: { provider: 'prebuilt', workspace: root, environment: 'imported', artifact },
+    flash: { provider: 'probe-rs' },
+    observations: [{ id: 'ready', provider: 'serial', contains: 'READY', requiredLevel: 'hardware_observed' }],
+  };
+  const launches = [];
+  const adapters = createTrustedAdapters({
+    agentPath: agent,
+    env: { PATH: '/trusted' },
+    async resolveTool(name) { return `/trusted/${name}`; },
+    async toolVersion(name) { return `${name} 1`; },
+    async run(descriptor) {
+      launches.push(descriptor);
+      if (descriptor.args[0] === 'probe' && descriptor.args[1] === 'flash') {
+        return { classification: 'exit', exitCode: 0, stderr: '', truncated: {}, stdout: `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ provider: 'probe-rs', artifactSha256: hash, chip: 'chip-x', probeSerial: 'probe-x', observationPort: '/dev/ttyX', environment: 'imported', workspace: root, identityApplied: true, serialPortApplied: false })}\n` };
+      }
+      return { classification: 'exit', exitCode: 0, stdout: '{"status":"hardware_observed","output":"READY"}\n', stderr: '', truncated: {} };
+    },
+  });
+  const dependencies = {
+    async loadProfile() { return structuredClone(profile); },
+    createAdapters() { return adapters; },
+    async resolveHardwareIdentities() { return [{ target: 'import-desk', probe: 'probe-x', serial: '/dev/ttyX', stableIds: { target: 't', probe: 'p', serial: 's' } }]; },
+    async acquireLocks() { return { async release() {} }; },
+    lockRoot: path.join(root, 'locks'),
+  };
+  const input = { profilePath: path.join(root, 'profile.json'), evidenceDir: path.join(root, 'evidence'), dependencies };
+  const planned = await planHardwareRun(input);
+  const outcome = await executeHardwareRun({ ...input, confirmDigest: planned.digest });
+  assert.equal(outcome.result, 'PASS', JSON.stringify(outcome));
+  assert.equal(launches.some((entry) => /cmake/i.test(entry.executable)), false);
+  const flash = launches.find((entry) => entry.args[0] === 'probe' && entry.args[1] === 'flash');
+  assert.equal(flash.args[2], artifact);
+  assert.equal(flash.args[flash.args.indexOf('--expected-sha256') + 1], hash);
+});
+
+test('surrogate twin stage authenticates A/B provenance while physical behavior flashes A', async () => {
+  const surrogate = 'b'.repeat(64);
+  const f = await fixture({ observations: [{ id: 'heartbeat', provider: 'serial', contains: 'alive', requiredLevel: 'hardware_observed' }] });
+  f.profile.twin.artifactRelation = 'surrogate';
+  f.profile.twin.artifact = path.join(f.root, 'firmware.elf');
+  f.profile.twin.sharedSources = ['src/main.cpp'];
+  const h = harness(f.profile, { realPhysical: true, twin: result('surrogate_model_observed', {
+    artifactSha256: 'a'.repeat(64), surrogateArtifactSha256: surrogate,
+    sharedSourcePaths: ['src/main.cpp'], rawEvidenceRefs: ['observations/twin-failure.json'],
+  }) });
+  h.dependencies.createEvidence = async (...args) => {
+    const { createEvidenceBundle } = await import('../lib/hardware/evidence.mjs');
+    return createEvidenceBundle(...args);
+  };
+  const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+  const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: planned.digest, dependencies: h.dependencies });
+  assert.equal(outcome.result, 'PASS', JSON.stringify({ outcome, calls: h.calls }));
+  const twinStage = JSON.parse(await readFile(path.join(f.evidenceDir, 'stages', 'twin', 'result.json'), 'utf8'));
+  assert.equal(twinStage.level, 'surrogate_model_observed', JSON.stringify(twinStage));
+  assert.equal(twinStage.artifactSha256, 'a'.repeat(64));
+  assert.equal(twinStage.surrogateArtifactSha256, surrogate);
+  assert.deepEqual(twinStage.sharedSourcePaths, ['src/main.cpp']);
 });

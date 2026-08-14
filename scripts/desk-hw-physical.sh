@@ -39,8 +39,8 @@ python3 - "$PROFILE" "$CHIP" "$PORT" "$PROBE_SERIAL" "$MARKER" "$TIMEOUT" "$ARTI
 import json,sys
 profile,chip,port,probe,marker,timeout,artifact=sys.argv[1:]
 doc={"schema":1,"target":{"id":"legacy-desk","chip":chip,"probeSerial":probe,"serialPort":port},
- "build":{"provider":"cmake","workspace":".","environment":".","artifact":artifact},
- "flash":{"provider":"probe-rs","timeoutSeconds":int(timeout)},
+ "build":{"provider":"prebuilt","workspace":".","environment":"imported","artifact":artifact},
+ "flash":{"provider":"probe-rs"},
  "observations":[{"id":"legacy-hardware-serial","provider":"serial","contains":marker,
                   "timeoutSeconds":int(timeout),"requiredLevel":"hardware_observed"}]}
 with open(profile,"w",encoding="utf-8") as f: json.dump(doc,f,separators=(",",":")); f.write("\n")
@@ -48,10 +48,17 @@ PY
 
 "$LABWIRED" hardware plan --profile "$PROFILE" --out "$OUT" >"$PLAN_OUTPUT" & CHILD_PID=$!
 set +e; wait "$CHILD_PID"; PLAN_RC=$?; set -e; CHILD_PID=""
-[[ "$PLAN_RC" -eq 0 ]] || exit "$PLAN_RC"
+if [[ "$PLAN_RC" -ne 0 ]]; then [[ "$PLAN_RC" -eq 2 || "$PLAN_RC" -eq 3 ]] && exit 2; exit 1; fi
 PLAN="$(<"$PLAN_OUTPUT")"
 printf '%s\n' "$PLAN"
 DIGEST="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' <<<"$PLAN")" || { echo 'desk-hw-physical: invalid plan response' >&2; exit 1; }
 [[ -n "$CONFIRM" ]] || { echo "desk-hw-physical: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the plan" >&2; exit 2; }
 [[ "$CONFIRM" == "$DIGEST" ]] || { echo 'desk-hw-physical: LABWIRED_HW_CONFIRM does not match the current plan digest' >&2; exit 2; }
-"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM"
+set +e
+"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM" >"$PLAN_OUTPUT"
+RUN_RC=$?
+set -e
+cat "$PLAN_OUTPUT"
+if [[ "$RUN_RC" -eq 0 ]]; then exit 0; fi
+if [[ "$RUN_RC" -eq 2 ]] || { [[ "$RUN_RC" -eq 3 ]] && grep -q '"result":"BLOCKED"' "$PLAN_OUTPUT"; }; then exit 2; fi
+exit 1
