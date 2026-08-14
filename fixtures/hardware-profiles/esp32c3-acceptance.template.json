@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "target": {
+    "id": "${TARGET_ID}",
+    "chip": "esp32c3",
+    "probeSerial": "${PROBE_SERIAL}",
+    "serialPort": "${SERIAL_PORT}"
+  },
+  "build": {
+    "provider": "platformio",
+    "workspace": ".",
+    "environment": "esp32-c3-devkitm-1",
+    "artifact": "dist/firmware.bin",
+    "timeoutSeconds": 30
+  },
+  "twin": {
+    "provider": "labwired-sim",
+    "system": "system.yaml",
+    "artifactRelation": "exact",
+    "timeoutSeconds": 10
+  },
+  "flash": {
+    "provider": "platformio",
+    "timeoutSeconds": 30
+  },
+  "observations": [
+    {
+      "id": "serial-heartbeat",
+      "provider": "serial",
+      "contains": "alive",
+      "timeoutSeconds": 5,
+      "requiredLevel": "hardware_observed"
+    },
+    {
+      "id": "led-blink",
+      "provider": "logic-csv",
+      "file": "logic.csv",
+      "channel": 0,
+      "timeColumn": "time_s",
+      "valueColumn": "gpio8",
+      "edgeCountAtLeast": 4,
+      "frequencyMinHz": 0.9,
+      "frequencyMaxHz": 1.1,
+      "requiredLevel": "hardware_observed"
+    },
+    {
+      "id": "wifi-health",
+      "provider": "network",
+      "deviceMarker": "WIFI_READY",
+      "hostProbeUrlFromMarker": "DEVICE_ADDR",
+      "hostProbePath": "/health",
+      "timeoutSeconds": 5,
+      "requiredLevel": "hardware_observed"
+    }
+  ]
+}

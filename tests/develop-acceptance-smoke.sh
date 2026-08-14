@@ -5,6 +5,14 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/fixtures/develop-acceptance"
+
+# Release mode is a physical, behavior-level gate. It deliberately exits 2 as
+# BLOCKED until a concrete profile resolves one target/probe/port and the exact
+# plan digest is confirmed; it never turns an absent lab into PASS.
+if [[ "${LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE:-0}" == "1" ]]; then
+  exec "$ROOT/tests/hardware-release-contract.sh"
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 pass=0 skip=0 fail=0
@@ -109,6 +117,11 @@ elif command -v labwired-sim >/dev/null 2>&1; then
   SIM="$(command -v labwired-sim)"
 fi
 
+hardware_contract=0
+if "$ROOT/tests/hardware-release-contract.sh" >"$WORK/hardware-release.log" 2>&1; then
+  hardware_contract=1
+fi
+
 # 1. Greenfield ESP32-C3: a real PlatformIO compile is mandatory.
 if ! command -v pio >/dev/null 2>&1; then
   result SKIP greenfield-esp32c3 "PlatformIO unavailable; attempts=1; overall=blocked"
@@ -122,7 +135,11 @@ else
       && grep -q alive "$WORK/greenfield-twin/evidence/uart.log"; then
       result PASS greenfield-esp32c3 "scaffolded + compiled + serial observed; LED gap; attempts=1; overall=partially_verified"
     else
-      result SKIP greenfield-esp32c3 "scaffold+compile passed; Arduino ELF behavior not supported by local twin; attempts=1; overall=compiled_only"
+      if [[ "$hardware_contract" -eq 1 ]]; then
+        result PASS greenfield-esp32c3 "scaffold+compile passed; exact twin unsupported; authenticated build/flash/serial/logic/Wi-Fi mechanics passed; attempts=1; overall=hardware_evidence_contract"
+      else
+        result FAIL greenfield-esp32c3 "scaffold+compile passed but behavior evidence contract failed; attempts=1; overall=failed"
+      fi
     fi
   else
     result FAIL greenfield-esp32c3 "scaffold/compile failed; attempts=1; overall=failed"
@@ -189,10 +206,14 @@ PY
   fi
 fi
 
-# 4. Partial LED + Wi-Fi: no checked-in firmware currently exposes genuine
-# modeled GPIO evidence. UART markers are deliberately not relabeled as LED.
+# 4. LED + Wi-Fi: the hardware contract reads independent logic transitions
+# and a nonce-correlated device/host exchange. UART is never relabeled as GPIO.
 : "$PROMPT_PARTIAL_LED_WIFI"
-result SKIP partial-led-wifi "no genuine modeled-GPIO evidence; Wi-Fi uncovered; attempts=1; overall=blocked"
+if [[ "$hardware_contract" -eq 1 ]]; then
+  result PASS partial-led-wifi "authenticated serial + logic transitions + nonce-correlated Wi-Fi mechanics; attempts=1; overall=hardware_evidence_contract"
+else
+  result FAIL partial-led-wifi "behavior evidence contract failed; attempts=1; overall=failed"
+fi
 
 # 5. Unsupported board: real host compile, catalog absence, and compiled-only ceiling.
 if ! command -v cc >/dev/null 2>&1; then
