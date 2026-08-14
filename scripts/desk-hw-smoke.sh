@@ -54,7 +54,7 @@ fi
 # shellcheck source=lib/rtt-capture.sh
 source "$ROOT/lib/rtt-capture.sh"
 printf 'boot\nLABWIRED_OK\n' >"$OUT/rtt-fixture.log"
-if LABWIRED_RTT_FIXTURE="$OUT/rtt-fixture.log" labwired_rtt_capture --chip esp32c3 --marker LABWIRED_OK --timeout 1 \
+if LABWIRED_RTT_FIXTURE="$OUT/rtt-fixture.log" labwired_rtt_capture --chip esp32c3 --probe fixture-probe --marker LABWIRED_OK --timeout 1 \
   >"$OUT/rtt-capture.json" 2>"$OUT/rtt-capture.err"; then
   if grep -q 'hardware_observed' "$OUT/rtt-capture.json"; then
     pass "rtt-capture fixture → hardware_observed"
@@ -65,7 +65,7 @@ else
   bad "rtt-capture fixture"; cat "$OUT/rtt-capture.err" 2>/dev/null || true
 fi
 set +e
-labwired_rtt_capture --chip esp32c3 --marker LABWIRED_OK --timeout 1 >"$OUT/rtt-need.out" 2>"$OUT/rtt-need.err"
+labwired_rtt_capture --chip esp32c3 --probe fixture-probe --marker LABWIRED_OK --timeout 1 >"$OUT/rtt-need.out" 2>"$OUT/rtt-need.err"
 rtt_rc=$?
 set -e
 if [[ "$rtt_rc" -eq 2 ]] && grep -q 'NEED_RTT' "$OUT/rtt-need.err"; then

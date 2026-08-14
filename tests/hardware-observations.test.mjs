@@ -80,7 +80,7 @@ test('flash revalidates the exact artifact before and after execution and redact
   const p = profile(root);
   const hash = await sha256File(p.build.artifact);
   const bundle = await evidence(root, p);
-  const receipt = { provider: 'platformio', artifactSha256: hash, chip: p.target.chip, probeSerial: p.target.probeSerial, serialPort: p.target.serialPort };
+  const receipt = { provider: 'platformio', artifactSha256: hash, chip: p.target.chip, environment: p.build.environment, workspace: p.build.workspace, probeSerial: p.target.probeSerial, observationPort: p.target.serialPort, identityApplied: true, serialPortApplied: true };
   const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 0, stdout: `secret-value\nLABWIRED_FLASH_RECEIPT ${JSON.stringify(receipt)}\n`, stderr: 'secret-value', truncated: { stdout: false, stderr: false } }));
   const result = await adapters.flash.platformio.execute(p, { artifactSha256: hash, evidenceDir: bundle, redact: ['secret-value'] });
   assert.equal(result.level, 'hardware_observed');
@@ -91,9 +91,14 @@ test('flash revalidates the exact artifact before and after execution and redact
 
 test('flash refuses a success exit with a missing or mismatched exact receipt', async (t) => {
   const root = await sandbox(); const p = profile(root); const hash = await sha256File(p.build.artifact);
+  const base = { provider: 'platformio', artifactSha256: hash, chip: p.target.chip, environment: p.build.environment, workspace: p.build.workspace, probeSerial: p.target.probeSerial, observationPort: p.target.serialPort, identityApplied: true, serialPortApplied: true };
   for (const [name, stdout] of [
     ['missing', 'claim: flashed'],
-    ['wrong chip', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ provider: 'platformio', artifactSha256: hash, chip: 'wrong-chip', probeSerial: p.target.probeSerial, serialPort: p.target.serialPort })}`],
+    ['wrong chip', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ ...base, chip: 'wrong-chip' })}`],
+    ['wrong environment', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ ...base, environment: 'other' })}`],
+    ['wrong workspace', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ ...base, workspace: `${p.build.workspace}-other` })}`],
+    ['identity unused', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ ...base, identityApplied: false })}`],
+    ['port unused', `LABWIRED_FLASH_RECEIPT ${JSON.stringify({ ...base, serialPortApplied: false })}`],
   ]) await t.test(name, async () => {
     const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 0, stdout, stderr: '', truncated: { stdout: false, stderr: false } }));
     const result = await adapters.flash.platformio.execute(p, { artifactSha256: hash });
@@ -171,7 +176,7 @@ test('serial and RTT delegate to existing capture commands and cannot share capa
   const serialReady = await adapters.observation.serial.preflight(p, serial);
   assert.deepEqual(adapters.observation.serial.plan(p, serial, serialReady).args, ['serial-capture', '/dev/ttyACM0', '115200', 'alive', '7']);
   const rttReady = await adapters.observation.rtt.preflight(p, rtt);
-  assert.deepEqual(adapters.observation.rtt.plan(p, rtt, rttReady).args, ['probe', 'rtt-capture', '--chip', 'esp32c3', '--elf', p.build.artifact, '--marker', 'ready', '--timeout', '8']);
+  assert.deepEqual(adapters.observation.rtt.plan(p, rtt, rttReady).args, ['probe', 'rtt-capture', '--chip', 'esp32c3', '--probe', 'probe-123', '--elf', p.build.artifact, '--marker', 'ready', '--timeout', '8']);
   assert.throws(() => adapters.observation.rtt.plan(p, rtt, serialReady), /capability/);
 });
 
@@ -311,6 +316,9 @@ test('network rejects wrong nonce, public addresses, redirects, and oversized re
   assert.equal((await adapter.execute(p, observation)).level, 'failed');
   for (const [name, handler, pattern] of [
     ['redirect', (_q, r) => { r.writeHead(302, { location: '/health' }); r.end(); }, /redirect/],
+    ['unauthorized', (_q, r) => { r.writeHead(401); r.end(nonce); }, /status 401/],
+    ['not found', (_q, r) => { r.writeHead(404); r.end(nonce); }, /status 404/],
+    ['server error', (_q, r) => { r.writeHead(500); r.end(nonce); }, /status 500/],
     ['oversize', (_q, r) => r.end('x'.repeat(70_000)), /size/],
   ]) await t.test(name, async () => {
     const server = createServer(handler); await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -320,4 +328,12 @@ test('network rejects wrong nonce, public addresses, redirects, and oversized re
       assert.equal(result.level, 'failed'); assert.match(result.diagnostics, pattern);
     } finally { await new Promise((resolve) => server.close(resolve)); }
   });
+});
+
+test('RTT plan binds the exact probe selector end to end', async () => {
+  const root = await sandbox(); const p = profile(root, 'probe-rs');
+  p.build.artifact = path.join(root, 'build', 'firmware.elf'); await writeFile(p.build.artifact, 'elf');
+  const observation = { id: 'rtt', provider: 'rtt', contains: 'ready', timeoutSeconds: 4, requiredLevel: 'hardware_observed' };
+  const { adapters } = harness(); const ready = await adapters.observation.rtt.preflight(p, observation);
+  assert.deepEqual(adapters.observation.rtt.plan(p, observation, ready).args, ['probe', 'rtt-capture', '--chip', p.target.chip, '--probe', p.target.probeSerial, '--elf', p.build.artifact, '--marker', 'ready', '--timeout', '4']);
 });

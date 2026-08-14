@@ -503,6 +503,8 @@ public static class NativeArgvEcho {
   Assert-True ((Get-Content (Join-Path $malformedPrefix "state\agent\state.txt") -Raw).Trim() -eq 'state-intact') "malformed ownership leaves Agent state intact"
   Assert-True ((Get-Content (Join-Path $malformedConfig "opencode.json") -Raw) -match 'config-intact') "malformed ownership leaves config untouched"
   Assert-True (-not @(Get-ChildItem -LiteralPath $malformedPrefix -Recurse -Force | Where-Object { $_.Name -like '.labwired-agent-delete-*' }).Count) "malformed ownership leaks no tombstones"
+  & (Join-Path $Root "tests\windows-hardware-contract.ps1") -Root $Root
+  if (-not $?) { throw "Windows hardware contract failed" }
   Write-Host "ok   windows-contract PASS"
 } finally {
   Remove-Item Env:LABWIRED_AGENT_BIN -ErrorAction SilentlyContinue

@@ -107,7 +107,7 @@ Env:
 }
 
 function Cmd-SerialChallenge {
-  if ($argsRest.Count -ne 6) { Fail "usage: serial-challenge PORT BAUD NONCE MARKER ADDRESS_KEY TIMEOUT" }
+  if ($argsRest.Count -ne 6) { [Console]::Error.WriteLine("usage: serial-challenge PORT BAUD NONCE MARKER ADDRESS_KEY TIMEOUT"); exit 2 }
   $helper = Join-Path $AgentHome "lib\serial-challenge.ps1"
   if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Fail "serial challenge helper missing" }
   Assert-SafePath $helper
@@ -115,6 +115,37 @@ function Cmd-SerialChallenge {
     -Marker ([string]$argsRest[3]) -AddressKey ([string]$argsRest[4]) -TimeoutSeconds ([int]$argsRest[5]) `
     -Terminator LF -MaxBytes 65536
   exit $LASTEXITCODE
+}
+
+function Cmd-SerialCapture {
+  if ($argsRest.Count -ne 4) { [Console]::Error.WriteLine("usage: serial-capture PORT BAUD MARKER TIMEOUT"); exit 2 }
+  $helper = Join-Path $AgentHome "lib\serial-capture.ps1"; Assert-SafePath $helper
+  & $helper -Port ([string]$argsRest[0]) -Baud ([int]$argsRest[1]) -Marker ([string]$argsRest[2]) -TimeoutSeconds ([int]$argsRest[3]) -MaxBytes 65536
+  exit $LASTEXITCODE
+}
+
+function Convert-FlagArguments([string[]]$Items) {
+  $result=@{};for($i=0;$i -lt $Items.Count;$i+=2){if($i+1 -ge $Items.Count -or -not $Items[$i].StartsWith('--')){[Console]::Error.WriteLine('invalid typed arguments');exit 2};$key=$Items[$i].Substring(2);if($result.ContainsKey($key)){[Console]::Error.WriteLine('duplicate typed argument');exit 2};$result[$key]=$Items[$i+1]};return $result
+}
+
+function Cmd-Probe {
+  if($argsRest.Count -lt 1){[Console]::Error.WriteLine('usage: probe flash|rtt-capture ...');exit 2};$sub=$argsRest[0]
+  if($sub -eq 'flash'){
+    if($argsRest.Count -lt 4){[Console]::Error.WriteLine('usage: probe flash ARTIFACT --provider ...');exit 2};$artifact=$argsRest[1];$flags=Convert-FlagArguments @($argsRest[2..($argsRest.Count-1)])
+    foreach($name in @('provider','chip','probe','port','expected-sha256','environment','workspace')){if(-not $flags.ContainsKey($name)){[Console]::Error.WriteLine("missing --$name");exit 2}}
+    $helper=Join-Path $AgentHome 'lib\probe-flash.ps1';Assert-SafePath $helper
+    $pio=(Get-Command pio -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Source -First 1);if(-not $pio){$pio='pio'}
+    $probeRs=if($env:LABWIRED_PROBE_RS){$env:LABWIRED_PROBE_RS}else{(Get-Command probe-rs -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Source -First 1)}
+    & $helper -Provider $flags['provider'] -Artifact $artifact -ExpectedSha256 $flags['expected-sha256'] -Chip $flags['chip'] -Probe $flags['probe'] -Port $flags['port'] -Environment $flags['environment'] -Workspace $flags['workspace'] -Pio $pio -ProbeRs $probeRs
+    exit $LASTEXITCODE
+  }
+  if($sub -eq 'rtt-capture'){
+    if($argsRest.Count -lt 3){[Console]::Error.WriteLine('usage: probe rtt-capture --chip ...');exit 2};$flags=Convert-FlagArguments @($argsRest[1..($argsRest.Count-1)]);foreach($name in @('chip','probe','elf','marker','timeout')){if(-not $flags.ContainsKey($name)){[Console]::Error.WriteLine("missing --$name");exit 2}}
+    $probeRs=if($env:LABWIRED_PROBE_RS){$env:LABWIRED_PROBE_RS}else{(Get-Command probe-rs -ErrorAction SilentlyContinue|Select-Object -ExpandProperty Source -First 1)}
+    $helper=Join-Path $AgentHome 'lib\rtt-capture.ps1';Assert-SafePath $helper
+    & $helper -ProbeRs $probeRs -Chip $flags['chip'] -Probe $flags['probe'] -Elf $flags['elf'] -Marker $flags['marker'] -TimeoutSeconds ([int]$flags['timeout']);exit $LASTEXITCODE
+  }
+  Fail "unknown probe command $sub"
 }
 
 function Get-LabWiredAgentConfigDir {
@@ -644,6 +675,9 @@ switch ($cmd) {
   "self-update" { Cmd-Update }
   "upgrade" { Cmd-Update }
   "serial-challenge" { Cmd-SerialChallenge }
+  "serial-capture" { Cmd-SerialCapture }
+  "probe" { Cmd-Probe }
+  "rtt-capture" { $script:argsRest=@('rtt-capture')+@($argsRest); Cmd-Probe }
   "opencode" {
     # Internal engine alias - same product start as bare labwired agent.
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {

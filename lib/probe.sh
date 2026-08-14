@@ -226,6 +226,12 @@ labwired_probe_flash() {
       [[ "$environment" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "labwired probe flash: invalid PlatformIO environment" >&2; return 2; }
       [[ -n "$workspace" && -f "$workspace/platformio.ini" ]] || { echo "labwired probe flash: explicit PlatformIO workspace is invalid" >&2; return 2; }
       command -v pio >/dev/null 2>&1 || { echo "labwired probe flash: pio not found" >&2; return 2; }
+      local device_json=""
+      device_json="$(pio device list --json-output)" || { echo "labwired probe flash: cannot enumerate PlatformIO devices" >&2; return 2; }
+      LABWIRED_PIO_DEVICE_JSON="$device_json" node -e '
+const devices=JSON.parse(process.env.LABWIRED_PIO_DEVICE_JSON); const [port,serial]=process.argv.slice(1);
+const matches=devices.filter(d=>d && d.port===port && (d.serialNumber===serial || d.serial_number===serial || [d.hwid,d.description].filter(v=>typeof v==="string").some(v=>v===serial || v.includes("SER="+serial) || v.includes("SERIAL="+serial))));
+if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwired probe flash: explicit port does not map uniquely to requested serial identity" >&2; return 2; }
       local stage="$workspace/.pio/build/$environment/firmware.bin"
       [[ ! -L "$workspace" && ! -L "$workspace/.pio" && ! -L "$workspace/.pio/build" && ! -L "$workspace/.pio/build/$environment" && ! -L "$stage" ]] || {
         echo "labwired probe flash: PlatformIO staging path must not contain symlinks" >&2; return 2;
@@ -235,15 +241,59 @@ labwired_probe_flash() {
       workspace_real="$(cd -P "$workspace" && pwd)" || return 2
       stage_parent_real="$(cd -P "$(dirname "$stage")" && pwd)" || return 2
       case "$stage_parent_real/" in "$workspace_real/"*) ;; *) echo "labwired probe flash: staging path escapes workspace" >&2; return 2 ;; esac
-      cp -- "$elf" "$stage"
+      local backup="" backup_sha="" backup_identity="" had_original=0
+      if [[ -e "$stage" ]]; then
+        [[ -f "$stage" && ! -L "$stage" ]] || { echo "labwired probe flash: existing upload artifact is not a regular file" >&2; return 2; }
+        backup="$stage.labwired-backup-$$-$RANDOM"
+        [[ ! -e "$backup" ]] || { echo "labwired probe flash: backup collision" >&2; return 2; }
+        mv -- "$stage" "$backup" || return 2
+        had_original=1
+        if command -v shasum >/dev/null 2>&1; then backup_sha="$(shasum -a 256 -- "$backup" | awk '{print $1}')"
+        else backup_sha="$(sha256sum -- "$backup" | awk '{print $1}')"; fi
+        if stat -f '%d:%i' "$backup" >/dev/null 2>&1; then backup_identity="$(stat -f '%d:%i' "$backup")"
+        else backup_identity="$(stat -c '%d:%i' "$backup")"; fi
+      fi
+      local staged_temp="$stage.labwired-stage-$$-$RANDOM"
+      [[ ! -e "$staged_temp" ]] || { [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
+      cp -- "$elf" "$staged_temp" || { rm -f -- "$staged_temp"; [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
       local stage_sha=""
-      if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
-      else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
-      [[ "$stage_sha" == "$expected_sha" ]] || { echo "labwired probe flash: staged artifact hash mismatch" >&2; return 1; }
-      (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || return $?
-      if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
-      else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
-      [[ "$stage_sha" == "$expected_sha" ]] || { echo "labwired probe flash: PlatformIO changed the staged artifact" >&2; return 1; }
+      if [[ -f "$staged_temp" && ! -L "$staged_temp" ]]; then
+        if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$staged_temp" | awk '{print $1}')"
+        else stage_sha="$(sha256sum -- "$staged_temp" | awk '{print $1}')"; fi
+      else stage_sha=""; fi
+      if [[ "$stage_sha" != "$expected_sha" ]]; then
+        rm -f -- "$staged_temp"
+        [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"
+        echo "labwired probe flash: staged artifact hash mismatch" >&2; return 1
+      fi
+      mv -- "$staged_temp" "$stage" || { rm -f -- "$staged_temp"; [[ "$had_original" -eq 1 ]] && mv -- "$backup" "$stage"; return 2; }
+      local upload_rc=0 cleanup_rc=0
+      (cd "$workspace" && pio run -e "$environment" -t nobuild -t upload --upload-port "$port") || upload_rc=$?
+      if [[ -f "$stage" && ! -L "$stage" ]]; then
+        if command -v shasum >/dev/null 2>&1; then stage_sha="$(shasum -a 256 -- "$stage" | awk '{print $1}')"
+        else stage_sha="$(sha256sum -- "$stage" | awk '{print $1}')"; fi
+      else stage_sha=""; fi
+      if [[ "$stage_sha" != "$expected_sha" ]]; then
+        echo "labwired probe flash: PlatformIO changed or replaced the staged artifact" >&2
+        cleanup_rc=1
+      else
+        rm -- "$stage" || cleanup_rc=1
+      fi
+      if [[ "$had_original" -eq 1 ]]; then
+        local current_backup_sha="" current_backup_identity=""
+        if [[ ! -f "$backup" || -L "$backup" ]]; then cleanup_rc=1
+        else
+          if command -v shasum >/dev/null 2>&1; then current_backup_sha="$(shasum -a 256 -- "$backup" | awk '{print $1}')"
+          else current_backup_sha="$(sha256sum -- "$backup" | awk '{print $1}')"; fi
+          if stat -f '%d:%i' "$backup" >/dev/null 2>&1; then current_backup_identity="$(stat -f '%d:%i' "$backup")"
+          else current_backup_identity="$(stat -c '%d:%i' "$backup")"; fi
+          if [[ "$current_backup_sha" != "$backup_sha" || "$current_backup_identity" != "$backup_identity" || -e "$stage" ]]; then cleanup_rc=1
+          else mv -- "$backup" "$stage" || cleanup_rc=1
+          fi
+        fi
+      fi
+      [[ "$cleanup_rc" -eq 0 ]] || { echo "labwired probe flash: staging cleanup ownership failure; recovery may be required" >&2; return 1; }
+      [[ "$upload_rc" -eq 0 ]] || return "$upload_rc"
       ;;
     probe-rs)
       [[ "$elf" == *.elf ]] || { echo "labwired probe flash: probe-rs exact flash requires an ELF artifact" >&2; return 2; }
@@ -253,7 +303,9 @@ labwired_probe_flash() {
       ;;
     *) echo "labwired probe flash: unsupported explicit provider $provider" >&2; return 2 ;;
   esac
-  node -e 'const [provider,artifactSha256,chip,probeSerial,serialPort]=process.argv.slice(1); console.log("LABWIRED_FLASH_RECEIPT "+JSON.stringify({provider,artifactSha256:artifactSha256.toLowerCase(),chip,probeSerial,serialPort}))' "$provider" "$expected_sha" "$chip" "$probe_sel" "$port"
+  local canonical_workspace=""
+  [[ -n "$workspace" ]] && canonical_workspace="$(cd -P "$workspace" && pwd)"
+  node -e 'const [provider,artifactSha256,chip,probeSerial,serialPort,environment,workspace]=process.argv.slice(1); console.log("LABWIRED_FLASH_RECEIPT "+JSON.stringify({provider,artifactSha256:artifactSha256.toLowerCase(),chip,environment,workspace,probeSerial,observationPort:serialPort,identityApplied:true,serialPortApplied:provider==="platformio"}))' "$provider" "$expected_sha" "$chip" "$probe_sel" "$port" "$environment" "$canonical_workspace"
 }
 
 labwired_probe_reset() {

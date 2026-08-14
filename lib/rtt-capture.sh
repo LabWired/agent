@@ -3,7 +3,7 @@
 # shellcheck shell=bash
 #
 # Usage:
-#   labwired_rtt_capture --chip <id> [--elf path] [--marker M] [--timeout S]
+#   labwired_rtt_capture --chip <id> --probe <selector> [--elf path] [--marker M] [--timeout S]
 #
 # Exit:
 #   0  marker observed → prints hardware_observed JSON
@@ -16,6 +16,7 @@
 labwired_rtt_capture() {
   local chip=""
   local elf=""
+  local probe_sel=""
   local marker="${LABWIRED_HW_MARKER:-LABWIRED_OK}"
   local timeout="${LABWIRED_RTT_TIMEOUT:-8}"
 
@@ -23,23 +24,28 @@ labwired_rtt_capture() {
     case "$1" in
       --chip) chip="${2:-}"; shift 2 || true ;;
       --elf) elf="${2:-}"; shift 2 || true ;;
+      --probe) probe_sel="${2:-}"; shift 2 || true ;;
       --marker) marker="${2:-}"; shift 2 || true ;;
       --timeout) timeout="${2:-}"; shift 2 || true ;;
       -h|--help)
-        echo "usage: labwired_rtt_capture --chip <id> [--elf path] [--marker M] [--timeout S]"
+        echo "usage: labwired_rtt_capture --chip <id> --probe <selector> [--elf path] [--marker M] [--timeout S]"
         return 0
         ;;
-      *) shift || true ;;
+      *) echo "rtt-capture: unknown argument $1" >&2; return 2 ;;
     esac
   done
+  [[ -n "$probe_sel" ]] || { echo "rtt-capture: --probe is required" >&2; return 2; }
 
   # Fixture path: same JSON contract as UART without inventing hardware
   if [[ -n "${LABWIRED_RTT_FIXTURE:-}" && -f "${LABWIRED_RTT_FIXTURE}" ]]; then
     export LABWIRED_SERIAL_FIXTURE="$LABWIRED_RTT_FIXTURE"
     # shellcheck source=lib/serial-capture.sh
     source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/serial-capture.sh"
-    labwired_serial_capture "-" 115200 "$marker" "$timeout"
-    return $?
+    local fixture_result="" fixture_rc=0
+    fixture_result="$(labwired_serial_capture "-" 115200 "$marker" "$timeout")" || fixture_rc=$?
+    [[ "$fixture_rc" -eq 0 ]] || { printf '%s\n' "$fixture_result"; return "$fixture_rc"; }
+    LABWIRED_RTT_RESULT="$fixture_result" LABWIRED_RTT_PROBE="$probe_sel" node -e 'const v=JSON.parse(process.env.LABWIRED_RTT_RESULT);v.path="rtt";v.probeSerial=process.env.LABWIRED_RTT_PROBE;console.log(JSON.stringify(v))'
+    return 0
   fi
 
   local prs
@@ -75,9 +81,9 @@ labwired_rtt_capture() {
   local out
   out="$(mktemp)"
   set +e
-  # shellcheck disable=SC2086
-  timeout "${timeout}" "$prs" attach ${chip:+--chip "$chip"} ${elf:+--elf "$elf"} \
-    >"$out" 2>&1
+  local args=(attach --chip "$chip" --probe "$probe_sel")
+  [[ -n "$elf" ]] && args+=(--elf "$elf")
+  timeout "${timeout}" "$prs" "${args[@]}" >"$out" 2>&1
   set -e
   if grep -Fq "$marker" "$out"; then
     python3 - <<PY
@@ -91,6 +97,7 @@ print(json.dumps({
   "matched": True,
   "excerpt": text[:500],
   "chip": r"""$chip""",
+  "probeSerial": r"""$probe_sel""",
 }, indent=2))
 PY
     rm -f "$out"
