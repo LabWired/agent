@@ -5,9 +5,10 @@ import { rmSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 
-import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
+import { createTrustedAdapters, resolveAgentLauncher } from '../lib/hardware/adapters.mjs';
 import { createEvidenceBundle, sha256File } from '../lib/hardware/evidence.mjs';
 import { resolveLaunch } from '../lib/hardware/process.mjs';
 import { validateHardwareProfile } from '../lib/hardware/profile.mjs';
@@ -122,6 +123,33 @@ test('physical plans are credential-free and normalize safely on Windows', async
   const resolved = resolveLaunch(descriptor, { platform: 'win32', pathEnv: 'C:\\Windows\\System32' });
   assert.equal(resolved.spawnOptions.shell, false);
   assert.deepEqual(resolved.args.slice(0, 5), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File']);
+});
+
+test('default launcher decodes spaced module paths and all physical adapters inherit the Windows ps1', async () => {
+  const simulatedModule = pathToFileURL(path.join('/tmp', 'Program Files', 'LabWired', 'lib', 'hardware', 'adapters.mjs'));
+  const decoded = resolveAgentLauncher({ platform: 'win32', moduleUrl: simulatedModule });
+  assert.equal(decoded.includes('%20'), false); assert.match(decoded, /Program Files/); assert.match(decoded, /labwired-agent\.ps1$/);
+  const root = await sandbox(); const p = profile(root); const hash = await sha256File(p.build.artifact);
+  const { adapters, calls } = harness(undefined, { agentPath: undefined, platform: 'win32' });
+  const flashReady = await adapters.flash.platformio.preflight(p, { artifactSha256: hash });
+  const serial = { id: 'serial', provider: 'serial', contains: 'ok', requiredLevel: 'hardware_observed' };
+  const rtt = { id: 'rtt', provider: 'rtt', contains: 'ok', requiredLevel: 'hardware_observed' };
+  const plans = [
+    adapters.flash.platformio.plan(p, flashReady),
+    adapters.observation.serial.plan(p, serial, await adapters.observation.serial.preflight(p, serial)),
+    adapters.observation.rtt.plan(p, rtt, await adapters.observation.rtt.preflight(p, rtt)),
+  ];
+  for (const descriptor of plans) {
+    assert.match(descriptor.executable, /labwired-agent\.ps1$/);
+    const resolved = resolveLaunch(descriptor, { platform: 'win32', pathEnv: 'C:\\Windows\\System32' });
+    assert.deepEqual(resolved.args.slice(0, 5), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File']);
+    assert.equal(resolved.args[5], descriptor.executable);
+  }
+  const network = { id: 'network', provider: 'network', deviceMarker: 'READY', hostProbeUrlFromMarker: 'IP', hostProbePath: '/', requiredLevel: 'hardware_observed' };
+  await adapters.observation.network.execute(p, network);
+  assert.match(calls[0].descriptor.executable, /labwired-agent\.ps1$/);
+  assert.throws(() => resolveAgentLauncher({ platform: 'win32', override: 'relative-agent.ps1' }), /absolute/);
+  assert.throws(() => resolveAgentLauncher({ platform: 'win32', override: 'C:\\LabWired\\agent.cmd' }), /command shim/);
 });
 
 test('flash preserves timeout and cancellation classifications without granting evidence', async (t) => {
