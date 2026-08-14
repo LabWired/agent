@@ -95,7 +95,10 @@ function Invoke-NativeComponent {
   $stdout = $process.StandardOutput.ReadToEndAsync()
   $stderr = $process.StandardError.ReadToEndAsync()
   $process.WaitForExit()
-  [Console]::Out.Write($stdout.Result)
+  # Keep stdout in PowerShell's success stream. Writing it directly to the
+  # process console and then returning from this function duplicates output
+  # when the dispatcher itself is captured by Tee-Object.
+  Write-Output -NoEnumerate $stdout.Result
   [Console]::Error.Write($stderr.Result)
   return $process.ExitCode
 }

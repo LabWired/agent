@@ -233,6 +233,9 @@ try {
   if ($versionText -notmatch "LabWired Agent" -or $versionText -notmatch "(?m)^version  ") {
     throw "initial Agent version output is incomplete"
   }
+  if (@($versionText -split "`r?`n" | Where-Object { $_ -match '^version  ' }).Count -ne 1) {
+    throw "initial Agent version command executed more than once"
+  }
   Complete-LifecyclePhase "initial-version"
 
   Start-LifecyclePhase "initial-doctor"
@@ -243,6 +246,9 @@ try {
   $doctorText = Get-Content -LiteralPath (Join-Path $EvidenceDir "doctor.txt") -Raw
   if ($doctorText -notmatch "agent-runtime" -or $doctorText -notmatch "ready") {
     throw "initial Agent doctor output is incomplete"
+  }
+  if (@($doctorText -split "`r?`n" | Where-Object { $_ -match '^==> ready$' }).Count -ne 1) {
+    throw "initial Agent doctor command executed more than once"
   }
   Complete-LifecyclePhase "initial-doctor"
 
