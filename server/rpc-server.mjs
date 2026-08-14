@@ -535,25 +535,6 @@ async function toolRun(params) {
   };
 }
 
-function findProbeRs() {
-  const candidates = [
-    process.env.LABWIRED_PROBE_RS,
-    join(homedir(), ".labwired", "tools", "probe-rs", "probe-rs"),
-    join(homedir(), ".labwired", "bin", "probe-rs"),
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  // PATH
-  try {
-    const r = spawn("which", ["probe-rs"], { encoding: "utf8" });
-    // sync-less: use fs which only
-  } catch {
-    /* */
-  }
-  return null;
-}
-
 function whichSync(bin) {
   try {
     const r = spawnSync(process.platform === "win32" ? "where" : "which", [bin], {
@@ -564,6 +545,34 @@ function whichSync(bin) {
   } catch {
     return null;
   }
+}
+
+/** probe-rs path, resolved by lib/resolve-probe.sh — the CLI's own resolver.
+ *  Do NOT re-implement the candidate list here: a second list drifts, and it did
+ *  (the old JS missed $LABWIRED_HOME, prefix/bin, and ~/.cargo/bin, so a
+ *  cargo-installed probe-rs worked in the terminal and was "missing" in the editor).
+ *  Sourcing the lib costs ~2ms; cached per session because the path cannot move
+ *  while the server runs. Returns null when probe-rs is absent. */
+let probeRsCached;
+function resolveProbeRs() {
+  if (probeRsCached !== undefined) return probeRsCached;
+  const lib = join(AGENT_ROOT, "lib", "resolve-probe.sh");
+  if (existsSync(lib)) {
+    try {
+      const r = spawnSync("bash", ["-c", `source "$1"; labwired_resolve_probe_rs`, "_", lib], {
+        encoding: "utf8",
+      });
+      const out = (r.stdout || "").trim().split(/\r?\n/)[0] || "";
+      probeRsCached = r.status === 0 && out ? out : null;
+      return probeRsCached;
+    } catch {
+      /* fall through to the degraded lookup below */
+    }
+  }
+  // Degraded: server running without the Agent kit beside it (copied server, tests).
+  // PATH only — never a second candidate list.
+  probeRsCached = whichSync("probe-rs");
+  return probeRsCached;
 }
 
 /** Hardware claim shape — never invent model_verified from flash/serial. */
@@ -745,11 +754,7 @@ async function runSpecialTool(tool, params) {
 }
 
 function runDebugOp(op, params) {
-  const probeRs =
-    process.env.LABWIRED_PROBE_RS ||
-    (existsSync(join(homedir(), ".labwired", "tools", "probe-rs", "probe-rs"))
-      ? join(homedir(), ".labwired", "tools", "probe-rs", "probe-rs")
-      : whichSync("probe-rs"));
+  const probeRs = resolveProbeRs();
 
   if (op === "info") {
     const lines = [

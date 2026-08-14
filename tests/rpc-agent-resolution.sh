@@ -12,7 +12,10 @@ printf '%s\n' '#!/usr/bin/env bash' 'echo "explicit-agent-ok"' >"$TMP/explicit-a
 chmod +x "$TMP/path/labwired-agent" "$TMP/path/labwired" "$TMP/explicit-agent"
 
 NODE_BIN="$(command -v node)"
-PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
+# HOME must be sandboxed too: findLabwiredAgent() checks
+# $HOME/.labwired/agent/bin/labwired-agent BEFORE PATH, so on a host with the
+# Agent installed the real CLI wins and the PATH fake is never reached.
+HOME="$TMP" PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
 import json, os, select, subprocess, sys, time
 server, node, core, explicit = sys.argv[1:5]
 
