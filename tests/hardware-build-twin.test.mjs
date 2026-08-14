@@ -48,7 +48,7 @@ function profile(root, provider = 'platformio') {
   };
 }
 
-function harness(onRun) {
+function harness(onRun, dependencyOverrides = {}) {
   const calls = [];
   const tools = { pio: '/trusted/pio', make: '/trusted/make', cmake: '/trusted/cmake', 'labwired-sim': '/trusted/labwired-sim' };
   const adapters = createTrustedAdapters({
@@ -59,6 +59,7 @@ function harness(onRun) {
       calls.push({ descriptor, options });
       return onRun ? onRun(descriptor, options, calls.length) : { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
     },
+    ...dependencyOverrides,
   });
   return { adapters, calls };
 }
@@ -138,8 +139,77 @@ test('failed build restores quarantine only when destination is absent and never
     assert.equal(result.level, 'failed');
     assert.equal(await readFile(p.build.artifact, 'utf8'), replacement ? 'new-partial' : 'old');
     const names = await readdir(path.dirname(p.build.artifact));
-    assert.equal(names.some((name) => name.includes('labwired-quarantine')), replacement);
+    assert.equal(names.some((name) => name.includes('labwired-quarantine')), false);
   });
+});
+
+test('repeated failed replacements never overwrite output or leave hidden quarantines', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  await writeFile(p.build.artifact, 'old');
+  let attempt = 0;
+  const { adapters } = harness(async () => {
+    attempt += 1;
+    await writeFile(p.build.artifact, `replacement-${attempt}`);
+    return { classification: 'exit', exitCode: 2, stdout: '', stderr: 'failed', truncated: { stdout: false, stderr: false } };
+  });
+  for (let expected = 1; expected <= 2; expected += 1) {
+    const result = await adapters.build.platformio.execute(p);
+    assert.equal(result.level, 'failed');
+    assert.equal(await readFile(p.build.artifact, 'utf8'), `replacement-${expected}`);
+    assert.equal((await readdir(path.dirname(p.build.artifact))).some((name) => name.includes('labwired-quarantine')), false);
+  }
+});
+
+test('unprovable quarantine cleanup is explicit and includes a bounded recovery path', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  await writeFile(p.build.artifact, 'old');
+  let corrupted = false;
+  const { adapters } = harness(async () => {
+    await writeFile(p.build.artifact, 'replacement');
+    return { classification: 'exit', exitCode: 2, stdout: '', stderr: 'failed', truncated: { stdout: false, stderr: false } };
+  }, {
+    quarantineHooks: {
+      async beforeCleanup(entry) {
+        if (!corrupted) {
+          corrupted = true;
+          await writeFile(entry.quarantine, 'ownership-lost');
+        }
+      },
+    },
+  });
+  const result = await adapters.build.platformio.execute(p);
+  assert.equal(result.level, 'failed');
+  assert.equal(await readFile(p.build.artifact, 'utf8'), 'replacement');
+  assert.match(result.diagnostics, /quarantine cleanup/i);
+  assert.match(result.diagnostics, /recovery path: .*labwired-quarantine-/i);
+  assert.ok(result.diagnostics.length < 1024);
+});
+
+test('fd snapshot rejects replacement after lstat before open and cannot compile', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  let attackReady = false;
+  let attacked = false;
+  const { adapters } = harness(async () => {
+    await writeFile(p.build.artifact, 'built');
+    attackReady = true;
+    return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+  }, {
+    snapshotHooks: {
+      async afterLstatBeforeOpen({ file }) {
+        if (attackReady && !attacked && file === p.build.artifact) {
+          attacked = true;
+          await rename(file, `${file}.raced`);
+          await writeFile(file, 'replacement');
+        }
+      },
+    },
+  });
+  const result = await adapters.build.platformio.execute(p);
+  assert.equal(result.level, 'failed');
+  assert.match(result.diagnostics, /changed|replaced/i);
 });
 
 test('nonzero, timeout, absent, stale, symlink, and escaped artifacts never compile', async (t) => {
@@ -412,6 +482,37 @@ test('mutation or replacement of original or staged firmware invalidates model e
     });
     assert.equal(result.level, 'failed');
   });
+});
+
+test('fd snapshot rejects pathname replacement during firmware read and cannot produce model evidence', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  await writeFile(p.build.artifact, 'n'.repeat(100_000));
+  const hash = await sha256File(p.build.artifact);
+  let attacked = false;
+  let runs = 0;
+  const { adapters } = harness(async () => {
+    runs += 1;
+    return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+  }, {
+    snapshotHooks: {
+      async duringRead({ file }) {
+        if (!attacked && file === p.build.artifact) {
+          attacked = true;
+          await rename(file, `${file}.raced`);
+          await writeFile(file, 'replacement');
+        }
+      },
+    },
+  });
+  const result = await adapters.twin['labwired-sim'].execute(p, {
+    nativeArtifactSha256: hash,
+    evidenceDir: await evidenceDirectory(root, p),
+  });
+  assert.equal(result.level, 'failed');
+  assert.notEqual(result.level, 'model_observed');
+  assert.equal(runs, 0);
+  assert.match(result.diagnostics, /replaced|changed/i);
 });
 
 test('mutation or replacement of original or staged twin system invalidates model evidence', async (t) => {
