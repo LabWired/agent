@@ -73,8 +73,10 @@ function Invoke-NativeComponent {
   $startInfo.FileName = $Path
   $startInfo.UseShellExecute = $false
   $startInfo.CreateNoWindow = $true
-  $startInfo.RedirectStandardOutput = $true
-  $startInfo.RedirectStandardError = $true
+  # Inherit stdout/stderr. Redirecting and replaying them from this nested
+  # dispatcher duplicates output under Windows PowerShell capture pipelines.
+  $startInfo.RedirectStandardOutput = $false
+  $startInfo.RedirectStandardError = $false
   # Prefer ArgumentList for .exe (preserves empty argv on pwsh/.NET Core).
   # Always use a quoted Arguments string for .cmd/.bat - ArgumentList + cmd is flaky.
   $ext = [IO.Path]::GetExtension($Path)
@@ -92,14 +94,7 @@ function Invoke-NativeComponent {
   $process = New-Object Diagnostics.Process
   $process.StartInfo = $startInfo
   if (-not $process.Start()) { return 1 }
-  $stdout = $process.StandardOutput.ReadToEndAsync()
-  $stderr = $process.StandardError.ReadToEndAsync()
   $process.WaitForExit()
-  # Keep stdout in PowerShell's success stream. Writing it directly to the
-  # process console and then returning from this function duplicates output
-  # when the dispatcher itself is captured by Tee-Object.
-  Write-Output -NoEnumerate $stdout.Result
-  [Console]::Error.Write($stderr.Result)
   return $process.ExitCode
 }
 
