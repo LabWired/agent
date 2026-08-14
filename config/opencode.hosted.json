@@ -3,7 +3,7 @@
   "mcp": {
     "labwired": {
       "type": "remote",
-      "url": "https://api.labwired.com/mcp",
+      "url": "https://api.labwired.com/mcp?toolNames=unprefixed",
       "enabled": true,
       "oauth": false,
       "headers": {
