@@ -20,6 +20,7 @@ import {
   levelSatisfies,
   redactDeep,
   sha256File,
+  verifyEvidenceBundle,
 } from '../lib/hardware/evidence.mjs';
 
 const profile = {
@@ -312,7 +313,7 @@ test('rejects unsafe behavior IDs before creating any bundle path', async () => 
   for (const id of ['../escape', '/absolute', 'nested/child', 'nested\\child', '.', '..', '%2e%2e']) {
     const directory = await temporaryDirectory();
     const unsafeProfile = { ...profile, observations: [{ ...profile.observations[0], id }] };
-    await assert.rejects(createEvidenceBundle(directory, unsafeProfile, { redactValues: [] }), /safe behavior ID/);
+    await assert.rejects(createEvidenceBundle(directory, unsafeProfile, { redactValues: [] }), /behavior ID|portable/);
     await assert.rejects(access(directory));
   }
 });
@@ -480,4 +481,76 @@ test('raw evidence paths reject Windows aliases and non-portable components on e
     })), /portable|control|mutable|raw evidence path/);
     assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
   }
+});
+
+test('behavior IDs use portable component rules and portable uniqueness before filesystem work', async () => {
+  for (const id of ['CON', 'con.txt', 'PRN.log', 'NUL.bin', 'COM1.data', 'lpt9.csv', 'led.', 'led ', 'led:stream', 'led\\child', 'léd']) {
+    const directory = await temporaryDirectory();
+    const invalidProfile = { ...profile, observations: [{ ...profile.observations[0], id }] };
+    await assert.rejects(createEvidenceBundle(directory, invalidProfile, { redactValues: [] }), /portable|reserved|behavior ID/);
+    await assert.rejects(access(directory));
+  }
+
+  const directory = await temporaryDirectory();
+  const collidingProfile = {
+    ...profile,
+    observations: [
+      { ...profile.observations[0], id: 'LED' },
+      { ...profile.observations[1], id: 'led' },
+    ],
+  };
+  await assert.rejects(createEvidenceBundle(directory, collidingProfile, { redactValues: [] }), /portable identity|duplicate/);
+  await assert.rejects(access(directory));
+});
+
+test('verifyEvidenceBundle independently validates a persisted PASS', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+  await evidence.finalize();
+
+  const verified = await verifyEvidenceBundle(directory);
+  assert.deepEqual(verified, { valid: true, result: 'PASS', reasons: [] });
+});
+
+test('verifyEvidenceBundle downgrades capture, record, owner, and root mutations to invalid FAIL', async () => {
+  async function finalizedBundle() {
+    const directory = await temporaryDirectory();
+    const evidence = await createReadyEvidence(directory);
+    await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+    await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+    await evidence.finalize();
+    return directory;
+  }
+
+  let directory = await finalizedBundle();
+  await writeFile(path.join(directory, 'captures', 'led.txt'), 'tampered capture\n');
+  let verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.equal(verified.result, 'FAIL');
+
+  directory = await finalizedBundle();
+  const recordPath = path.join(directory, 'observations', 'led', 'result.json');
+  const record = JSON.parse(await readFile(recordPath, 'utf8'));
+  await writeFile(recordPath, `${JSON.stringify({ ...record, level: 'failed' })}\n`);
+  verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.equal(verified.result, 'FAIL');
+
+  directory = await finalizedBundle();
+  const ownerPath = path.join(directory, '.owner.json');
+  const owner = JSON.parse(await readFile(ownerPath, 'utf8'));
+  await writeFile(ownerPath, `${JSON.stringify({ ...owner, owner: 'replaced' })}\n`);
+  verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.equal(verified.result, 'FAIL');
+
+  directory = await finalizedBundle();
+  const original = `${directory}.original`;
+  await rename(directory, original);
+  await symlink(original, directory, process.platform === 'win32' ? 'junction' : 'dir');
+  verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.equal(verified.result, 'FAIL');
 });
