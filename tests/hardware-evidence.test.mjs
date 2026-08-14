@@ -586,6 +586,44 @@ test('verifyEvidenceBundle downgrades capture, record, owner, and root mutations
   assert.equal(verified.result, 'FAIL');
 });
 
+test('verifyEvidenceBundle rejects a zero-stage root symlink without touching its target', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  const receipt = await evidence.finalize();
+  const external = await mkdtemp(path.join(os.tmpdir(), 'labwired-external-'));
+  const sentinel = path.join(external, 'sentinel.txt');
+  await writeFile(sentinel, 'untouched');
+  await rm(path.join(directory, 'stages'), { recursive: true });
+  await symlink(external, path.join(directory, 'stages'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  for (const options of [{}, { expectedManifestSha256: receipt.manifestSha256 }]) {
+    const verified = await verifyEvidenceBundle(directory, options);
+    assert.equal(verified.valid, false);
+    assert.equal(verified.result, 'FAIL');
+    assert.match(verified.reasons[0].message, /stage.*real directory|symlink|escape/i);
+  }
+  assert.equal(await readFile(sentinel, 'utf8'), 'untouched');
+});
+
+test('verifyEvidenceBundle rejects a populated stage root replacement without touching its target', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory, profile, { stages: [{ id: 'flash', provider: 'openocd' }] });
+  const receipt = await evidence.finalize();
+  const external = await mkdtemp(path.join(os.tmpdir(), 'labwired-external-'));
+  const sentinel = path.join(external, 'sentinel.txt');
+  await writeFile(sentinel, 'untouched');
+  await rm(path.join(directory, 'stages'), { recursive: true });
+  await symlink(external, path.join(directory, 'stages'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  for (const options of [{}, { expectedManifestSha256: receipt.manifestSha256 }]) {
+    const verified = await verifyEvidenceBundle(directory, options);
+    assert.equal(verified.valid, false);
+    assert.equal(verified.result, 'FAIL');
+    assert.match(verified.reasons[0].message, /stage.*real directory|symlink|escape/i);
+  }
+  assert.equal(await readFile(sentinel, 'utf8'), 'untouched');
+});
+
 test('typed persistence rejects unknown top-level and nested caller fields', async () => {
   let directory = await temporaryDirectory();
   let evidence = await createReadyEvidence(directory);
