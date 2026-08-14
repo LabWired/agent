@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 
-import { acquireHardwareLocks } from '../lib/hardware/locks.mjs';
+import { __testing, acquireHardwareLocks } from '../lib/hardware/locks.mjs';
 
 const identities = { target: 'esp32-c3 bench A', probe: 'J-Link/1234', serial: '/dev/cu.usbmodem 1' };
 
 async function temporaryRoot(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'labwired-locks-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  return root;
+  return realpath(root);
 }
 
 test('locks explicit identities in deterministic order without exposing them in paths or records', async (t) => {
@@ -152,4 +152,100 @@ test('rejects missing, ambiguous, or unsafe identity and root inputs', async (t)
   await assert.rejects(acquireHardwareLocks({}, { root }), /identity/i);
   await assert.rejects(acquireHardwareLocks({ target: '   ' }, { root }), /identity/i);
   await assert.rejects(acquireHardwareLocks({ target: 'board' }, { root: `${root}/..` }), /root/i);
+});
+
+test('rejects a symlink anywhere in the supplied root ancestry', async (t) => {
+  const base = await temporaryRoot(t);
+  const actualParent = path.join(base, 'actual');
+  const linkedParent = path.join(base, 'linked');
+  await writeFile(path.join(base, 'sentinel'), 'outside');
+  await mkdir(actualParent);
+  await symlink(actualParent, linkedParent, 'dir');
+
+  await assert.rejects(
+    acquireHardwareLocks({ target: 'board' }, { root: path.join(linkedParent, 'locks') }),
+    /symbolic|reparse|unsafe/i,
+  );
+  assert.equal(await readFile(path.join(base, 'sentinel'), 'utf8'), 'outside');
+  await assert.rejects(readdir(path.join(actualParent, 'locks')), { code: 'ENOENT' });
+});
+
+test('revalidates root ownership immediately before creating a lock', async (t) => {
+  const root = await temporaryRoot(t);
+  const moved = `${root}-moved`;
+  t.after(() => rm(moved, { recursive: true, force: true }));
+  let checks = 0;
+  const hooks = {
+    async beforeLockMutation() {
+      checks += 1;
+      if (checks === 1) {
+        await rename(root, moved);
+        await symlink(moved, root, 'dir');
+      }
+    },
+  };
+  await assert.rejects(
+    __testing.acquireHardwareLocks({ target: 'board' }, { root }, hooks),
+    /changed|symbolic|unsafe/i,
+  );
+});
+
+for (const operation of ['write', 'sync']) {
+  test(`rolls back its exclusive file when initialization ${operation} fails`, async (t) => {
+    const root = await temporaryRoot(t);
+    const hooks = {
+      async openLock(lockPath, flags, mode) {
+        const descriptor = await open(lockPath, flags, mode);
+        return new Proxy(descriptor, {
+          get(target, property) {
+            if (property === (operation === 'write' ? 'writeFile' : operation)) {
+              return async (...args) => {
+                await target[property](...args);
+                throw new Error(`injected ${operation} failure`);
+              };
+            }
+            const value = target[property];
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+      },
+    };
+    await assert.rejects(
+      __testing.acquireHardwareLocks({ target: `failure-${operation}` }, { root }, hooks),
+      new RegExp(`injected ${operation} failure`),
+    );
+    assert.deepEqual(await readdir(root), []);
+    const retry = await acquireHardwareLocks({ target: `failure-${operation}` }, { root });
+    await retry.release();
+  });
+}
+
+test('initialization failure never removes a replacement lock', async (t) => {
+  const root = await temporaryRoot(t);
+  const replacement = '{"replacement":true}\n';
+  const hooks = {
+    async openLock(lockPath, flags, mode) {
+      const descriptor = await open(lockPath, flags, mode);
+      return new Proxy(descriptor, {
+        get(target, property) {
+          if (property === 'sync') {
+            return async () => {
+              await target.sync();
+              await rm(lockPath);
+              await writeFile(lockPath, replacement, { flag: 'wx' });
+              throw new Error('injected replacement failure');
+            };
+          }
+          const value = target[property];
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    },
+  };
+  await assert.rejects(
+    __testing.acquireHardwareLocks({ target: 'replacement' }, { root }, hooks),
+    /injected replacement failure/,
+  );
+  const [name] = await readdir(root);
+  assert.equal(await readFile(path.join(root, name), 'utf8'), replacement);
 });
