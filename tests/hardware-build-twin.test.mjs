@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -55,6 +55,19 @@ function harness(onRun) {
     },
   });
   return { adapters, calls };
+}
+
+function passingResult(firmwareHash, marker = 'ALIVE', extraAssertions = []) {
+  return {
+    status: 'pass',
+    firmware_hash: firmwareHash,
+    assertions: [{ assertion: { uart_contains: marker }, passed: true }, ...extraAssertions],
+  };
+}
+
+function firmwareFromScript(script) {
+  const line = script.split('\n').find((entry) => entry.startsWith('  firmware: '));
+  return JSON.parse(line.slice('  firmware: '.length));
 }
 
 test('build plans exact shell-free PlatformIO, Make, and CMake descriptors', async (t) => {
@@ -123,23 +136,49 @@ test('adapter selection and typed fields cannot become commands or option escape
   await assert.rejects(adapters.build.cmake.preflight(cmakeEscape), /build directory/);
 });
 
+test('plans accept only adapter-owned preflight capabilities bound to unchanged inputs', async () => {
+  const root = await sandbox();
+  const { adapters } = harness();
+  const pioProfile = profile(root);
+  const pioReady = await adapters.build.platformio.preflight(pioProfile);
+  assert.throws(() => { pioReady.executable = '/bin/sh'; }, /read only|Cannot assign/);
+  assert.throws(() => adapters.build.platformio.plan(pioProfile, { executable: '/bin/sh', toolVersion: 'forged' }), /capability/);
+
+  const makeProfile = profile(root, 'make');
+  assert.throws(() => adapters.build.make.plan(makeProfile, pioReady), /capability/);
+  pioProfile.build.environment = 'changed';
+  assert.throws(() => adapters.build.platformio.plan(pioProfile, pioReady), /changed/);
+
+  const twinProfile = profile(root);
+  const twinReady = await adapters.twin['labwired-sim'].preflight(twinProfile);
+  assert.throws(
+    () => adapters.twin['labwired-sim'].plan(twinProfile, twinReady, { script: '/tmp/forged', output: '/tmp/forged-output' }),
+    /runtime capability/,
+  );
+});
+
 test('twin uses test-file contract with selected system and exact artifact', async (t) => {
   const root = await sandbox();
   const p = profile(root);
   await writeFile(p.build.artifact, 'native');
   const nativeHash = await sha256File(p.build.artifact);
   let script;
+  let stagedArtifact;
+  let stagedHash;
   const { adapters, calls } = harness(async (descriptor) => {
     script = await readFile(descriptor.args[2], 'utf8');
+    stagedArtifact = firmwareFromScript(script);
+    stagedHash = await sha256File(stagedArtifact);
     const output = descriptor.args[4];
     await mkdir(output, { recursive: true });
-    await writeFile(path.join(output, 'result.json'), JSON.stringify({ status: 'pass', firmware_hash: nativeHash, assertions: [{ passed: true }] }));
+    await writeFile(path.join(output, 'result.json'), JSON.stringify(passingResult(nativeHash)));
     return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
   });
   const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: nativeHash });
   assert.equal(result.level, 'model_observed');
   assert.equal(result.nativeArtifactSha256, nativeHash);
-  assert.match(script, new RegExp(`firmware: ${JSON.stringify(p.build.artifact)}`));
+  assert.notEqual(stagedArtifact, p.build.artifact);
+  assert.equal(stagedHash, nativeHash);
   assert.match(script, new RegExp(`system: ${JSON.stringify(p.twin.system)}`));
   assert.deepEqual(calls[0].descriptor.args.slice(0, 2), ['test', '--script']);
   assert.equal(calls[0].descriptor.shell, false);
@@ -157,7 +196,7 @@ test('different supported artifact is labeled surrogate with both hashes and pro
   const { adapters } = harness(async (descriptor) => {
     const output = descriptor.args[4];
     await mkdir(output, { recursive: true });
-    await writeFile(path.join(output, 'result.json'), JSON.stringify({ status: 'pass', firmware_hash: surrogateHash, assertions: [{ passed: true }] }));
+    await writeFile(path.join(output, 'result.json'), JSON.stringify(passingResult(surrogateHash)));
     return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
   });
   const result = await adapters.twin['labwired-sim'].execute(p, {
@@ -191,4 +230,53 @@ test('a passing exit without genuine simulator result cannot yield model evidenc
   const { adapters } = harness();
   const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
   assert.equal(result.level, 'failed');
+});
+
+test('twin result assertions must exactly match requested kind, value, count, and pass state', async (t) => {
+  for (const [name, assertions] of [
+    ['wrong marker', [{ assertion: { uart_contains: 'WRONG' }, passed: true }]],
+    ['missing assertion', []],
+    ['duplicate assertion', [
+      { assertion: { uart_contains: 'ALIVE' }, passed: true },
+      { assertion: { uart_contains: 'ALIVE' }, passed: true },
+    ]],
+    ['extra assertion', [
+      { assertion: { uart_contains: 'ALIVE' }, passed: true },
+      { assertion: { uart_contains: 'EXTRA' }, passed: true },
+    ]],
+    ['failed assertion', [{ assertion: { uart_contains: 'ALIVE' }, passed: false }]],
+  ]) await t.test(name, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    const hash = await sha256File(p.build.artifact);
+    const { adapters } = harness(async (descriptor) => {
+      const output = descriptor.args[4];
+      await writeFile(path.join(output, 'result.json'), JSON.stringify({ status: 'pass', firmware_hash: hash, assertions }));
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    assert.equal(result.level, 'failed');
+  });
+});
+
+test('mutation or replacement of original or staged firmware invalidates model evidence', async (t) => {
+  for (const scenario of ['original-mutate', 'original-replace', 'staged-mutate', 'staged-replace']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    const hash = await sha256File(p.build.artifact);
+    const { adapters } = harness(async (descriptor) => {
+      const script = await readFile(descriptor.args[2], 'utf8');
+      const staged = firmwareFromScript(script);
+      const target = scenario.startsWith('original') ? p.build.artifact : staged;
+      if (scenario.endsWith('replace')) await unlink(target);
+      await writeFile(target, 'mutated');
+      const output = descriptor.args[4];
+      await writeFile(path.join(output, 'result.json'), JSON.stringify(passingResult(hash)));
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    assert.equal(result.level, 'failed');
+  });
 });
