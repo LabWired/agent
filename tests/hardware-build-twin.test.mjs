@@ -6,7 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
-import { sha256File } from '../lib/hardware/evidence.mjs';
+import { createEvidenceBundle, levelSatisfies, sha256File } from '../lib/hardware/evidence.mjs';
 
 const temporaryRoots = new Set();
 process.once('exit', () => {
@@ -246,11 +246,12 @@ test('different supported artifact is labeled surrogate with both hashes and pro
     sharedSourcePaths: ['src/main.cpp'],
   });
   assert.equal(result.level, 'surrogate_model_observed');
-  assert.equal(result.nativeArtifactSha256, nativeHash);
+  assert.equal(result.artifactSha256, nativeHash);
   assert.equal(result.surrogateArtifactSha256, surrogateHash);
-  assert.equal(result.sharedSources[0].path, 'src/main.cpp');
-  assert.equal(result.sharedSources[0].sha256, await sha256File(path.join(root, 'src', 'main.cpp')));
-  assert.equal(result.sharedSources[0].size, 13);
+  assert.deepEqual(result.sharedSourcePaths, ['src/main.cpp']);
+  assert.deepEqual(Object.keys(result).sort(), [
+    'artifactSha256', 'level', 'provider', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
+  ]);
 });
 
 test('unsupported native twin execution is blocked and never upgrades compilation', async (t) => {
@@ -397,4 +398,51 @@ test('surrogate shared sources must be unique existing contained regular files a
     assert.equal(result.level, 'failed');
     assert.equal(runs, ['mutate', 'replace'].includes(scenario) ? 1 : 0);
   });
+});
+
+test('surrogate adapter output normalizes into the real evidence contract without upgrading model requirements', async () => {
+  const root = await sandbox();
+  const p = profile(root);
+  p.twin.artifactRelation = 'surrogate';
+  await writeFile(p.build.artifact, 'native');
+  const surrogate = path.join(root, 'build', 'surrogate.elf');
+  await writeFile(surrogate, 'surrogate');
+  await mkdir(path.join(root, 'src'));
+  await writeFile(path.join(root, 'src', 'main.cpp'), 'shared');
+  const nativeHash = await sha256File(p.build.artifact);
+  const surrogateHash = await sha256File(surrogate);
+  const { adapters } = harness(async (descriptor) => {
+    await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(surrogateHash)));
+    return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+  });
+  const adapterResult = await adapters.twin['labwired-sim'].execute(p, {
+    nativeArtifactSha256: nativeHash,
+    twinArtifact: surrogate,
+    sharedSourcePaths: ['src/main.cpp'],
+  });
+  assert.deepEqual(Object.keys(adapterResult).sort(), [
+    'artifactSha256', 'level', 'provider', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
+  ]);
+
+  const bundleRoot = path.join(root, 'evidence');
+  const evidence = await createEvidenceBundle(bundleRoot, p);
+  await mkdir(path.join(bundleRoot, 'captures'));
+  await writeFile(path.join(bundleRoot, 'captures', 'alive.txt'), 'surrogate simulator assertion evidence\n');
+  const startedAt = new Date().toISOString();
+  const record = await evidence.recordBehavior('alive', {
+    ...adapterResult,
+    behaviorId: 'alive',
+    provider: p.observations[0].provider,
+    targetIdentity: { ...p.target },
+    startedAt,
+    endedAt: new Date().toISOString(),
+    rawEvidenceRefs: ['captures/alive.txt'],
+    diagnostics: { simulator: 'passed exact requested assertion against surrogate' },
+  });
+  assert.equal(record.level, 'surrogate_model_observed');
+  assert.equal(levelSatisfies(record.level, 'model_observed'), false);
+  const summary = await evidence.finalize();
+  assert.equal(summary.result, 'FAIL');
+  assert.equal(summary.reasons[0].actualLevel, 'surrogate_model_observed');
+  assert.equal(summary.reasons[0].requiredLevel, 'model_observed');
 });
