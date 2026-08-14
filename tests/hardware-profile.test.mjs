@@ -71,6 +71,9 @@ test('canonicalProfile is deterministic and redacts credential-shaped values', (
   assert.equal(JSON.stringify(canonical).includes('never-return-this'), false);
   assert.equal(canonical.observations[0].apiToken, '[REDACTED]');
   assert.equal(canonicalProfile({ note: 'token=never-return-this' }).note, '[REDACTED]');
+  assert.equal(canonicalProfile({ note: 'sk-live-secret' }).note, '[REDACTED]');
+  assert.equal(canonicalProfile({ endpoint: 'https://user:password@example.test' }).endpoint, '[REDACTED]');
+  assert.equal(canonicalProfile({ note: 'Authorization: Bearer abc' }).note, '[REDACTED]');
   assert.deepEqual(canonical, canonicalProfile(profile));
 });
 
@@ -102,6 +105,15 @@ test('rejects inline credential values before they can enter a profile', () => {
   assert.throws(() => validateHardwareProfile(minimal({
     observations: [{ ...minimal().observations[0], contains: 'api_key=sk-test' }],
   }), fixturePath), /inline credential/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    build: { ...minimal().build, environment: 'https://user:password@example.test' },
+  }), fixturePath), /inline credential/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], contains: 'Authorization: Bearer abc' }],
+  }), fixturePath), /inline credential/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], contains: 'Bearer abc' }],
+  }), fixturePath), /inline credential/i);
   assert.doesNotThrow(() => validateHardwareProfile(minimal({
     observations: [{ ...minimal().observations[0], contains: 'TOKEN_READY' }],
   }), fixturePath));
@@ -127,7 +139,10 @@ test('resolves logic CSV files under the workspace', async () => {
     timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 2,
     requiredLevel: 'hardware_observed',
   };
-  await withProfile(minimal({ observations: [observation] }), async ({ root, profilePath }) => {
+  await withProfile(minimal({
+    target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0' },
+    observations: [observation],
+  }), async ({ root, profilePath }) => {
     const profile = await loadHardwareProfile(profilePath, { realpath: true });
     assert.equal(profile.observations[0].file, path.join(await realpath(root), 'captures', 'logic.csv'));
   });
@@ -198,9 +213,33 @@ test('requires a physical profile to name the target, probe, and serial port', (
     }],
   }), fixturePath), /probeSerial|physical.*identity/i);
   assert.doesNotThrow(() => validateHardwareProfile(minimal({
-    target: { id: 'desk-c3', chip: 'esp32c3', serialPort: '/dev/ttyACM0' },
+    target: {
+      id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0',
+    },
     observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
   }), fixturePath));
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{
+      id: 'led', provider: 'logic-csv', file: 'capture.csv', channel: 0,
+      timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 2,
+      requiredLevel: 'hardware_observed',
+    }],
+  }), fixturePath), /probeSerial.*serialPort|physical.*identity/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{
+      id: 'wifi', provider: 'network', deviceMarker: 'WIFI_READY',
+      hostProbeUrlFromMarker: 'DEVICE_IP', hostProbePath: '/health',
+      requiredLevel: 'hardware_observed',
+    }],
+  }), fixturePath), /probeSerial.*serialPort|physical.*identity/i);
+  for (const sentinel of ['auto', 'FIRST', 'Any', 'default']) {
+    assert.throws(() => validateHardwareProfile(minimal({
+      target: {
+        id: sentinel, chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0',
+      },
+      observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
+    }), fixturePath), /ambiguous.*identity/i);
+  }
 });
 
 test('allows only the intentional load options', async () => {
