@@ -52,6 +52,7 @@
     "lib/*.sh",
     "server/rpc-server.mjs",
     "share/tools.json",
+    "server/agent-launcher.mjs",
     "server/cloud-auth.mjs",
     "server/catalog-facts.json",
     "share/catalog/README.md",
@@ -155,5 +156,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "yaml": "2.9.0"
   }
 }

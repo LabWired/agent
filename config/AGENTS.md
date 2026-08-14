@@ -128,14 +128,16 @@ Never invent a sim result. Never call debugger success `model_verified`.
 
 ## Default loop (firmware sessions — always)
 
-**For any firmware creation, modification, compile, twin-check, repair, or report task, load `develop` first.**
+**For any firmware / board / blink / prove task, load `golden-path` first.**  
 Do not lead with Superpowers (TDD/plans) alone — domain packs own the loop.
 
 ```text
-develop
-  → bringup / import-circuit   (only when knowledge or external circuit input is needed)
-  → prove                       (labwired_verify → model_verified)
-  → desk-hw                     (optional; available physical board only)
+golden-path                    (entry; delegates firmware work to develop)
+  → develop                    (inspect → ground → edit → compile → twin-check → repair)
+  → bringup / import-circuit   (knowledge MCP: list/describe/part/datasheet)
+  → prove     (labwired_verify → model_verified; three total attempts)
+  → observe   (optional; labwired compose …)
+  → desk-hw   (optional; hardware_observed only)
 ```
 
 If no twin: debugger/probe path with honest claims (not model_verified).
@@ -148,8 +150,8 @@ See `skills/README.md` · `docs/KNOWLEDGE.md`.
 
 | Pack | When |
 |------|------|
-| **`develop`** | Default inspect → ground → compile → twin-check → repair workflow |
-| **`golden-path`** | First-session guide; delegates firmware work to `develop` |
+| **`golden-path`** | Default end-to-end stranger path; delegates firmware work to `develop` |
+| **`develop`** | Inspect → ground → compile → twin-check → repair workflow |
 | **`bringup`** | Knowledge + diagram + scaffold |
 | **`prove`** | Twin verify, three total attempts (at most two repairs after initial red), evidence report |
 | **`observe`** | Plots from **elements** (not ready-made) |
@@ -161,7 +163,7 @@ Old micro-skill names (verify-firmware, part-knowledge, …) are **removed**.
 ### Superpowers (process — prepacked, secondary for firmware)
 
 Engineering process skills ship in the kit (`using-superpowers`, TDD, plans, …).  
-**On firmware tasks: `develop` first; Superpowers second.**
+**On firmware tasks: `golden-path` first; Superpowers second.**  
 They **do not** mint `model_verified` and **do not** replace knowledge MCP.
 
 **Knowledge (one path):** `bringup` + MCP  
@@ -210,10 +212,10 @@ tool, and whenever a description points at it. That pointer is not optional.
 - Treating `hardware_observed` as `model_verified`  
 - Inventing plot/waveform series or claiming a ready-made plot product exists  
 - Treating a composed plot as `model_verified` or `hardware_observed`  
-- Inventing pinouts, I²C/SPI addresses, or register values without a knowledge tool result or cited project/SDK/SVD/schematic fallback source
+- Inventing pinouts, I²C/SPI addresses, or register values without part/describe tools  
 - Invoking training / QLoRA / fine-tune tooling as part of the agent product  
 - OpenOCD-first workflows as the primary path (probe-rs remains default backend)  
-- More than **three total** edit-and-test attempts, including the initial implementation and verify; after the first red, make at most two repair patches
+- More than **3** repair re-verifies after the first red without stopping and reporting  
 
 ## Offline
 

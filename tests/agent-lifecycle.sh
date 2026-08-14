@@ -148,6 +148,8 @@ echo "ok   agent uninstall isolation PASS"
 export LABWIRED_HOME="$TMP/new-config-prefix"
 export LABWIRED_BIN_DIR="$TMP/new-config-bin"
 export OPENCODE_CONFIG_DIR="$TMP/new-config-opencode"
+unset LABWIRED_MODEL_URL LABWIRED_MODEL_KEY LABWIRED_ACCESS_TOKEN LABWIRED_PROJECT
+export LABWIRED_AGENT_PROFILE=hosted
 mkdir -p "$LABWIRED_BIN_DIR" "$OPENCODE_CONFIG_DIR"
 run_install --agent-only
 python3 - "$OPENCODE_CONFIG_DIR/opencode.json" <<'PY'
@@ -155,8 +157,10 @@ import json, sys
 p = sys.argv[1]
 with open(p) as f:
     data = json.load(f)
-for key in ("model", "default_agent", "autoupdate", "share", "$schema", "agent"):
-    assert key not in data, key
+assert data.get("model") == "labwired/labwired-default", data.get("model")
+assert data.get("default_agent") == "build", data.get("default_agent")
+assert "labwired" in data.get("provider", {}), data.get("provider")
+assert "labwired" in data.get("mcp", {}), data.get("mcp")
 data.setdefault("provider", {})["added-later"] = {"name": "keep"}
 data["settings"] = {"theme": "later-user"}
 with open(p, "w") as f:
@@ -171,6 +175,8 @@ python3 - "$OPENCODE_CONFIG_DIR/opencode.json" <<'PY'
 import json, sys
 with open(sys.argv[1]) as f:
     data = json.load(f)
+assert "model" not in data, data.get("model")
+assert "default_agent" not in data, data.get("default_agent")
 assert data["provider"]["added-later"]["name"] == "keep"
 assert data["settings"]["theme"] == "later-user"
 assert "labwired" not in data.get("provider", {})

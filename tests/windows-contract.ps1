@@ -13,7 +13,10 @@ $ShimDir = Join-Path $TempRoot "shim"
 $Shim = Join-Path $ShimDir "labwired.cmd"
 $ArgsFile = Join-Path $TempRoot "args.txt"
 $Installer = Join-Path $Root "scripts\install.ps1"
+$Harness = Join-Path $Root ".github\workflows\harness.yml"
 $OriginalPath = $env:Path
+$InstallSmoke = Join-Path $Root "tests\windows-install-smoke.ps1"
+$UpgradeSmoke = Join-Path $Root "tests\windows-upgrade-smoke.ps1"
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") {
   Join-Path $PSHOME "pwsh.exe"
 } else {
@@ -71,7 +74,163 @@ function Invoke-Installer([string[]]$Arguments) {
   return (Invoke-NativePowerShell (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Installer) + @($Arguments)))
 }
 
+function Assert-UnsafeUpgradeZip([string]$Kind) {
+  $zipPath = Join-Path $TempRoot ("unsafe-upgrade-" + $Kind + ".zip")
+  $evidenceDir = Join-Path $TempRoot ("unsafe-upgrade-evidence-" + $Kind)
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+  try {
+    $entry = if ($Kind -eq "traversal") {
+      $zip.CreateEntry("../outside.txt")
+    } elseif ($Kind -eq "reparse") {
+      $created = $zip.CreateEntry("previous/unsafe-link")
+      $created.ExternalAttributes = [int][IO.FileAttributes]::ReparsePoint
+      $created
+    } else {
+      $created = $zip.CreateEntry("previous/unsafe-link")
+      $created.ExternalAttributes = [BitConverter]::ToInt32([byte[]](0x00, 0x00, 0xFF, 0xA1), 0)
+      $created
+    }
+    $writer = New-Object IO.StreamWriter($entry.Open())
+    try { $writer.Write("unsafe") } finally { $writer.Dispose() }
+  } finally {
+    $zip.Dispose()
+  }
+  New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+  $env:LABWIRED_EVIDENCE_DIR = $evidenceDir
+  $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $zipPath
+  $env:LABWIRED_PREVIOUS_AGENT_VERSION = "0.3.10"
+  $env:LABWIRED_PREVIOUS_AGENT_SHA256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+  try {
+    $result = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $UpgradeSmoke)
+  } finally {
+    Remove-Item Env:LABWIRED_EVIDENCE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_ARCHIVE -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_VERSION -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_SHA256 -ErrorAction SilentlyContinue
+  }
+  Assert-True ($result.Status -ne 0 -and $result.Output -match "unsafe archive") "upgrade rejects $Kind ZIP before install"
+  foreach ($name in @(
+    "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+    "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+  )) {
+    $path = Join-Path $evidenceDir $name
+    Assert-True ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -gt 0) "$Kind ZIP failure retains $name"
+  }
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "result.txt") -Raw).Trim() -eq "FAIL") "$Kind ZIP failure records FAIL"
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "previous-version.txt") -Raw).Trim() -eq "not-run") "$Kind ZIP is rejected before previous install"
+}
+
+function Assert-InvalidUpgradeVersion([string]$Version, [switch]$RequireOrderingError) {
+  $safeName = $Version -replace "[^0-9A-Za-z]", "_"
+  $zipPath = Join-Path $TempRoot ("invalid-upgrade-version-" + $safeName + ".zip")
+  $evidenceDir = Join-Path $TempRoot ("invalid-upgrade-version-evidence-" + $safeName)
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+  $zip.Dispose()
+  New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
+  $env:LABWIRED_EVIDENCE_DIR = $evidenceDir
+  $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $zipPath
+  $env:LABWIRED_PREVIOUS_AGENT_VERSION = $Version
+  $env:LABWIRED_PREVIOUS_AGENT_SHA256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+  try {
+    $result = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $UpgradeSmoke)
+  } finally {
+    Remove-Item Env:LABWIRED_EVIDENCE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_ARCHIVE -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_VERSION -ErrorAction SilentlyContinue
+    Remove-Item Env:LABWIRED_PREVIOUS_AGENT_SHA256 -ErrorAction SilentlyContinue
+  }
+  Assert-True ($result.Status -ne 0 -and $result.Output -match "stable numeric X.Y.Z|must be older than current") "upgrade rejects invalid baseline version $Version"
+  if ($RequireOrderingError) {
+    Assert-True ($result.Output -match "must be older than current version") "ordered baseline $Version fails for ordering"
+  }
+  foreach ($name in @(
+    "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+    "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+  )) {
+    $path = Join-Path $evidenceDir $name
+    Assert-True ((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -gt 0) "invalid version $Version retains $name"
+  }
+  Assert-True ((Get-Content -LiteralPath (Join-Path $evidenceDir "result.txt") -Raw).Trim() -eq "FAIL") "invalid version $Version records FAIL"
+  $lifecycle = Get-Content -LiteralPath (Join-Path $evidenceDir "lifecycle.txt") -Raw
+  Assert-True ($lifecycle -notmatch "phase=previous-install") "invalid version $Version fails before previous install"
+}
+
 try {
+  New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
+  Assert-True (Test-Path -LiteralPath $InstallSmoke -PathType Leaf) "Windows install evidence script exists"
+  Assert-True (Test-Path -LiteralPath $UpgradeSmoke -PathType Leaf) "Windows upgrade evidence script exists"
+  $installSmokeText = Get-Content -LiteralPath $InstallSmoke -Raw
+  foreach ($marker in @(
+    "LABWIRED_EVIDENCE_DIR",
+    "agent version",
+    "agent doctor",
+    "capabilities.txt",
+    "lifecycle.txt",
+    "result.txt",
+    "PowerShellExe",
+    "-File `$installer",
+    "installed-ownership.manifest",
+    "agent package uninstall --yes",
+    "phase=uninstall",
+    "phase=reinstall",
+    "post-install-user-tui",
+    "failed_phase=",
+    'Write-Result "FAIL"',
+    "Complete-LifecyclePhase",
+    "prefix_sentinel=preserved",
+    "config_sentinel=preserved"
+  )) {
+    Assert-True ($installSmokeText.Contains($marker)) "Windows install evidence includes $marker"
+  }
+  foreach ($file in @(
+    (Join-Path $Root "bin\labwired.ps1"),
+    (Join-Path $Root "bin\labwired-agent.ps1"),
+    (Join-Path $Root "scripts\agent-install.ps1"),
+    (Join-Path $Root "scripts\install.ps1"),
+    (Join-Path $Root "tests\windows-contract.ps1"),
+    (Join-Path $Root "tests\windows-install-smoke.ps1")
+  )) {
+    $bytes = [IO.File]::ReadAllBytes($file)
+    Assert-True (-not ($bytes | Where-Object { $_ -gt 127 })) "$file is ASCII-compatible for Windows PowerShell 5.1"
+  }
+  $agentLauncherText = Get-Content -LiteralPath (Join-Path $Root "bin\labwired-agent.ps1") -Raw
+  Assert-True ($agentLauncherText.Contains('(Get-Command npm -ErrorAction SilentlyContinue) -or (Get-Command npx -ErrorAction SilentlyContinue)')) "Windows doctor groups command availability checks"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentOwnedConfig')) "Windows uninstall removes only recorded Agent config ownership"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentTombstones')) "Windows uninstall removes isolated Agent trees through a safe lifecycle helper"
+  Assert-True ($agentLauncherText.Contains('Assert-NoReparseTree')) "Windows uninstall rejects descendant reparse points before recursive deletion"
+  Assert-True ($agentLauncherText.Contains('Assert-AgentUninstallSafe')) "Windows uninstall validates every target before mutation"
+  Assert-True ($agentLauncherText.Contains('Move-AgentTreeToTombstone')) "Windows uninstall atomically isolates recursive delete roots"
+  Assert-True ($agentLauncherText.Contains('Remove-NoFollowTree')) "Windows uninstall removes tombstones without following reparse entries"
+  Assert-True ($agentLauncherText.Contains('rmdir /s /q')) "Windows tombstone cleanup uses native reparse-safe directory removal"
+  Assert-True ($agentLauncherText.Contains('Assert-CmdLiteralSafePath')) "Windows uninstall rejects cmd.exe-expanded cleanup paths before isolation"
+  Assert-True ($agentLauncherText.Contains('Irreversible deletion begins only after')) "Windows tombstone deletion is an explicit post-commit phase"
+  Assert-True ($agentLauncherText.Contains('LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET')) "Windows uninstall exposes an adversarial post-preflight test hook"
+  Assert-True ($agentLauncherText.Contains('Get-AgentOwnershipPlan')) "Windows uninstall shares one validated ownership plan"
+  Assert-True ($agentLauncherText.Contains('Remove-AgentOwnedConfig $ownershipPlan')) "Windows uninstall consumes its preflight ownership plan after isolation"
+  Assert-True ($agentLauncherText.Contains('Join-Path $env:USERPROFILE ".config\opencode"')) "Windows install and uninstall share the default config path"
+  Assert-True ($agentLauncherText.Contains('json-array:')) "Windows uninstall supports granular array ownership"
+  $installerText = Get-Content -LiteralPath $Installer -Raw
+  Assert-True ($installerText.Contains('labwired-agent.manifest')) "Windows installer records Agent config ownership"
+  Assert-True ($installerText.Contains('json:')) "Windows installer records merged JSON ownership"
+  Assert-True ($installerText.Contains('json-array:')) "Windows installer records granular TUI array ownership"
+  Assert-True ($installerText.Contains('$owned.Remove("tui.json")')) "Windows installer migrates legacy whole-file TUI ownership"
+  Assert-True (-not $installerText.Contains('Add-OwnedEntry (Get-ConfigRelativePath $tuiDst)')) "fresh Windows TUI config uses granular ownership"
+  $harnessText = Get-Content -LiteralPath $Harness -Raw
+  Assert-True ($harnessText.Contains('windows\powershell') -and $harnessText.Contains('windows\pwsh')) "Windows engines write independent evidence directories"
+  Assert-UnsafeUpgradeZip "traversal"
+  Assert-UnsafeUpgradeZip "reparse"
+  Assert-UnsafeUpgradeZip "symlink"
+  $currentAgentVersion = (Get-Content -LiteralPath (Join-Path $Root "VERSION") -Raw).Trim()
+  $currentVersionParts = @($currentAgentVersion.Split(".") | ForEach-Object { [uint64]::Parse($_, [Globalization.CultureInfo]::InvariantCulture) })
+  $futureAgentVersion = "{0}.{1}.{2}" -f $currentVersionParts[0], $currentVersionParts[1], ($currentVersionParts[2] + 1)
+  Assert-InvalidUpgradeVersion $currentAgentVersion -RequireOrderingError
+  Assert-InvalidUpgradeVersion $futureAgentVersion -RequireOrderingError
+  Assert-InvalidUpgradeVersion "0.3.10-rc.1"
+  Assert-InvalidUpgradeVersion "0.3.10+build.1"
   New-Item -ItemType Directory -Path $Prefix -Force | Out-Null
   @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
@@ -247,9 +406,9 @@ public static class NativeArgvEcho {
   $savedPath = $env:Path
   $env:Path = "$fakeGitBin;$savedPath"
   $env:LABWIRED_HOME = $installPrefix
-  $updateOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") update 2>&1 | Out-String
+  $updateResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "update")
   $env:Path = $savedPath
-  Assert-True ($LASTEXITCODE -ne 0 -and $updateOutput -match 'git clone failed') "failed self-update reports native git failure"
+  Assert-True ($updateResult.Status -ne 0 -and $updateResult.Output -match 'git clone failed') "failed self-update reports native git failure"
   Assert-True ((Get-Content (Join-Path $installPrefix "agent\VERSION") -Raw).Trim() -eq 'old-working') "failed self-update leaves Agent runnable"
 
   $result = Invoke-Installer @("-Prefix", (Join-Path $TempRoot "bad-mode"), "-UserBin", $userBin, "-AgentOnly", "-Full", "-SkipOpenCode", "-SkipPathUpdate")
@@ -302,9 +461,48 @@ public static class NativeArgvEcho {
   $agentJunction = Join-Path $uninstallPrefix "agent"
   $null = & cmd.exe /d /c mklink /J $agentJunction $outside
   $env:LABWIRED_HOME = $uninstallPrefix
-  $uninstallOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "bin\labwired-agent.ps1") package uninstall --yes 2>&1 | Out-String
-  Assert-True ($LASTEXITCODE -ne 0 -and $uninstallOutput -match 'reparse-point') "uninstall rejects junction Agent target"
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'reparse-point') "uninstall rejects junction Agent target"
   Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "uninstall preserves external sentinel"
+
+  if (Test-Path $agentJunction) { $null = & cmd.exe /d /c rmdir $agentJunction }
+  $agentJunction = $null
+  New-Item -ItemType Directory -Path (Join-Path $uninstallPrefix "agent\nested") -Force | Out-Null
+  $descendantJunction = Join-Path $uninstallPrefix "agent\nested\outside"
+  $null = & cmd.exe /d /c mklink /J $descendantJunction $outside
+  Assert-True ($LASTEXITCODE -eq 0) "test descendant junction created"
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'reparse-point') "uninstall rejects descendant junction before recursive removal"
+  Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "descendant junction rejection preserves external sentinel"
+
+  if (Test-Path $descendantJunction) { $null = & cmd.exe /d /c rmdir $descendantJunction }
+  $descendantJunction = $null
+  Remove-Item -LiteralPath (Join-Path $uninstallPrefix "agent") -Recurse -Force
+  New-Item -ItemType Directory -Path (Join-Path $uninstallPrefix "agent\nested") -Force | Out-Null
+  Set-Content (Join-Path $uninstallPrefix "agent\nested\owned.txt") "owned" -Encoding ASCII
+  $env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET = $outside
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Remove-Item Env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET -ErrorAction SilentlyContinue
+  Assert-True ($uninstallResult.Status -eq 0) "post-preflight junction is isolated and removed without following"
+  Assert-True ((Get-Content (Join-Path $outside "sentinel.txt") -Raw).Trim() -eq 'keep') "post-preflight junction cleanup preserves external sentinel"
+  Assert-True (-not (Test-Path (Join-Path $uninstallPrefix "agent"))) "atomically isolated Agent root is absent"
+
+  $malformedPrefix = Join-Path $TempRoot "malformed-manifest-prefix"
+  $malformedConfig = Join-Path $TempRoot "malformed-manifest-config"
+  New-Item -ItemType Directory -Path (Join-Path $malformedPrefix "agent\nested"), (Join-Path $malformedPrefix "state\agent"), $malformedConfig -Force | Out-Null
+  Set-Content (Join-Path $malformedPrefix "agent\nested\owned.txt") "agent-intact" -Encoding ASCII
+  Set-Content (Join-Path $malformedPrefix "state\agent\state.txt") "state-intact" -Encoding ASCII
+  Set-Content (Join-Path $malformedConfig "opencode.json") '{"user":"config-intact"}' -Encoding ASCII
+  Set-Content (Join-Path $malformedConfig "labwired-agent.manifest") "json:" -Encoding ASCII
+  $env:LABWIRED_HOME = $malformedPrefix
+  $env:LABWIRED_AGENT_CONFIG_DIR = $malformedConfig
+  $env:OPENCODE_CONFIG_DIR = $malformedConfig
+  $uninstallResult = Invoke-NativePowerShell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "bin\labwired-agent.ps1"), "package", "uninstall", "--yes")
+  Assert-True ($uninstallResult.Status -ne 0 -and $uninstallResult.Output -match 'unsafe Agent ownership entry') "malformed JSON ownership is rejected before isolation"
+  Assert-True ((Get-Content (Join-Path $malformedPrefix "agent\nested\owned.txt") -Raw).Trim() -eq 'agent-intact') "malformed ownership leaves Agent root intact"
+  Assert-True ((Get-Content (Join-Path $malformedPrefix "state\agent\state.txt") -Raw).Trim() -eq 'state-intact') "malformed ownership leaves Agent state intact"
+  Assert-True ((Get-Content (Join-Path $malformedConfig "opencode.json") -Raw) -match 'config-intact') "malformed ownership leaves config untouched"
+  Assert-True (-not @(Get-ChildItem -LiteralPath $malformedPrefix -Recurse -Force | Where-Object { $_.Name -like '.labwired-agent-delete-*' }).Count) "malformed ownership leaks no tombstones"
   Write-Host "ok   windows-contract PASS"
 } finally {
   Remove-Item Env:LABWIRED_AGENT_BIN -ErrorAction SilentlyContinue
@@ -313,8 +511,10 @@ public static class NativeArgvEcho {
   Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:LABWIRED_WINDOWS_TEST_MODE -ErrorAction SilentlyContinue
   Remove-Item Env:LABWIRED_TEST_CORE_CMD -ErrorAction SilentlyContinue
+  Remove-Item Env:LABWIRED_TEST_UNINSTALL_RACE_JUNCTION_TARGET -ErrorAction SilentlyContinue
   $env:Path = $OriginalPath
   if ($agentJunction -and (Test-Path $agentJunction)) { $null = & cmd.exe /d /c rmdir $agentJunction }
+  if ($descendantJunction -and (Test-Path $descendantJunction)) { $null = & cmd.exe /d /c rmdir $descendantJunction }
   if ($junction -and (Test-Path $junction)) { $null = & cmd.exe /d /c rmdir $junction }
   Remove-Item $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
   if ($outside) { Remove-Item $outside -Recurse -Force -ErrorAction SilentlyContinue }

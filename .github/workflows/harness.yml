@@ -6,9 +6,12 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Install contract dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: unit + skills + public-install
         run: |
+          node tests/release-evidence-contract.js
           bash tests/harness.sh
           bash tests/skills-inventory.sh
           bash tests/public-install.sh
@@ -30,7 +33,7 @@ jobs:
   install-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: install dependencies for sim download
         run: |
           sudo apt-get update -qq
@@ -48,7 +51,7 @@ jobs:
   windows-contract:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Windows dispatcher contract
         shell: powershell
         run: .\tests\windows-contract.ps1
@@ -64,7 +67,8 @@ jobs:
             ".\bin\labwired-agent.ps1",
             ".\scripts\install.ps1",
             ".\scripts\public\install.ps1",
-            ".\tests\windows-contract.ps1"
+            ".\tests\windows-contract.ps1",
+            ".\tests\windows-upgrade-smoke.ps1"
           )) {
             $tokens = $null
             $parseErrors = $null
@@ -76,10 +80,152 @@ jobs:
             exit 1
           }
 
+  release-evidence-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Source install evidence
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/ubuntu
+        run: bash tests/install-smoke.sh
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-source-ubuntu
+          path: artifacts/release-evidence/ubuntu
+          if-no-files-found: error
+
+  release-evidence-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+      - name: Source install evidence
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/release-evidence/macos
+        run: bash tests/install-smoke.sh
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-source-macos
+          path: artifacts/release-evidence/macos
+          if-no-files-found: error
+
+  release-evidence-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Source install evidence (Windows PowerShell)
+        shell: powershell
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\powershell
+        run: ./tests/windows-install-smoke.ps1
+      - name: Source install evidence (PowerShell Core)
+        if: always()
+        shell: pwsh
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\pwsh
+        run: ./tests/windows-install-smoke.ps1
+      - name: Validate previous-release upgrade configuration
+        if: ${{ always() && (vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL != '' || vars.LABWIRED_PREVIOUS_AGENT_VERSION != '' || vars.LABWIRED_PREVIOUS_AGENT_SHA256 != '') && (vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL == '' || vars.LABWIRED_PREVIOUS_AGENT_VERSION == '' || vars.LABWIRED_PREVIOUS_AGENT_SHA256 == '') }}
+        shell: pwsh
+        run: |
+          $evidenceFiles = @(
+            "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+            "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+          )
+          foreach ($relativePath in @("windows\upgrade\powershell", "windows\upgrade\pwsh")) {
+            $evidence = Join-Path $env:GITHUB_WORKSPACE ("artifacts\release-evidence\" + $relativePath)
+            New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+            foreach ($name in $evidenceFiles) {
+              Set-Content -LiteralPath (Join-Path $evidence $name) -Value "not-run" -Encoding ASCII
+            }
+            Set-Content -LiteralPath (Join-Path $evidence "upgrade-install.txt") -Value "previous-release upgrade configuration is incomplete" -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $evidence "lifecycle.txt") -Value @("phase=validate-inputs", "failed_phase=validate-inputs", "result=FAIL") -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $evidence "result.txt") -Value "FAIL" -Encoding ASCII
+          }
+          throw "LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL, LABWIRED_PREVIOUS_AGENT_VERSION, and LABWIRED_PREVIOUS_AGENT_SHA256 must be configured together"
+      - name: Previous-release upgrade evidence (Windows PowerShell)
+        if: ${{ always() && vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL != '' && vars.LABWIRED_PREVIOUS_AGENT_VERSION != '' && vars.LABWIRED_PREVIOUS_AGENT_SHA256 != '' }}
+        shell: powershell
+        env:
+          LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL: ${{ vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL }}
+          LABWIRED_PREVIOUS_AGENT_VERSION: ${{ vars.LABWIRED_PREVIOUS_AGENT_VERSION }}
+          LABWIRED_PREVIOUS_AGENT_SHA256: ${{ vars.LABWIRED_PREVIOUS_AGENT_SHA256 }}
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\upgrade\powershell
+        run: |
+          $evidenceFiles = @(
+            "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+            "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+          )
+          New-Item -ItemType Directory -Path $env:LABWIRED_EVIDENCE_DIR -Force | Out-Null
+          foreach ($name in $evidenceFiles) {
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR $name) -Value "not-run" -Encoding ASCII
+          }
+          Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "result.txt") -Value "FAIL" -Encoding ASCII
+          $archive = Join-Path $env:RUNNER_TEMP "labwired-previous-agent-powershell.zip"
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL -OutFile $archive
+          } catch {
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "upgrade-install.txt") -Value "archive download failed before install" -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "lifecycle.txt") -Value @("phase=archive-download", "failed_phase=archive-download", "result=FAIL") -Encoding ASCII
+            throw
+          }
+          $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $archive
+          ./tests/windows-upgrade-smoke.ps1
+      - name: Previous-release upgrade not configured (Windows PowerShell)
+        if: ${{ always() && vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL == '' && vars.LABWIRED_PREVIOUS_AGENT_VERSION == '' && vars.LABWIRED_PREVIOUS_AGENT_SHA256 == '' }}
+        shell: powershell
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\upgrade\powershell
+        run: ./tests/windows-upgrade-smoke.ps1
+      - name: Previous-release upgrade evidence (PowerShell Core)
+        if: ${{ always() && vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL != '' && vars.LABWIRED_PREVIOUS_AGENT_VERSION != '' && vars.LABWIRED_PREVIOUS_AGENT_SHA256 != '' }}
+        shell: pwsh
+        env:
+          LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL: ${{ vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL }}
+          LABWIRED_PREVIOUS_AGENT_VERSION: ${{ vars.LABWIRED_PREVIOUS_AGENT_VERSION }}
+          LABWIRED_PREVIOUS_AGENT_SHA256: ${{ vars.LABWIRED_PREVIOUS_AGENT_SHA256 }}
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\upgrade\pwsh
+        run: |
+          $evidenceFiles = @(
+            "platform.txt", "previous-version.txt", "current-version.txt", "upgrade-install.txt",
+            "doctor.txt", "lifecycle.txt", "capabilities.txt", "result.txt"
+          )
+          New-Item -ItemType Directory -Path $env:LABWIRED_EVIDENCE_DIR -Force | Out-Null
+          foreach ($name in $evidenceFiles) {
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR $name) -Value "not-run" -Encoding ASCII
+          }
+          Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "result.txt") -Value "FAIL" -Encoding ASCII
+          $archive = Join-Path $env:RUNNER_TEMP "labwired-previous-agent-pwsh.zip"
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL -OutFile $archive
+          } catch {
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "upgrade-install.txt") -Value "archive download failed before install" -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $env:LABWIRED_EVIDENCE_DIR "lifecycle.txt") -Value @("phase=archive-download", "failed_phase=archive-download", "result=FAIL") -Encoding ASCII
+            throw
+          }
+          $env:LABWIRED_PREVIOUS_AGENT_ARCHIVE = $archive
+          ./tests/windows-upgrade-smoke.ps1
+      - name: Previous-release upgrade not configured (PowerShell Core)
+        if: ${{ always() && vars.LABWIRED_PREVIOUS_AGENT_ARCHIVE_URL == '' && vars.LABWIRED_PREVIOUS_AGENT_VERSION == '' && vars.LABWIRED_PREVIOUS_AGENT_SHA256 == '' }}
+        shell: pwsh
+        env:
+          LABWIRED_EVIDENCE_DIR: ${{ github.workspace }}\artifacts\release-evidence\windows\upgrade\pwsh
+        run: ./tests/windows-upgrade-smoke.ps1
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-source-windows
+          path: artifacts/release-evidence/windows
+          if-no-files-found: error
+
   llm-deepinfra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: DeepInfra Kimi chat smoke (skip if no secret)
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}

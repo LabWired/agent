@@ -264,7 +264,8 @@ backup = cfg_dir / "opencode.json.labwired-backup"
 template = json.loads(Path(os.environ["CONFIG_TEMPLATE"]).read_text())
 # Fresh install: full product config (MCP + model + agent) from the start.
 # Existing file: merge LabWired-owned keys only — never wipe user prefs.
-if dst.exists():
+fresh = not dst.exists()
+if not fresh:
     if not backup.exists():
         shutil.copy2(dst, backup)
     cfg = json.loads(dst.read_text())
@@ -272,6 +273,7 @@ if dst.exists():
         cfg = {}
 else:
     cfg = json.loads(json.dumps(template))  # deep copy full kit config
+preexisting_top = set(cfg) if not fresh else set()
 
 owned = []
 # Product namespaces — always refresh so LabWired MCP is present from install.
@@ -286,8 +288,11 @@ for section, key in (
 
 # Default model / agent persona if missing (first install or stripped config).
 for top in ("model", "default_agent", "agent", "autoupdate", "share"):
-    if top in template and top not in cfg:
+    if top not in template:
+        continue
+    if top not in cfg:
         cfg[top] = template[top]
+    if top not in preexisting_top:
         owned.append(f"json:{top}")
 
 skills = template.get("permission", {}).get("skill", {})

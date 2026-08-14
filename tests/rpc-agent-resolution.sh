@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+node "$ROOT/tests/rpc-agent-launcher.mjs"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/server" "$TMP/path" "$TMP/share"
+mkdir -p "$TMP/server" "$TMP/path" "$TMP/home/.labwired/agent/bin" "$TMP/share"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
+cp "$ROOT/server/agent-launcher.mjs" "$TMP/server/agent-launcher.mjs"
 # The server reads its tool table from <root>/share/tools.json and exits loudly
 # when it is absent, so a copied server must bring the manifest with it.
 cp "$ROOT/share/tools.json" "$TMP/share/tools.json"
@@ -12,13 +14,14 @@ cp "$ROOT/share/tools.json" "$TMP/share/tools.json"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agent-path-ok"' >"$TMP/path/labwired-agent"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "CORE MUST NOT RUN" >&2' 'exit 42' >"$TMP/path/labwired"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "explicit-agent-ok"' >"$TMP/explicit-agent"
-chmod +x "$TMP/path/labwired-agent" "$TMP/path/labwired" "$TMP/explicit-agent"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "STALE HOME AGENT MUST NOT RUN" >&2' 'exit 43' >"$TMP/home/.labwired/agent/bin/labwired-agent"
+chmod +x "$TMP/path/labwired-agent" "$TMP/path/labwired" "$TMP/explicit-agent" "$TMP/home/.labwired/agent/bin/labwired-agent"
 
 NODE_BIN="$(command -v node)"
 # HOME must be sandboxed too: findLabwiredAgent() checks
 # $HOME/.labwired/agent/bin/labwired-agent BEFORE PATH, so on a host with the
 # Agent installed the real CLI wins and the PATH fake is never reached.
-HOME="$TMP" PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
+HOME="$TMP/home" PATH="$TMP/path:/usr/bin:/bin" python3 - "$TMP/server/rpc-server.mjs" "$NODE_BIN" "$TMP/path/labwired" "$TMP/explicit-agent" <<'PY'
 import json, os, select, subprocess, sys, time
 server, node, core, explicit = sys.argv[1:5]
 
@@ -47,12 +50,17 @@ def run(expected, extra):
                 break
     p.terminate()
     result = (message or {}).get("result") or {}
-    if result.get("code") != 0 or expected not in result.get("stdout", "") or "CORE MUST NOT RUN" in result.get("stderr", ""):
+    if result.get("code") != 0 or expected not in result.get("stdout", "") or "MUST NOT RUN" in result.get("stderr", ""):
         print(json.dumps(message or {}))
         raise SystemExit(1)
 
 run("agent-path-ok", {"LABWIRED_CLI_PATH": core})
 run("explicit-agent-ok", {"LABWIRED_CLI_PATH": core, "LABWIRED_AGENT_CLI_PATH": explicit})
+os.remove(os.path.join(os.environ["PATH"].split(os.pathsep)[0], "labwired-agent"))
+with open(os.path.join(os.environ["HOME"], ".labwired", "agent", "bin", "labwired-agent"), "w") as f:
+    f.write("#!/bin/sh\necho legacy-home-ok\n")
+os.chmod(os.path.join(os.environ["HOME"], ".labwired", "agent", "bin", "labwired-agent"), 0o755)
+run("legacy-home-ok", {"LABWIRED_CLI_PATH": core})
 PY
 
 echo "ok   RPC Agent override/PATH ignore legacy Core override"

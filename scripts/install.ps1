@@ -596,31 +596,158 @@ function Install-UserShim {
 }
 
 function Install-OpenCodeConfig {
-  $cfg = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".config\opencode" }
+  $cfg = if ($env:OPENCODE_CONFIG_DIR) {
+    $env:OPENCODE_CONFIG_DIR
+  } elseif ($env:LABWIRED_AGENT_CONFIG_DIR) {
+    $env:LABWIRED_AGENT_CONFIG_DIR
+  } else {
+    Join-Path $env:USERPROFILE ".config\opencode"
+  }
   Assert-NoReparseAncestors $cfg
   if (-not (Test-Path -LiteralPath $cfg)) { Protect-Mutation $cfg }
+  Ensure-Dir $cfg
   $skillsDir = Join-Path $cfg "skills"
   Protect-Mutation $skillsDir
   Ensure-Dir $skillsDir
   $agent = Join-Path $Prefix "agent"
+  $ownershipManifest = Join-Path $cfg "labwired-agent.manifest"
+  Assert-NoReparseAncestors $ownershipManifest
+  Protect-Mutation $ownershipManifest
+  $owned = @{}
+  if (Test-Path -LiteralPath $ownershipManifest -PathType Leaf) {
+    foreach ($entry in @(Get-Content -LiteralPath $ownershipManifest)) {
+      if ($entry) { $owned[$entry] = $true }
+    }
+  }
+
+  function Add-OwnedEntry([string]$Entry) {
+    if ($Entry) { $owned[$Entry] = $true }
+  }
+
+  function Test-JsonProperty([object]$Object, [string]$Name) {
+    return ($null -ne $Object -and $null -ne $Object.PSObject.Properties[$Name])
+  }
+
+  function Copy-JsonValue([object]$Value) {
+    return ($Value | ConvertTo-Json -Depth 20 | ConvertFrom-Json)
+  }
+
+  function Set-JsonProperty([object]$Object, [string]$Name, [object]$Value) {
+    $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+  }
+
+  function Ensure-JsonObjectProperty([object]$Object, [string]$Name) {
+    if (-not (Test-JsonProperty $Object $Name) -or $null -eq $Object.PSObject.Properties[$Name].Value) {
+      Set-JsonProperty $Object $Name ([pscustomobject]@{})
+    }
+    return $Object.PSObject.Properties[$Name].Value
+  }
+
+  function Get-ConfigRelativePath([string]$Path) {
+    $root = [IO.Path]::GetFullPath($cfg).TrimEnd([char[]]@(92, 47))
+    $full = [IO.Path]::GetFullPath($Path)
+    if (-not $full.StartsWith($root + "\", [StringComparison]::OrdinalIgnoreCase)) {
+      Die "owned config path escaped config root: $Path"
+    }
+    return $full.Substring($root.Length + 1)
+  }
+
+  function Install-OwnedFileIfAbsent([string]$Source, [string]$Destination) {
+    if (-not (Test-Path -LiteralPath $Destination)) {
+      Protect-Mutation $Destination
+      Ensure-Dir (Split-Path -Parent $Destination)
+      Copy-Safe $Source $Destination
+      Add-OwnedEntry (Get-ConfigRelativePath $Destination)
+    }
+  }
+
   $srcCfg = Join-Path $agent "config\opencode.json"
   if ($Airgap -and (Test-Path (Join-Path $agent "config\opencode.airgap.json"))) {
     $srcCfg = Join-Path $agent "config\opencode.airgap.json"
   }
-  if ((Test-Path $srcCfg) -and -not (Test-Path (Join-Path $cfg "opencode.json"))) {
+  if (Test-Path -LiteralPath $srcCfg -PathType Leaf) {
     $destination = Join-Path $cfg "opencode.json"
+    Assert-NoReparseAncestors $destination
     Protect-Mutation $destination
-    Copy-Safe $srcCfg $destination
+    $template = Get-Content -LiteralPath $srcCfg -Raw | ConvertFrom-Json
+    $freshConfig = -not (Test-Path -LiteralPath $destination -PathType Leaf)
+    $config = if (-not $freshConfig) {
+      Get-Content -LiteralPath $destination -Raw | ConvertFrom-Json
+    } else {
+      Copy-JsonValue $template
+    }
+    $preexistingTop = @{}
+    foreach ($property in @($config.PSObject.Properties)) { $preexistingTop[$property.Name] = $true }
+    if ($freshConfig -and (Test-JsonProperty $template '$schema')) { Add-OwnedEntry 'json:$schema' }
+    if ($freshConfig -and (Test-JsonProperty $template "enabled_providers")) {
+      foreach ($providerName in @($template.enabled_providers)) {
+        Add-OwnedEntry "json-array-value:opencode.json:enabled_providers:$providerName"
+      }
+    }
+
+    foreach ($sectionName in @("mcp", "provider")) {
+      if (-not (Test-JsonProperty $template $sectionName)) { continue }
+      $templateSection = $template.PSObject.Properties[$sectionName].Value
+      $configSection = Ensure-JsonObjectProperty $config $sectionName
+      foreach ($key in @("labwired", "labwired-local")) {
+        if (-not (Test-JsonProperty $templateSection $key)) { continue }
+        Set-JsonProperty $configSection $key (Copy-JsonValue $templateSection.PSObject.Properties[$key].Value)
+        Add-OwnedEntry "json:$sectionName.$key"
+      }
+    }
+
+    if (Test-JsonProperty $template "agent") {
+      $agentConfig = Ensure-JsonObjectProperty $config "agent"
+      foreach ($agentName in @($template.agent.PSObject.Properties)) {
+        $agentWasMissing = -not (Test-JsonProperty $agentConfig $agentName.Name)
+        if ($agentWasMissing) {
+          Set-JsonProperty $agentConfig $agentName.Name (Copy-JsonValue $agentName.Value)
+        }
+        if ($freshConfig -or $agentWasMissing) { Add-OwnedEntry "json:agent.$($agentName.Name)" }
+      }
+    }
+
+    foreach ($top in @("model", "default_agent", "autoupdate", "share")) {
+      if (-not (Test-JsonProperty $template $top)) { continue }
+      if (-not (Test-JsonProperty $config $top)) {
+        Set-JsonProperty $config $top (Copy-JsonValue $template.PSObject.Properties[$top].Value)
+      }
+      if ($freshConfig -or -not $preexistingTop.ContainsKey($top)) { Add-OwnedEntry "json:$top" }
+    }
+
+    if ((Test-JsonProperty $template "permission") -and (Test-JsonProperty $template.permission "skill")) {
+      $permission = Ensure-JsonObjectProperty $config "permission"
+      $skills = Ensure-JsonObjectProperty $permission "skill"
+      foreach ($skill in @($template.permission.skill.PSObject.Properties)) {
+        $skillWasMissing = -not (Test-JsonProperty $skills $skill.Name)
+        if ($skillWasMissing) {
+          Set-JsonProperty $skills $skill.Name (Copy-JsonValue $skill.Value)
+        }
+        if ($freshConfig -or $skillWasMissing) {
+          Add-OwnedEntry "json:permission.skill.$($skill.Name)"
+        }
+      }
+    }
+    $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $destination -Encoding UTF8
   }
-  if ((Test-Path (Join-Path $agent "config\AGENTS.md")) -and -not (Test-Path (Join-Path $cfg "AGENTS.md"))) {
-    $destination = Join-Path $cfg "AGENTS.md"
-    Protect-Mutation $destination
-    Copy-Safe (Join-Path $agent "config\AGENTS.md") $destination
+  $agentsSource = Join-Path $agent "config\AGENTS.md"
+  if (Test-Path -LiteralPath $agentsSource -PathType Leaf) {
+    Install-OwnedFileIfAbsent $agentsSource (Join-Path $cfg "AGENTS.md")
+  }
+  $hostedSource = Join-Path $agent "config\opencode.hosted.json"
+  if (Test-Path -LiteralPath $hostedSource -PathType Leaf) {
+    Install-OwnedFileIfAbsent $hostedSource (Join-Path $cfg "opencode.hosted.json")
   }
   if (Test-Path (Join-Path $agent "skills")) {
     Get-ChildItem (Join-Path $agent "skills") -Directory | ForEach-Object {
       $destination = Join-Path (Join-Path $cfg "skills") $_.Name
-      if (-not (Test-Path $destination)) { Protect-Mutation $destination; Copy-Safe $_.FullName $destination -Recurse }
+      if (-not (Test-Path -LiteralPath $destination)) {
+        Protect-Mutation $destination
+        Copy-Safe $_.FullName $destination -Recurse
+        Get-ChildItem -LiteralPath $destination -File -Recurse | ForEach-Object {
+          Add-OwnedEntry (Get-ConfigRelativePath $_.FullName)
+        }
+      }
     }
   }
   # LabWired product chrome: theme + brand plugin (replaces OpenCode home logo).
@@ -632,6 +759,7 @@ function Install-OpenCodeConfig {
     $themeDst = Join-Path $themesDir "labwired.json"
     Protect-Mutation $themeDst
     Copy-Safe $themeSrc $themeDst
+    Add-OwnedEntry (Get-ConfigRelativePath $themeDst)
   }
   if (Test-Path (Join-Path $agent "branding")) {
     $brandingDir = Join-Path $cfg "branding"
@@ -642,6 +770,7 @@ function Install-OpenCodeConfig {
       if (-not (Test-Path $destination)) {
         Protect-Mutation $destination
         Copy-Safe $_.FullName $destination
+        Add-OwnedEntry (Get-ConfigRelativePath $destination)
       }
     }
   }
@@ -653,20 +782,31 @@ function Install-OpenCodeConfig {
     $pluginDst = Join-Path $pluginsDir "labwired-brand.tsx"
     Protect-Mutation $pluginDst
     Copy-Safe $pluginSrc $pluginDst
+    Add-OwnedEntry (Get-ConfigRelativePath $pluginDst)
   }
   $tuiSrc = Join-Path $agent "config\tui.json"
   $tuiDst = Join-Path $cfg "tui.json"
   if (Test-Path $tuiSrc) {
+    $legacyTuiOwned = $owned.ContainsKey("tui.json")
     Protect-Mutation $tuiDst
     if (-not (Test-Path $tuiDst)) {
       Copy-Safe $tuiSrc $tuiDst
+      $product = Get-Content -Raw $tuiSrc | ConvertFrom-Json
+      if (Test-JsonProperty $product "theme") { Add-OwnedEntry "json-file:tui.json:theme" }
+      if (Test-JsonProperty $product '$schema') { Add-OwnedEntry 'json-file:tui.json:$schema' }
+      if (@($product.plugin) -contains "./plugins/labwired-brand.tsx") {
+        Add-OwnedEntry "json-array:tui.json:plugin"
+      }
     } else {
       # Merge product theme + brand plugin into existing tui.json.
       try {
         $cfgObj = Get-Content -Raw $tuiDst | ConvertFrom-Json
         $product = Get-Content -Raw $tuiSrc | ConvertFrom-Json
-        if (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
+        if ($legacyTuiOwned) {
+          if ($cfgObj.theme -eq $product.theme) { Add-OwnedEntry "json-file:tui.json:theme" }
+        } elseif (-not $cfgObj.theme -or $cfgObj.theme -in @('system', 'opencode')) {
           $cfgObj | Add-Member -NotePropertyName theme -NotePropertyValue $product.theme -Force
+          Add-OwnedEntry "json-file:tui.json:theme"
         }
         $wanted = "./plugins/labwired-brand.tsx"
         $plugins = @()
@@ -676,15 +816,30 @@ function Install-OpenCodeConfig {
           $s = if ($p -is [string]) { $p } else { '' }
           if ($s -eq $wanted -or $s.EndsWith('labwired-brand.tsx')) { $has = $true; break }
         }
-        if (-not $has) {
+        if ($legacyTuiOwned) {
+          if ($has) { Add-OwnedEntry "json-array:tui.json:plugin" }
+        } elseif (-not $has) {
           $cfgObj | Add-Member -NotePropertyName plugin -NotePropertyValue (@($wanted) + $plugins) -Force
+          Add-OwnedEntry "json-array:tui.json:plugin"
+        }
+        if ($legacyTuiOwned) {
+          if ($cfgObj.'$schema' -eq $product.'$schema') { Add-OwnedEntry 'json-file:tui.json:$schema' }
+        } elseif (-not (Test-JsonProperty $cfgObj '$schema')) {
+          $cfgObj | Add-Member -NotePropertyName '$schema' -NotePropertyValue $product.'$schema' -Force
+          Add-OwnedEntry 'json-file:tui.json:$schema'
         }
         ($cfgObj | ConvertTo-Json -Depth 8) | Set-Content -Path $tuiDst -Encoding utf8
       } catch {
-        Copy-Safe $tuiSrc $tuiDst
+        throw "could not merge existing TUI config: $_"
       }
     }
+    # Commit 05cfc2a recorded a freshly created tui.json as a wholly owned file.
+    # A successfully parsed legacy file is no longer safe to own wholesale.
+    # Current product values received granular markers above; changed or
+    # removed values become user-owned during migration.
+    $null = $owned.Remove("tui.json")
   }
+  @($owned.Keys | Sort-Object) | Set-Content -LiteralPath $ownershipManifest -Encoding ASCII
   Ok "LabWired config -> $cfg"
 }
 

@@ -21,6 +21,7 @@ run() {
 }
 
 run "harness"           "$ROOT/tests/harness.sh"
+run "run-bounded"       "$ROOT/tests/run-bounded.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "skills-verify-all" "$ROOT/tests/skills-verify-all.sh"
 run "develop-skill"     "$ROOT/tests/develop-skill.sh"
@@ -33,8 +34,10 @@ run "compose-helpers"   "$ROOT/tests/compose-helpers.sh"
 run "smoke-doctor-gate" "$ROOT/tests/smoke-doctor-gate.sh"
 run "smoke-wave-a"      "$ROOT/scripts/smoke-wave-a.sh"
 run "smoke-remaining"   "$ROOT/scripts/smoke-remaining.sh"
+run "ship-gate-bounds"  "$ROOT/tests/ship-gate-bounds.sh"
 run "ship-gate"         "$ROOT/scripts/ship-gate.sh"
 run "public-docs"       "$ROOT/scripts/check-public-package.sh"
+run "public-package-scope" "$ROOT/tests/public-package-scope.sh"
 run "public-install"    "$ROOT/tests/public-install.sh"
 run "public-install-safety" "$ROOT/tests/public-install-safety.sh"
 run "prefix-unit"       "$ROOT/tests/prefix-unit.sh"
@@ -47,6 +50,15 @@ run "rpc-probe-resolution" "$ROOT/tests/rpc-probe-resolution.sh"
 run "rpc-claim-shape"   "$ROOT/tests/rpc-claim-shape.sh"
 run "rpc-promote"       "$ROOT/tests/rpc-promote.sh"
 run "tools-manifest"    "$ROOT/tests/tools-manifest.sh"
+run "upgrade-contract"   "$ROOT/tests/upgrade-contract.sh"
+echo ""
+echo "======== release-evidence-contract ========"
+if node "$ROOT/tests/release-evidence-contract.js"; then
+  echo "PASS release-evidence-contract"
+else
+  echo "FAIL release-evidence-contract"
+  fail=1
+fi
 run "demo"              "$ROOT/demo.sh"
 run "fw-usecase-qa"     "$ROOT/tests/fw-usecase-qa.sh"
 editor_root="${LABWIRED_EDITOR_ROOT:-$(cd "$ROOT/../labwired-cursor" 2>/dev/null && pwd || true)}"

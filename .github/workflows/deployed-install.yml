@@ -1,0 +1,155 @@
+name: deployed-install-evidence
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Published LabWired Agent version, without a v prefix
+        required: true
+        type: string
+
+jobs:
+  deployed-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deployed POSIX installer
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/ubuntu
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          echo FAIL >"$EVIDENCE_DIR/result.txt"
+          for file in install.txt version.txt doctor.txt capabilities.txt platform.txt; do echo not-run >"$EVIDENCE_DIR/$file"; done
+          trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
+          tmp="$(mktemp -d)"
+          export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
+          export OPENCODE_CONFIG_DIR="$tmp/config" LABWIRED_AGENT_CONFIG_DIR="$tmp/config"
+          mkdir -p "$HOME"
+          curl -fsSL https://labwired.com/install -o "$tmp/install"
+          sha256sum "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
+          bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
+          actual_version="$(awk '/^version  / { sub(/^version  /, ""); print }' "$EVIDENCE_DIR/version.txt")"
+          test "$actual_version" = "$EXPECTED_VERSION"
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
+          { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
+          echo PASS >"$EVIDENCE_DIR/result.txt"
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-deployed-ubuntu
+          path: evidence/ubuntu
+          if-no-files-found: error
+
+  deployed-macos:
+    runs-on: macos-14
+    steps:
+      - name: Verify deployed POSIX installer
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}/evidence/macos
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          echo FAIL >"$EVIDENCE_DIR/result.txt"
+          for file in install.txt version.txt doctor.txt capabilities.txt platform.txt; do echo not-run >"$EVIDENCE_DIR/$file"; done
+          trap 'echo FAIL >"$EVIDENCE_DIR/result.txt"' ERR
+          tmp="$(mktemp -d)"
+          export HOME="$tmp/home" LABWIRED_HOME="$tmp/prefix" LABWIRED_BIN_DIR="$tmp/bin"
+          export OPENCODE_CONFIG_DIR="$tmp/config" LABWIRED_AGENT_CONFIG_DIR="$tmp/config"
+          mkdir -p "$HOME"
+          curl -fsSL https://labwired.com/install -o "$tmp/install"
+          shasum -a 256 "$tmp/install" >"$EVIDENCE_DIR/installer-sha256.txt"
+          bash "$tmp/install" --agent-only >"$EVIDENCE_DIR/install.txt" 2>&1
+          "$LABWIRED_BIN_DIR/labwired" agent version >"$EVIDENCE_DIR/version.txt" 2>&1
+          actual_version="$(awk '/^version  / { sub(/^version  /, ""); print }' "$EVIDENCE_DIR/version.txt")"
+          test "$actual_version" = "$EXPECTED_VERSION"
+          "$LABWIRED_BIN_DIR/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
+          { uname -a; echo "architecture=$(uname -m)"; } >"$EVIDENCE_DIR/platform.txt"
+          { test -x "$LABWIRED_HOME/tools/sim/labwired-sim" && echo simulator=present || echo simulator=absent; echo verification_fallback=hosted; } >"$EVIDENCE_DIR/capabilities.txt"
+          echo PASS >"$EVIDENCE_DIR/result.txt"
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-deployed-macos
+          path: evidence/macos
+          if-no-files-found: error
+
+  deployed-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Verify deployed Windows installer
+        shell: powershell
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence\windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path $env:EVIDENCE_DIR -Force | Out-Null
+          Set-Content "$env:EVIDENCE_DIR\result.txt" FAIL
+          foreach ($file in @('install.txt', 'version.txt', 'doctor.txt', 'version-pwsh.txt', 'doctor-pwsh.txt', 'capabilities.txt', 'platform.txt')) {
+            Set-Content (Join-Path $env:EVIDENCE_DIR $file) 'not-run'
+          }
+          function Invoke-Captured([string]$Path, [string[]]$Arguments, [string]$OutputPath) {
+            $previousPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+              $raw = & $Path @Arguments 2>&1
+              $succeeded = $?
+              $status = $LASTEXITCODE
+              if ($null -eq $status) { $status = if ($succeeded) { 0 } else { 1 } }
+            } finally {
+              $ErrorActionPreference = $previousPreference
+            }
+            @($raw | ForEach-Object { $_.ToString() }) | Set-Content -LiteralPath $OutputPath
+            @($raw | ForEach-Object { Write-Host $_.ToString() })
+            return [int]$status
+          }
+          $tmp = Join-Path $env:RUNNER_TEMP ('labwired-deployed-' + [guid]::NewGuid().ToString('n'))
+          $env:USERPROFILE = Join-Path $tmp 'home'
+          $env:LABWIRED_HOME = Join-Path $tmp 'prefix'
+          $env:LABWIRED_BIN_DIR = Join-Path $tmp 'bin'
+          $env:OPENCODE_CONFIG_DIR = Join-Path $tmp 'config'
+          $env:LABWIRED_AGENT_CONFIG_DIR = $env:OPENCODE_CONFIG_DIR
+          New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
+          $installer = Join-Path $tmp 'install.ps1'
+          $powershellExe = Join-Path $PSHOME 'powershell.exe'
+          Invoke-WebRequest https://labwired.com/install.ps1 -OutFile $installer
+          (Get-FileHash $installer -Algorithm SHA256).Hash | Set-Content "$env:EVIDENCE_DIR\installer-sha256.txt"
+          $installStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Prefix', $env:LABWIRED_HOME, '-UserBin', $env:LABWIRED_BIN_DIR, '-AgentOnly', '-SkipPathUpdate') -OutputPath "$env:EVIDENCE_DIR\install.txt"
+          if ($installStatus -ne 0) { throw "published Windows installer failed with code $installStatus" }
+          $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
+          $dispatchFailed = $false
+          $versionStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $dispatcher, 'agent', 'version') -OutputPath "$env:EVIDENCE_DIR\version.txt"
+          if ($versionStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version command failed' }
+          $versionLines = @(Get-Content "$env:EVIDENCE_DIR\version.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
+          if ($versionLines.Count -ne 1 -or $versionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version mismatch' }
+          $doctorStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $dispatcher, 'agent', 'doctor') -OutputPath "$env:EVIDENCE_DIR\doctor.txt"
+          if ($doctorStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor.txt" 'ERROR: published doctor command failed' }
+          $pwshVersionStatus = Invoke-Captured -Path 'pwsh.exe' -Arguments @('-NoProfile', '-File', $dispatcher, 'agent', 'version') -OutputPath "$env:EVIDENCE_DIR\version-pwsh.txt"
+          if ($pwshVersionStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version command failed' }
+          $pwshVersionLines = @(Get-Content "$env:EVIDENCE_DIR\version-pwsh.txt" | Where-Object { $_ -match '^version  ' } | ForEach-Object { $_.Substring(9).Trim() })
+          if ($pwshVersionLines.Count -ne 1 -or $pwshVersionLines[0] -cne $env:EXPECTED_VERSION) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version-pwsh.txt" 'ERROR: published pwsh version mismatch' }
+          $pwshDoctorStatus = Invoke-Captured -Path 'pwsh.exe' -Arguments @('-NoProfile', '-File', $dispatcher, 'agent', 'doctor') -OutputPath "$env:EVIDENCE_DIR\doctor-pwsh.txt"
+          if ($pwshDoctorStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\doctor-pwsh.txt" 'ERROR: published pwsh doctor command failed' }
+          if ($dispatchFailed) { throw 'one or more deployed Windows dispatcher checks failed' }
+          @(
+            "os=$([Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+            "os_architecture=$([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+            "process_architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
+          ) | Set-Content "$env:EVIDENCE_DIR\platform.txt"
+          @(
+            "simulator=$(if (Test-Path (Join-Path $env:LABWIRED_HOME 'tools\sim\labwired-sim.exe')) { 'present' } else { 'absent' })"
+            'verification_fallback=hosted-or-wsl'
+          ) | Set-Content "$env:EVIDENCE_DIR\capabilities.txt"
+          Set-Content "$env:EVIDENCE_DIR\result.txt" PASS
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: labwired-agent-deployed-windows
+          path: evidence/windows
+          if-no-files-found: error

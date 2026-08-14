@@ -24,6 +24,7 @@ __pycache__/
 # Smoke run artifacts (keep coverage-latest.* tracked)
 # VS Code extension build
 dist/
+/node_modules/
 docs/competitive/embedder-vscode/*.vsix
 docs/competitive/embedder-vscode/marketplace-meta.json
 docs/competitive/embedder-vscode/marketplace-query.json
@@ -38,6 +39,7 @@ extensions/labwired-vscode/out/
 # the single source of truth is server/rpc-server.mjs at the repo root.
 extensions/labwired-vscode/server/rpc-server.mjs
 extensions/labwired-vscode/server/AGENT_VERSION
+extensions/labwired-vscode/server/agent-launcher.mjs
 extensions/labwired-vscode/share/tools.json
 fixtures/**/.pio/
 fixtures/**/evidence/

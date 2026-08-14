@@ -11,6 +11,10 @@ const agentRoot = join(extRoot, '..', '..');
 const outDir = join(extRoot, 'server');
 mkdirSync(outDir, { recursive: true });
 copyFileSync(join(agentRoot, 'server', 'rpc-server.mjs'), join(outDir, 'rpc-server.mjs'));
+// rpc-server.mjs does `import { resolveAgentLauncher } from "./agent-launcher.mjs"`,
+// so the sibling module has to travel with it or the packaged server throws
+// ERR_MODULE_NOT_FOUND before it can serve anything.
+copyFileSync(join(agentRoot, 'server', 'agent-launcher.mjs'), join(outDir, 'agent-launcher.mjs'));
 
 // share/tools.json is the server's tool table AND its mode policy. The server
 // resolves it at <agentRoot>/share/tools.json, where agentRoot is the extension

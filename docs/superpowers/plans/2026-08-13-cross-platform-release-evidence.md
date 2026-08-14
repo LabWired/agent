@@ -2,329 +2,381 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make one commit produce retained clean-install evidence for LabWired Agent on GitHub-hosted Ubuntu, macOS, and Windows runners, with all reproduced local release blockers resolved.
+**Goal:** Produce honest, retained clean-install evidence for LabWired Agent on GitHub-hosted Ubuntu, macOS, and Windows while fixing the two reproduced local release-gate failures.
 
-**Architecture:** Keep `bin/labwired` and `bin/labwired.ps1` as the product dispatch boundary and test the installed command rather than a checkout-only launcher. Split safety checking into the npm-published file set and a deliberately scoped public-source set. Add an OS matrix whose platform scripts install into isolated homes, exercise advertised commands, and write stable evidence files uploaded even when a check fails.
+**Architecture:** Separate deterministic source-install evidence, which proves a commit before deployment, from public-endpoint evidence, which proves the deployed installer afterward. POSIX and Windows use separate CI jobs and platform-native smoke scripts. Both scripts accept a persistent evidence directory containing platform, installer, version, doctor, and capability records that CI uploads even on failure.
 
-**Tech Stack:** Bash, PowerShell 5.1/7, Node.js 18+, Python 3, npm package manifests, GitHub Actions.
+**Tech Stack:** Bash, PowerShell 5.1/7, Node.js 18+, Python 3, npm, GitHub Actions.
 
 ---
 
+## Support Claim
+
+This plan proves native Agent installation and command dispatch on the runner operating systems. It does not claim native simulator parity where a simulator artifact is absent. Architecture claims remain limited to the architectures shown in each evidence artifact; adding ARM64 Linux or Windows requires an actual ARM64 runner, not static path tests.
+
 ## File Map
 
-- `tests/install-smoke.sh`: POSIX installed-dispatch and doctor regression coverage.
-- `tests/windows-install-smoke.ps1`: Windows isolated installer and installed-command evidence.
-- `tests/agent-lifecycle.sh`: isolated configuration ownership assertions with actionable failures.
-- `scripts/check-public-package.sh`: published-file and public-source safety scan boundaries.
-- `tests/public-package-scope.sh`: regression coverage for included and excluded scan paths.
-- `tests/release-evidence-contract.sh`: static contract for the three-OS workflow and artifacts.
-- `.github/workflows/harness.yml`: three-OS clean-install evidence jobs and artifact retention.
-- `docs/INSTALL.md`, `docs/TESTING.md`: exact platform support and evidence semantics.
+- `tests/install-smoke.sh`: isolated POSIX source install with persistent evidence output.
+- `tests/windows-install-smoke.ps1`: isolated Windows source install with persistent evidence output.
+- `tests/agent-lifecycle.sh`: hosted configuration ownership and uninstall contract.
+- `scripts/check-public-package.sh`: safety scan of shipped and explicitly public content.
+- `tests/public-package-scope.sh`: negative and positive package-scope fixtures.
+- `tests/release-evidence-contract.js`: structured workflow contract.
+- `.github/workflows/harness.yml`: separate Ubuntu, macOS, and Windows evidence jobs.
+- `.github/workflows/deployed-install.yml`: manual/post-deploy public endpoint probe.
+- `docs/INSTALL.md`, `docs/TESTING.md`: precise support and evidence interpretation.
 
-### Task 1: Installed POSIX Dispatcher Regression
-
-**Files:**
-- Modify: `tests/install-smoke.sh`
-- Modify only if the regression fails: `install.sh`
-
-- [ ] **Step 1: Extend the installed-command test before changing production code**
-
-Add assertions immediately after `agent_version` is captured:
-
-```bash
-agent_doctor="$($USERBIN/labwired agent doctor 2>&1)"
-grep -q 'version  ' <<<"$agent_version"
-grep -q 'home     ' <<<"$agent_version"
-grep -q 'agent-runtime' <<<"$agent_doctor"
-if grep -q 'Failed to change directory' <<<"$agent_version$agent_doctor"; then
-  echo 'FAIL installed dispatcher forwarded an Agent subcommand as a directory' >&2
-  exit 1
-fi
-```
-
-- [ ] **Step 2: Run the test and verify the current installer behavior**
-
-Run: `bash tests/install-smoke.sh`
-
-Expected: PASS for the repository installer. Then reproduce the stale local shim separately with `labwired agent version`; this establishes that the defect is an obsolete user shim, not the current installer output.
-
-- [ ] **Step 3: Add a reinstall-upgrades-stale-shim fixture**
-
-Before invoking `install.sh`, create `$USERBIN/labwired` with the legacy direct-Agent launcher shape and assert installation replaces it:
-
-```bash
-mkdir -p "$USERBIN"
-printf '#!/usr/bin/env bash\nexec "$LABWIRED_HOME/agent/bin/labwired-agent" "$@"\n' >"$USERBIN/labwired"
-chmod +x "$USERBIN/labwired"
-```
-
-After installation, require `grep -q 'labwired_product_help' "$USERBIN/labwired"`.
-
-- [ ] **Step 4: Run the regression test red, then make the smallest installer change if needed**
-
-Run: `bash tests/install-smoke.sh`
-
-Expected before a necessary fix: FAIL because the legacy shim survives or dispatch is wrong. If it fails, update the existing user-shim installation branch in `install.sh` to atomically replace the legacy file with `bin/labwired`; do not change direct Agent launcher semantics.
-
-- [ ] **Step 5: Verify the focused tests**
-
-Run: `bash tests/install-smoke.sh && bash tests/dispatcher.sh && bash tests/agent-lifecycle.sh`
-
-Expected: all three scripts exit 0.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add tests/install-smoke.sh install.sh
-git commit -m "fix: upgrade legacy agent shims during install"
-```
-
-### Task 2: Public Package Safety Boundary
+### Task 1: Fix the Package Safety Scope
 
 **Files:**
 - Create: `tests/public-package-scope.sh`
 - Modify: `scripts/check-public-package.sh`
 - Modify: `tests/all.sh`
 
-- [ ] **Step 1: Write a failing scope regression**
+- [ ] **Step 1: Add a root override for fixture testing**
 
-Create a temporary git repository containing a publishable file, a development plan with a workstation path, and an extension lockfile with a maintainer email. Invoke the checker through a new `LABWIRED_PACKAGE_ROOT` override. Assert that publishable secrets fail, while non-published development files do not fail the package gate:
+Write the test first against `LABWIRED_PACKAGE_ROOT`. The fixture must contain a minimal npm package whose `files` list includes `README.md` and `bin/labwired`, plus:
 
-```bash
-run_check() {
-  LABWIRED_PACKAGE_ROOT="$FIXTURE" NPM_CONFIG_CACHE="$TMP/npm-cache" \
-    bash "$ROOT/scripts/check-public-package.sh"
-}
-```
+- a non-published `docs/superpowers/plans/dev.md` containing a synthetic macOS
+  home path assembled as `"/" + "Users/example/private"` inside the fixture;
+- a non-published `extensions/example/package-lock.json` containing `maintainer@invalid.test`;
+- a packed `README.md` variant containing the same private path.
 
-The fixture copies the real `package.json`, scanner, required public files, and package files, then uses `git init && git add .` so the test exercises tracked-file behavior.
+The first fixture run expects success with only development files tainted. The second expects failure after tainting the packed README.
 
-- [ ] **Step 2: Run it and confirm the existing over-broad scan fails**
+- [ ] **Step 2: Run the regression and verify RED**
 
-Run: `bash tests/public-package-scope.sh`
+Run: `NPM_CONFIG_CACHE=/private/tmp/labwired-agent-npm-cache bash tests/public-package-scope.sh`
 
-Expected: FAIL because tracked development-only files are included in `publicSources`.
+Expected: the development-only fixture fails because the checker currently scans every tracked file.
 
-- [ ] **Step 3: Restrict strict scanning to shipped and explicitly public source files**
+- [ ] **Step 3: Restrict the scan without weakening secret detection**
 
-In `scripts/check-public-package.sh`, allow `ROOT` to use `${LABWIRED_PACKAGE_ROOT:-...}`. In the Node block, replace `new Set([...tracked, ...files])` with the union of npm-packed files and `PUBLIC_DOCS`; retain the tracked list only for detecting required files and repository metadata. Do not weaken `scanBuffer`, secret patterns, or required-package checks.
-
-- [ ] **Step 4: Verify both positive and negative fixtures**
-
-Run: `bash tests/public-package-scope.sh && NPM_CONFIG_CACHE=/tmp/labwired-agent-npm-cache bash scripts/check-public-package.sh`
-
-Expected: the development-only fixture passes, the intentionally tainted packed-file fixture fails inside its test harness, and the real repository check exits 0.
-
-- [ ] **Step 5: Add the regression to the full suite and commit**
-
-Add:
+Set:
 
 ```bash
-run "public-package-scope" "$ROOT/tests/public-package-scope.sh"
+ROOT="${LABWIRED_PACKAGE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 ```
 
-Then commit:
+Pass `PUBLIC_DOCS` into the Node block as a newline-delimited temporary file. Replace the tracked-file union with the npm-packed files plus those explicit public documents. Keep required-file checks, forbidden package paths, `scanBuffer`, and all secret patterns unchanged.
+
+- [ ] **Step 4: Verify GREEN**
+
+Run:
+
+```bash
+NPM_CONFIG_CACHE=/private/tmp/labwired-agent-npm-cache bash tests/public-package-scope.sh
+NPM_CONFIG_CACHE=/private/tmp/labwired-agent-npm-cache bash scripts/check-public-package.sh
+```
+
+Expected: both exit 0; the nested negative fixture confirms a tainted packed file is still rejected.
+
+- [ ] **Step 5: Add the test to `tests/all.sh` and commit**
 
 ```bash
 git add scripts/check-public-package.sh tests/public-package-scope.sh tests/all.sh
-git commit -m "test: scope public safety checks to shipped content"
+git commit -m "fix: scope package safety scan to public content"
 ```
 
-### Task 3: Lifecycle Configuration Isolation
+### Task 2: Correct Hosted Configuration Lifecycle Expectations
 
 **Files:**
 - Modify: `tests/agent-lifecycle.sh`
-- Modify only if ownership is wrong: `install.sh`
+- Modify only if ownership is not recorded correctly: `install.sh`
 
-- [ ] **Step 1: Replace opaque Python assertions with diagnostic assertions**
+- [ ] **Step 1: Make the failing assertion diagnostic**
 
-In the new-config section, use:
+Replace the opaque fresh-config loop with assertions for the intended hosted contract:
 
 ```python
-for key in ("model", "default_agent", "autoupdate", "share", "$schema", "agent"):
-    if key in data:
-        raise AssertionError(f"fresh user config unexpectedly owns {key}={data[key]!r}")
+assert data.get("model") == "labwired/labwired-default", data.get("model")
+assert data.get("default_agent") == "build", data.get("default_agent")
+assert "labwired" in data.get("provider", {}), data.get("provider")
+assert "labwired" in data.get("mcp", {}), data.get("mcp")
 ```
 
-Also invoke the new-config install with an explicit clean environment:
+Before this install phase, clear `LABWIRED_MODEL_URL`, `LABWIRED_MODEL_KEY`, `LABWIRED_ACCESS_TOKEN`, and `LABWIRED_PROJECT`, then set `LABWIRED_AGENT_PROFILE=hosted` explicitly.
+
+- [ ] **Step 2: Verify the ownership test fails at the next incorrect assumption**
+
+Run: `bash tests/agent-lifecycle.sh`
+
+Expected RED: if uninstall does not remove a manifest-owned hosted key or preserve later user fields, the diagnostic assertion names that exact field. A pass here is acceptable because the original failure itself demonstrates the stale test expectation.
+
+- [ ] **Step 3: Complete the uninstall contract**
+
+After adding later user settings and uninstalling, assert:
+
+```python
+assert "model" not in data
+assert "default_agent" not in data
+assert "labwired" not in data.get("provider", {})
+assert "labwired" not in data.get("mcp", {})
+assert data["provider"]["added-later"]["name"] == "keep"
+assert data["settings"]["theme"] == "later-user"
+```
+
+Change `install.sh` only if this exposes a real ownership/removal bug.
+
+- [ ] **Step 4: Verify GREEN and commit**
+
+Run: `bash tests/agent-lifecycle.sh && bash tests/hosted-config.sh`
 
 ```bash
-unset LABWIRED_MODEL_URL LABWIRED_MODEL_KEY LABWIRED_ACCESS_TOKEN LABWIRED_PROJECT
-export LABWIRED_AGENT_PROFILE=hosted
+git add tests/agent-lifecycle.sh install.sh
+git commit -m "test: align lifecycle checks with hosted config ownership"
 ```
 
-- [ ] **Step 2: Verify the failure and trace the written key**
+### Task 3: Add Persistent POSIX Evidence
 
-Run: `bash -x tests/agent-lifecycle.sh`
+**Files:**
+- Modify: `tests/install-smoke.sh`
 
-Expected before the fix: FAIL naming the exact inherited or installed key. Compare that value with `config/opencode.hosted.json` and the merge ownership list in `install.sh`.
+- [ ] **Step 1: Write the evidence contract first**
 
-- [ ] **Step 3: Correct the test contract or installer ownership at the source**
+Add a calling test mode using `LABWIRED_EVIDENCE_DIR`. When set, require the script to preserve these files outside its disposable install root:
 
-If the key is intentionally part of a fresh hosted configuration, change the test to assert its expected hosted value and confirm uninstall removes only the manifest-recorded LabWired key. If it is inherited state, clear it at the test boundary. Change `install.sh` only if it writes an unrecorded product-owned key or removes a user-owned key.
+```text
+platform.txt
+install.txt
+version.txt
+doctor.txt
+capabilities.txt
+result.txt
+```
 
-- [ ] **Step 4: Verify lifecycle and configuration tests**
+Run once before implementation and verify at least one required file is missing.
 
-Run: `bash tests/agent-lifecycle.sh && bash tests/hosted-config.sh && bash tests/public-install.sh`
+- [ ] **Step 2: Capture install and command evidence**
 
-Expected: all scripts exit 0 with the npm cache set to an isolated writable directory where necessary.
+Create the evidence directory before the temporary prefix. Capture `uname -a`, `uname -m`, installer output, and `labwired agent version` output. Install test-local executable stubs for `opencode`, `npx`, and `node` so `doctor` can exercise dispatch without failing merely because test mode intentionally skipped runtime installation.
+
+- [ ] **Step 3: Validate doctor honestly**
+
+Capture its exit code without `set -e` aborting:
+
+```bash
+set +e
+"$USERBIN/labwired" agent doctor >"$EVIDENCE_DIR/doctor.txt" 2>&1
+doctor_rc=$?
+set -e
+```
+
+Require exit 0 with the test stubs, require Agent doctor markers, and reject `Failed to change directory` and standalone `not ready`. Record whether a simulator and probe were present in `capabilities.txt`; absence remains a recorded capability gap, not a fake pass.
+
+- [ ] **Step 4: Verify the installed dispatcher and legacy replacement**
+
+Before installation, seed the exact old direct-Agent shim already observed locally. After installation, require the installed file to match the product-dispatch shape and prove `agent version` and `agent doctor` reach Agent subcommands. This tests upgrade replacement without claiming the old shim came from the current installer.
+
+- [ ] **Step 5: Verify and commit**
+
+Run:
+
+```bash
+evidence="$(mktemp -d)"
+LABWIRED_EVIDENCE_DIR="$evidence" bash tests/install-smoke.sh
+find "$evidence" -maxdepth 1 -type f -print
+grep -q '^PASS$' "$evidence/result.txt"
+bash tests/dispatcher.sh
+```
+
+```bash
+git add tests/install-smoke.sh
+git commit -m "test: retain POSIX clean-install evidence"
+```
+
+### Task 4: Add Native Windows Evidence
+
+**Files:**
+- Create: `tests/windows-install-smoke.ps1`
+- Modify: `tests/windows-contract.ps1`
+
+- [ ] **Step 1: Extend the Windows contract with evidence assertions**
+
+Before creating the new script, make `tests/windows-contract.ps1` require that it exists and contains `LABWIRED_EVIDENCE_DIR`, `agent version`, `agent doctor`, `capabilities.txt`, and `result.txt`.
+
+- [ ] **Step 2: Run on Windows and verify RED**
+
+Run: `powershell -NoProfile -File .\tests\windows-contract.ps1`
+
+Expected: FAIL because `tests/windows-install-smoke.ps1` is absent. This RED step occurs on the Windows CI runner or a native Windows development environment.
+
+- [ ] **Step 3: Implement isolated Windows installation evidence**
+
+The script creates a GUID-named temporary home and sets `USERPROFILE`, `LABWIRED_HOME`, `LABWIRED_BIN_DIR`, `LABWIRED_AGENT_CONFIG_DIR`, and test-mode variables. It invokes the checkout's `scripts/install.ps1 -AgentOnly`, captures installer output, then exercises the installed product dispatcher through both the generated `.cmd` entry and PowerShell entry.
+
+It writes the same six evidence files as POSIX, records `$PSVersionTable`, OS architecture, process architecture, simulator presence, and probe presence, and preserves the evidence directory in `finally`. It rejects directory-dispatch errors and false-ready output.
+
+- [ ] **Step 4: Verify under both PowerShell engines**
+
+Run on Windows:
+
+```powershell
+powershell -NoProfile -File .\tests\windows-install-smoke.ps1
+pwsh -NoProfile -File .\tests\windows-install-smoke.ps1
+```
+
+Expected: both exit 0 and write `PASS` to their result files.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/agent-lifecycle.sh install.sh
-git commit -m "test: isolate agent lifecycle configuration state"
+git add tests/windows-contract.ps1 tests/windows-install-smoke.ps1
+git commit -m "test: retain native Windows install evidence"
 ```
 
-### Task 4: Three-OS Evidence Contract
+### Task 5: Add Structured Workflow Contracts and CI Jobs
 
 **Files:**
-- Create: `tests/release-evidence-contract.sh`
-- Create: `tests/windows-install-smoke.ps1`
+- Create: `tests/release-evidence-contract.js`
 - Modify: `.github/workflows/harness.yml`
 - Modify: `tests/all.sh`
 
-- [ ] **Step 1: Write the workflow contract first**
+- [ ] **Step 1: Write the structured contract before workflow changes**
 
-Create a shell test that parses `.github/workflows/harness.yml` as text and requires:
+Use a small dependency-free Node parser limited to the known workflow shape. It must locate jobs by exact keys and validate:
 
-```bash
-for runner in ubuntu-latest macos-latest windows-latest; do
-  grep -q "$runner" "$WORKFLOW" || fail "missing runner $runner"
-done
-grep -q 'actions/upload-artifact@v4' "$WORKFLOW" || fail 'missing evidence upload'
-grep -q 'if: always()' "$WORKFLOW" || fail 'evidence is not retained on failure'
-grep -q 'labwired-agent-evidence-' "$WORKFLOW" || fail 'missing stable artifact prefix'
-grep -q 'tests/windows-install-smoke.ps1' "$WORKFLOW" || fail 'missing Windows clean install'
-grep -q 'tests/install-smoke.sh' "$WORKFLOW" || fail 'missing POSIX clean install'
-```
+- `release-evidence-ubuntu` uses `ubuntu-latest` and `tests/install-smoke.sh`;
+- `release-evidence-macos` uses an explicitly documented macOS runner and `tests/install-smoke.sh`;
+- `release-evidence-windows` uses `windows-latest` and `tests/windows-install-smoke.ps1` under both `powershell` and `pwsh`;
+- every evidence job has an `actions/upload-artifact@v4` step with `if: always()` and a stable OS-specific artifact name.
 
-- [ ] **Step 2: Run the contract and confirm it fails**
+The parser must ignore comments and reject duplicate job keys.
 
-Run: `bash tests/release-evidence-contract.sh`
+- [ ] **Step 2: Run and verify RED**
 
-Expected: FAIL because macOS clean-install evidence and artifact upload are absent.
+Run: `node tests/release-evidence-contract.js`
 
-- [ ] **Step 3: Add the Windows isolated install smoke**
+Expected: FAIL naming the first missing job.
 
-The PowerShell script creates a GUID-named temp root, sets `USERPROFILE`, `LABWIRED_HOME`, `LABWIRED_BIN_DIR`, `OPENCODE_CONFIG_DIR`, and test-mode environment variables, invokes `scripts/install.ps1 -AgentOnly`, then captures:
+- [ ] **Step 3: Add separate platform jobs**
 
-```powershell
-& $Labwired agent version *>&1 | Tee-Object "$EvidenceDir\version.txt"
-& $Labwired agent doctor *>&1 | Tee-Object "$EvidenceDir\doctor.txt"
-if ($LASTEXITCODE -ne 0) { throw "installed Agent doctor failed" }
-```
+Add three explicit jobs rather than a cross-shell matrix. Ubuntu and macOS create `artifacts/release-evidence/<os>` and pass that path to `tests/install-smoke.sh`. Windows passes an equivalent path to the PowerShell smoke. Each upload step uses `if: always()` and `if-no-files-found: error`.
 
-It must run through both `bin/labwired.cmd` and `bin/labwired.ps1`, reject `Failed to change directory`, record `$PSVersionTable`, and clean up in `finally` while preserving the requested evidence directory.
+- [ ] **Step 4: Keep source evidence deterministic**
 
-- [ ] **Step 4: Add the clean-install matrix and artifact upload**
+Source-install jobs use checkout files, isolated homes/caches, and test-local runtime stubs. They do not require hosted credentials or public installer availability. Existing optional hosted checks continue to report `not run` when secrets are absent.
 
-Add a `release-evidence` matrix with explicit includes for Ubuntu, macOS, and Windows. POSIX entries run `tests/install-smoke.sh`; Windows runs `tests/windows-install-smoke.ps1` under both `powershell` and `pwsh`. Each writes into `artifacts/release-evidence/<os>` and uploads with:
+- [ ] **Step 5: Verify and commit**
 
-```yaml
-- name: Upload release evidence
-  if: always()
-  uses: actions/upload-artifact@v4
-  with:
-    name: labwired-agent-evidence-${{ matrix.platform }}
-    path: artifacts/release-evidence/${{ matrix.platform }}
-    if-no-files-found: error
-```
+Run: `node tests/release-evidence-contract.js && bash tests/install-smoke.sh`
 
-- [ ] **Step 5: Keep the workflow testable without network credentials**
-
-Set `LABWIRED_TEST_SKIP_NETWORK=1`, `LABWIRED_TEST_SKIP_OPENCODE=1`, and an isolated npm cache for clean-install contract jobs. Keep hosted model/twin smoke in its existing optional credentialed lane; absence of credentials must print `not run`, never `PASS`.
-
-- [ ] **Step 6: Verify workflow and platform contracts locally**
-
-Run: `bash tests/release-evidence-contract.sh && bash tests/install-smoke.sh && bash tests/windows-contract.ps1 2>/dev/null || test "$(uname -s)" != Linux`
-
-Expected: the static evidence contract and POSIX smoke pass. The Windows script is executed authoritatively by the Windows runner, not emulated on POSIX.
-
-- [ ] **Step 7: Add the contract to `tests/all.sh` and commit**
+Add `node "$ROOT/tests/release-evidence-contract.js"` to `tests/all.sh`, then commit:
 
 ```bash
-git add .github/workflows/harness.yml tests/release-evidence-contract.sh tests/windows-install-smoke.ps1 tests/all.sh
-git commit -m "ci: retain clean-install evidence on three operating systems"
+git add .github/workflows/harness.yml tests/release-evidence-contract.js tests/all.sh
+git commit -m "ci: collect source-install evidence on three systems"
 ```
 
-### Task 5: Documentation and Release Semantics
+### Task 6: Add a Separate Deployed-Endpoint Probe
+
+**Files:**
+- Create: `.github/workflows/deployed-install.yml`
+- Modify: `tests/release-evidence-contract.js`
+
+- [ ] **Step 1: Add failing deployed-workflow assertions**
+
+Require a `workflow_dispatch` workflow with Ubuntu, macOS, and Windows jobs. POSIX jobs must download `https://labwired.com/install`; Windows must download `https://labwired.com/install.ps1`. Require the workflow input `expected_version` and require installed `labwired agent version` output to match it.
+
+- [ ] **Step 2: Run and verify RED**
+
+Run: `node tests/release-evidence-contract.js`
+
+Expected: FAIL because the deployed workflow does not exist.
+
+- [ ] **Step 3: Implement post-deploy endpoint checks**
+
+Each job downloads the public installer to a temporary file, records its SHA-256, installs into an isolated temporary home, captures version/doctor/capabilities, and uploads evidence even on failure. This workflow is manual or invoked by the deployment pipeline after the endpoint is updated; it is not a pull-request gate because a PR commit is not deployed yet.
+
+- [ ] **Step 4: Verify static contracts and commit**
+
+Run: `node tests/release-evidence-contract.js`
+
+```bash
+git add .github/workflows/deployed-install.yml tests/release-evidence-contract.js
+git commit -m "ci: verify deployed installers after publication"
+```
+
+### Task 7: Document Evidence and Narrow Claims
 
 **Files:**
 - Modify: `docs/INSTALL.md`
 - Modify: `docs/TESTING.md`
+- Modify: `tests/release-evidence-contract.js`
 
-- [ ] **Step 1: Add a failing documentation assertion to the evidence contract**
+- [ ] **Step 1: Add documentation checks first**
 
-Require `docs/INSTALL.md` to contain `native Agent` and `hosted verification or WSL`, and require `docs/TESTING.md` to name `labwired-agent-evidence-macos`, `labwired-agent-evidence-ubuntu`, and `labwired-agent-evidence-windows`.
+Require the install guide to distinguish native Agent support from local simulator availability. Require the testing guide to distinguish source evidence from deployed-endpoint evidence and explain that artifact architecture values—not installer branches—determine proven architectures.
 
-- [ ] **Step 2: Run the contract and observe the documentation failure**
+- [ ] **Step 2: Run and verify RED**
 
-Run: `bash tests/release-evidence-contract.sh`
+Run: `node tests/release-evidence-contract.js`
 
-Expected: FAIL for missing release-evidence language.
+Expected: FAIL naming missing documentation language.
 
-- [ ] **Step 3: Document the precise support claim**
+- [ ] **Step 3: Update the documentation**
 
-State that the Agent launcher and hosted workflow are native on Windows 10+, while local twin simulation uses hosted verification or WSL until a matching native simulator release asset exists. Document how to download and interpret the three evidence artifacts and that all must come from the same commit.
+Document:
 
-- [ ] **Step 4: Verify public language and commit**
+- native Agent support on tested macOS, Ubuntu, and Windows runners;
+- hosted verification or WSL when no native Windows simulator artifact exists;
+- exact artifact names and required files;
+- same-commit requirement for the three source artifacts;
+- separate post-deploy endpoint evidence;
+- architecture support only where `platform.txt` provides actual runner evidence.
 
-Run: `bash tests/release-evidence-contract.sh && NPM_CONFIG_CACHE=/tmp/labwired-agent-npm-cache bash scripts/check-public-package.sh`
+- [ ] **Step 4: Verify and commit**
 
-Expected: both exit 0.
+Run:
 
 ```bash
-git add docs/INSTALL.md docs/TESTING.md tests/release-evidence-contract.sh
-git commit -m "docs: define cross-platform release evidence"
+node tests/release-evidence-contract.js
+NPM_CONFIG_CACHE=/private/tmp/labwired-agent-npm-cache bash scripts/check-public-package.sh
 ```
 
-### Task 6: Full Verification and Hosted Evidence
+```bash
+git add docs/INSTALL.md docs/TESTING.md tests/release-evidence-contract.js
+git commit -m "docs: define evidence-qualified platform support"
+```
+
+### Task 8: Local and Hosted Verification
 
 **Files:**
 - No expected production changes
 
-- [ ] **Step 1: Run the complete local suite with isolated caches**
+- [ ] **Step 1: Run the complete local suite**
 
 Run:
 
 ```bash
-NPM_CONFIG_CACHE=/tmp/labwired-agent-npm-cache \
+NPM_CONFIG_CACHE=/private/tmp/labwired-agent-npm-cache \
 LABWIRED_FAST=1 LABWIRED_INSTALL_PIO=0 bash tests/all.sh
 ```
 
-Expected: `======== OVERALL PASS ========`; optional hardware and credentialed lanes may say `not run` with their requirements.
+Expected: `======== OVERALL PASS ========`; hardware and credentialed lanes may explicitly report `not run`.
 
-- [ ] **Step 2: Confirm a clean working tree except intentional commits**
+- [ ] **Step 2: Inspect repository state**
 
-Run: `git status --short && git diff --check`
+Run: `git status --short && git diff --check && git log --oneline --decorate -8`
 
-Expected: no uncommitted output and `git diff --check` exits 0.
+Expected: no uncommitted files and no whitespace errors.
 
-- [ ] **Step 3: Push the implementation branch and wait for the matrix**
+- [ ] **Step 3: Request approval before pushing**
 
-Run: `git push -u origin ext/thin-client`
+Report local results and ask the user to approve pushing `fix/cross-platform-release-evidence`. Do not push merely because implementation was authorized.
 
-Then inspect the workflow for the pushed commit:
+- [ ] **Step 4: After approval, push and watch the exact commit**
 
 ```bash
-gh run list --repo LabWired/agent --workflow harness.yml --branch ext/thin-client --limit 5
+git push -u origin fix/cross-platform-release-evidence
+gh run list --repo LabWired/agent --workflow harness.yml --branch fix/cross-platform-release-evidence --limit 5
 gh run watch --repo LabWired/agent <run-id> --exit-status
 ```
 
-Expected: unit, Ubuntu evidence, macOS evidence, Windows evidence, and Windows contract jobs all pass for the same SHA.
+- [ ] **Step 5: Download and audit evidence**
 
-- [ ] **Step 4: Verify retained evidence artifacts**
+Download `labwired-agent-source-ubuntu`, `labwired-agent-source-macos`, and `labwired-agent-source-windows` for the same SHA. Confirm each has all six files, `result.txt` is `PASS`, command output belongs to LabWired Agent, and `capabilities.txt` states rather than conceals missing simulator/probe support.
 
-Run:
+- [ ] **Step 6: Run deployed evidence after publication**
 
-```bash
-gh run download --repo LabWired/agent <run-id> --pattern 'labwired-agent-evidence-*' --dir /tmp/labwired-agent-evidence
-find /tmp/labwired-agent-evidence -type f -maxdepth 3 -print
-```
-
-Expected: separate Ubuntu, macOS, and Windows directories containing platform, installer, version, and doctor logs. Read each log and reject false-ready text or wrong command dispatch.
-
-- [ ] **Step 5: Report the evidence-qualified release status**
-
-Only call the Agent cross-platform release-ready when all required jobs and artifacts exist for the same commit. Report native Windows Agent support and its hosted/WSL simulation boundary explicitly.
+Invoke `deployed-install.yml` with the published version. Only call the public release cross-platform ready when the deployed endpoint jobs pass in addition to the same-commit source jobs.

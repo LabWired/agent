@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { readdir } from "node:fs/promises";
+import { resolveAgentLauncher } from "./agent-launcher.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
@@ -115,17 +116,14 @@ function onData(chunk) {
 // ——— labwired resolution ———
 
 function findLabwiredAgent() {
-  const candidates = [
-    process.env.LABWIRED_AGENT_CLI_PATH,
-    join(AGENT_ROOT, "bin", "labwired-agent"),
-    join(homedir(), ".labwired", "agent", "bin", "labwired-agent"),
-    "labwired-agent", // PATH
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (c === "labwired-agent") return c;
-    if (existsSync(c)) return c;
-  }
-  return null;
+  return resolveAgentLauncher({
+    platform: process.platform,
+    env: process.env,
+    agentRoot: AGENT_ROOT,
+    home: homedir(),
+    exists: existsSync,
+    which: whichSync,
+  });
 }
 
 /**
@@ -210,8 +208,8 @@ function expandArgv(template, params = {}) {
  *  until close. Output is still accumulated for the final result. */
 function runLabwired(argv, { timeoutMs = 120_000, onDelta } = {}) {
   return new Promise((resolveRun) => {
-    const bin = findLabwiredAgent();
-    if (!bin) {
+    const launcher = findLabwiredAgent();
+    if (!launcher) {
       resolveRun({
         code: 127,
         stdout: "",
@@ -219,7 +217,7 @@ function runLabwired(argv, { timeoutMs = 120_000, onDelta } = {}) {
       });
       return;
     }
-    const child = spawn(bin, argv, {
+    const child = spawn(launcher.command, [...launcher.argsPrefix, ...argv], {
       cwd: state.workspacePath,
       env: {
         ...process.env,
@@ -331,7 +329,7 @@ function initialize(params) {
     serverName: "labwired-agent",
     serverVersion: "0.5.0",
     agentRoot: AGENT_ROOT,
-    labwiredPath: labwired,
+    labwiredPath: labwired?.path || null,
     capabilities: {
       tools: true,
       chat: true,

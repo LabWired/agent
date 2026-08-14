@@ -1,7 +1,10 @@
 # Install LabWired Agent
 
-LabWired Agent supports macOS and Linux on x86-64 and Arm64. It also supports
-Windows 10 and later with PowerShell 5.1 or later.
+Native Agent support is continuously checked on GitHub-hosted macOS, Ubuntu,
+and Windows runners. Windows 10 and later requires PowerShell 5.1 or later.
+Release evidence records the runner architecture in `platform.txt`; an
+installer code path by itself is not evidence that a particular architecture
+was exercised.
 
 The Agent is optional. It does not install LabWired Core or the Editor. If Core
 is already installed, both products use the same `labwired` command without
@@ -24,6 +27,11 @@ irm https://labwired.com/install.ps1 | iex
 ```
 
 Legacy aliases also work: `https://labwired.com/agent-install.ps1`
+
+The Agent and hosted workflow run natively on Windows. When a matching native
+simulator release is unavailable, use hosted verification or WSL for local
+twin simulation. The install evidence records simulator and probe availability
+instead of treating optional hardware tooling as present.
 
 Start the Agent after installation:
 

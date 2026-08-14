@@ -9,6 +9,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/server" "$TMP/share"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
+# rpc-server.mjs imports ./agent-launcher.mjs — without the sibling the copied
+# server dies on ERR_MODULE_NOT_FOUND and this test just times out.
+cp "$ROOT/server/agent-launcher.mjs" "$TMP/server/agent-launcher.mjs"
 # share/tools.json is the server's tool table and mode policy, not an optional
 # extra: without it the server exits loudly instead of serving an empty tool list.
 # A copied server therefore has to bring the manifest with it.

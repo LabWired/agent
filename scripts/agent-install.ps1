@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 <#
-  LabWired Firmware Agent — one-command Windows bootstrap
+  LabWired Firmware Agent - one-command Windows bootstrap
   https://labwired.com/agent-install.ps1
 
   Usage:
@@ -19,7 +19,7 @@ function Say([string]$m) { Write-Host "==> $m" -ForegroundColor Cyan }
 function Die([string]$m) { Write-Host "labwired-agent-install: $m" -ForegroundColor Red; exit 1 }
 
 $AgentHome = Join-Path $Prefix "agent"
-Say "LabWired Firmware Agent — full stack (Windows portable prefix)"
+Say "LabWired Firmware Agent - full stack (Windows portable prefix)"
 Say "prefix: $Prefix  ref: $RepoRef"
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
