@@ -3,8 +3,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/server" "$TMP/path"
+mkdir -p "$TMP/server" "$TMP/path" "$TMP/share"
 cp "$ROOT/server/rpc-server.mjs" "$TMP/server/rpc-server.mjs"
+# The server reads its tool table from <root>/share/tools.json and exits loudly
+# when it is absent, so a copied server must bring the manifest with it.
+cp "$ROOT/share/tools.json" "$TMP/share/tools.json"
 
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agent-path-ok"' >"$TMP/path/labwired-agent"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "CORE MUST NOT RUN" >&2' 'exit 42' >"$TMP/path/labwired"

@@ -1,0 +1,208 @@
+{
+  "manifestVersion": 1,
+  "_comment": [
+    "ONE home for the RPC tool table. server/rpc-server.mjs reads this file; it",
+    "carries no inline tool array and no inline mode sets. The VS Code extension's",
+    "own registry (extensions/labwired-vscode/src/tools/registry.ts) is checked",
+    "against this file by tests/tools-manifest.sh.",
+    "",
+    "argv is the argv handed to bin/labwired-agent, with ${name} placeholders.",
+    "argv[0] must be a subcommand the CLI really dispatches — the gate proves it —",
+    "UNLESS argv[0] is one of `sentinels` below, which are handled in-process by",
+    "the server and never reach the CLI.",
+    "",
+    "`modes` lists the modes allowed to run the tool. Only the modes named in",
+    "`modePolicy` are enforced; act, debug and any unrecognised mode string run",
+    "everything, exactly as the old hardcoded sets did (they only ever tested for",
+    "mode === 'plan' and mode === 'verify').",
+    "",
+    "modePolicy.plan reproduces the old `destructive` denylist: a tool missing",
+    "'plan' from `modes` is what used to sit in that set. modePolicy.verify",
+    "reproduces the old `verifyOnly` allowlist: a tool listing 'verify' is what",
+    "used to sit in that set. The old denylist also named probe_reset and",
+    "probe_install_backend, which are NOT tools of this server — unreachable then,",
+    "absent now."
+  ],
+  "sentinels": ["__debug__", "__plot__", "__hw__"],
+  "modePolicy": {
+    "plan": {
+      "message": "Plan mode: tool `${name}` disabled (no flash/promote/install/GDB attach). Switch to Act or Debug."
+    },
+    "verify": {
+      "message": "Verify mode: only doctor/score/assert/probe-list/serial-capture tools. `${name}` blocked."
+    }
+  },
+  "tools": [
+    {
+      "name": "doctor",
+      "title": "Doctor",
+      "argv": ["doctor"],
+      "group": "install",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "doctor_strict",
+      "title": "Doctor (strict)",
+      "argv": ["doctor", "--strict"],
+      "group": "install",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "version",
+      "title": "Version",
+      "argv": ["version"],
+      "group": "install",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "smoke",
+      "title": "Smoke",
+      "argv": ["smoke"],
+      "group": "install",
+      "timeoutMs": 180000,
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "install_deps",
+      "title": "Install deps",
+      "argv": ["install-deps"],
+      "group": "install",
+      "timeoutMs": 600000,
+      "modes": ["act", "debug"]
+    },
+    {
+      "name": "help",
+      "title": "Help",
+      "argv": ["help"],
+      "group": "project",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "probe_list",
+      "title": "Probe list",
+      "argv": ["probe", "list"],
+      "group": "hardware",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "probe_doctor",
+      "title": "Probe doctor",
+      "argv": ["probe", "doctor"],
+      "group": "hardware",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "probe_chips",
+      "title": "Probe chips",
+      "argv": ["probe", "chips", "${query}"],
+      "params": ["query"],
+      "group": "hardware",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "probe_flash",
+      "title": "Flash",
+      "argv": ["probe", "flash", "${elf}", "--chip", "${chip}", "--target", "${target}"],
+      "params": ["elf", "chip", "target", "confirm"],
+      "group": "hardware",
+      "timeoutMs": 120000,
+      "modes": ["act", "debug"]
+    },
+    {
+      "name": "serial_capture",
+      "title": "Serial capture",
+      "argv": ["serial-capture", "${port}", "${baud}", "${marker}", "${timeout}"],
+      "params": ["port", "baud", "marker", "timeout"],
+      "group": "hardware",
+      "timeoutMs": 60000,
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "score_verify",
+      "title": "Score verify",
+      "argv": ["score-verify", "${file}"],
+      "params": ["file"],
+      "group": "verify",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "assert_status",
+      "title": "Assert status",
+      "argv": ["assert-status", "${expected}", "${file}"],
+      "params": ["expected", "file"],
+      "group": "verify",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "debug_info",
+      "title": "Debug info",
+      "argv": ["__debug__", "info"],
+      "group": "debug",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "debug_gdb_start",
+      "title": "GDB server start",
+      "argv": ["__debug__", "gdb_start", "${chip}", "${port}"],
+      "params": ["chip", "port"],
+      "group": "debug",
+      "modes": ["act", "debug"]
+    },
+    {
+      "name": "debug_gdb_stop",
+      "title": "GDB server stop",
+      "argv": ["__debug__", "gdb_stop"],
+      "group": "debug",
+      "modes": ["act", "debug", "plan"]
+    },
+    {
+      "name": "debug_read",
+      "title": "Memory read",
+      "argv": ["__debug__", "read", "${addr}", "${len}", "${chip}"],
+      "params": ["addr", "len", "chip"],
+      "group": "debug",
+      "modes": ["act", "debug", "plan"]
+    },
+    {
+      "name": "plot_status",
+      "title": "Serial plot status",
+      "argv": ["__plot__", "status"],
+      "group": "hardware",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "plot_clear",
+      "title": "Serial plot clear",
+      "argv": ["__plot__", "clear"],
+      "group": "hardware",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "hw_claim_shape",
+      "title": "HW claim shape check",
+      "_comment": "Claim rules live in lib/claim-shape.sh — one engine, shared with the CLI.",
+      "argv": [
+        "claim-shape",
+        "--status",
+        "${status}",
+        "--marker-matched",
+        "${marker_matched}",
+        "--flashed",
+        "${flashed}"
+      ],
+      "params": ["status", "marker_matched", "flashed"],
+      "group": "verify",
+      "modes": ["act", "debug", "plan", "verify"]
+    },
+    {
+      "name": "hw_promote",
+      "title": "HW promote (flash + marker → claim)",
+      "_comment": "Nests probe_flash, so it must be denied in Plan mode in its own right.",
+      "argv": ["__hw__", "promote", "${elf}", "${chip}", "${target}", "${port}", "${marker}", "${confirm}"],
+      "params": ["elf", "chip", "target", "port", "marker", "confirm", "baud", "timeout"],
+      "group": "verify",
+      "timeoutMs": 180000,
+      "modes": ["act", "debug"]
+    }
+  ]
+}
