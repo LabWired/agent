@@ -74,6 +74,7 @@ test('canonicalProfile is deterministic and redacts credential-shaped values', (
   assert.equal(canonicalProfile({ note: 'sk-live-secret' }).note, '[REDACTED]');
   assert.equal(canonicalProfile({ endpoint: 'https://user:password@example.test' }).endpoint, '[REDACTED]');
   assert.equal(canonicalProfile({ note: 'Authorization: Bearer abc' }).note, '[REDACTED]');
+  assert.equal(canonicalProfile({ note: 'Basic dXNlcjpwYXNz' }).note, '[REDACTED]');
   assert.deepEqual(canonical, canonicalProfile(profile));
 });
 
@@ -113,6 +114,9 @@ test('rejects inline credential values before they can enter a profile', () => {
   }), fixturePath), /inline credential/i);
   assert.throws(() => validateHardwareProfile(minimal({
     observations: [{ ...minimal().observations[0], contains: 'Bearer abc' }],
+  }), fixturePath), /inline credential/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], contains: 'Basic dXNlcjpwYXNz' }],
   }), fixturePath), /inline credential/i);
   assert.doesNotThrow(() => validateHardwareProfile(minimal({
     observations: [{ ...minimal().observations[0], contains: 'TOKEN_READY' }],
@@ -239,6 +243,12 @@ test('requires a physical profile to name the target, probe, and serial port', (
       },
       observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
     }), fixturePath), /ambiguous.*identity/i);
+  }
+  for (const [field, value] of [['probeSerial', '   '], ['serialPort', '\t']]) {
+    assert.throws(() => validateHardwareProfile(minimal({
+      target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0', [field]: value },
+      observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
+    }), fixturePath), /non-empty|identity/i);
   }
 });
 
