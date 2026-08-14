@@ -190,7 +190,7 @@ test('revalidates root ownership immediately before creating a lock', async (t) 
   );
 });
 
-for (const operation of ['write', 'sync']) {
+for (const operation of ['write', 'partial-write', 'sync']) {
   test(`rolls back its exclusive file when initialization ${operation} fails`, async (t) => {
     const root = await temporaryRoot(t);
     const hooks = {
@@ -198,9 +198,13 @@ for (const operation of ['write', 'sync']) {
         const descriptor = await open(lockPath, flags, mode);
         return new Proxy(descriptor, {
           get(target, property) {
-            if (property === (operation === 'write' ? 'writeFile' : operation)) {
+            if (property === (operation === 'sync' ? 'sync' : 'writeFile')) {
               return async (...args) => {
-                await target[property](...args);
+                if (operation === 'partial-write') {
+                  await target.write(String(args[0]).slice(0, 19));
+                } else if (operation !== 'write') {
+                  await target[property](...args);
+                }
                 throw new Error(`injected ${operation} failure`);
               };
             }
