@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { chmod, mkdtemp, mkdir, readFile, readdir, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, rename, symlink, unlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { createTrustedAdapters } from '../lib/hardware/adapters.mjs';
-import { createEvidenceBundle, levelSatisfies, sha256File } from '../lib/hardware/evidence.mjs';
+import { createEvidenceBundle, levelSatisfies, sha256File, verifyEvidenceBundle } from '../lib/hardware/evidence.mjs';
 
 const temporaryRoots = new Set();
 process.once('exit', () => {
@@ -19,6 +19,12 @@ async function sandbox() {
   await mkdir(path.join(root, 'build'), { recursive: true });
   await writeFile(path.join(root, 'system.yaml'), 'chip: fixture\n');
   return root;
+}
+
+async function evidenceDirectory(root, p, name = `evidence-${Math.random().toString(16).slice(2)}`) {
+  const directory = path.join(root, name);
+  await createEvidenceBundle(directory, p);
+  return directory;
 }
 
 function profile(root, provider = 'platformio') {
@@ -212,7 +218,10 @@ test('twin uses test-file contract with selected system and exact artifact', asy
     await writeFile(path.join(output, 'result.json'), JSON.stringify(passingResult(nativeHash)));
     return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
   });
-  const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: nativeHash });
+  const result = await adapters.twin['labwired-sim'].execute(p, {
+    nativeArtifactSha256: nativeHash,
+    evidenceDir: await evidenceDirectory(root, p),
+  });
   assert.equal(result.level, 'model_observed');
   assert.equal(result.nativeArtifactSha256, nativeHash);
   assert.notEqual(stagedArtifact, p.build.artifact);
@@ -244,13 +253,14 @@ test('different supported artifact is labeled surrogate with both hashes and pro
     nativeArtifactSha256: nativeHash,
     twinArtifact: surrogate,
     sharedSourcePaths: ['src/main.cpp'],
+    evidenceDir: await evidenceDirectory(root, p),
   });
   assert.equal(result.level, 'surrogate_model_observed');
   assert.equal(result.artifactSha256, nativeHash);
   assert.equal(result.surrogateArtifactSha256, surrogateHash);
   assert.deepEqual(result.sharedSourcePaths, ['src/main.cpp']);
   assert.deepEqual(Object.keys(result).sort(), [
-    'artifactSha256', 'level', 'provider', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
+    'artifactSha256', 'level', 'provider', 'rawEvidenceRefs', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
   ]);
 });
 
@@ -260,7 +270,10 @@ test('unsupported native twin execution is blocked and never upgrades compilatio
   await writeFile(p.build.artifact, 'arduino-elf');
   const hash = await sha256File(p.build.artifact);
   const { adapters } = harness(async () => ({ classification: 'exit', exitCode: 2, stdout: '', stderr: 'unsupported firmware format', truncated: { stdout: false, stderr: false } }));
-  const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+  const result = await adapters.twin['labwired-sim'].execute(p, {
+    nativeArtifactSha256: hash,
+    evidenceDir: await evidenceDirectory(root, p),
+  });
   assert.equal(result.level, 'blocked');
   assert.notEqual(result.level, 'model_observed');
   assert.match(result.diagnostics, /unsupported/i);
@@ -272,8 +285,65 @@ test('a passing exit without genuine simulator result cannot yield model evidenc
   await writeFile(p.build.artifact, 'native');
   const hash = await sha256File(p.build.artifact);
   const { adapters } = harness();
-  const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+  const result = await adapters.twin['labwired-sim'].execute(p, {
+    nativeArtifactSha256: hash,
+    evidenceDir: await evidenceDirectory(root, p),
+  });
   assert.equal(result.level, 'failed');
+});
+
+test('malformed and oversized simulator results are rejected without raw evidence persistence', async (t) => {
+  for (const scenario of ['malformed', 'oversized']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    const hash = await sha256File(p.build.artifact);
+    const evidenceDir = await evidenceDirectory(root, p);
+    const { adapters } = harness(async (descriptor) => {
+      const body = scenario === 'malformed' ? '{' : JSON.stringify({ padding: 'x'.repeat(140_000) });
+      await writeFile(path.join(descriptor.args[4], 'result.json'), body);
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash, evidenceDir });
+    assert.equal(result.level, 'failed');
+    await assert.rejects(readFile(path.join(evidenceDir, 'twin', 'simulator-output.json')), /ENOENT/);
+  });
+});
+
+test('evidence persistence rejects alias, replacement, and overwrite paths', async (t) => {
+  for (const scenario of ['symlink-root', 'replaced-root', 'preexisting-capture']) await t.test(scenario, async () => {
+    const root = await sandbox();
+    const p = profile(root);
+    await writeFile(p.build.artifact, 'native');
+    const hash = await sha256File(p.build.artifact);
+    const bundle = await evidenceDirectory(root, p);
+    let evidenceDir = bundle;
+    if (scenario === 'symlink-root') {
+      evidenceDir = path.join(root, 'evidence-alias');
+      await symlink(bundle, evidenceDir, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+    if (scenario === 'preexisting-capture') {
+      await mkdir(path.join(bundle, 'twin'));
+      await writeFile(path.join(bundle, 'twin', 'simulator-output.json'), 'sentinel');
+    }
+    let runs = 0;
+    const { adapters } = harness(async (descriptor) => {
+      runs += 1;
+      await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(hash)));
+      if (scenario === 'replaced-root') {
+        const moved = `${bundle}.moved`;
+        await rename(bundle, moved);
+        await symlink(moved, bundle, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+      return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+    });
+    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash, evidenceDir });
+    assert.equal(result.level, 'failed');
+    assert.equal(runs, scenario === 'symlink-root' ? 0 : 1);
+    if (scenario === 'preexisting-capture') {
+      assert.equal(await readFile(path.join(bundle, 'twin', 'simulator-output.json'), 'utf8'), 'sentinel');
+    }
+  });
 });
 
 test('twin requires an exact well-formed native build hash before launching', async (t) => {
@@ -312,7 +382,10 @@ test('twin result assertions must exactly match requested kind, value, count, an
       await writeFile(path.join(output, 'result.json'), JSON.stringify({ status: 'pass', firmware_hash: hash, assertions }));
       return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
     });
-    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    const result = await adapters.twin['labwired-sim'].execute(p, {
+      nativeArtifactSha256: hash,
+      evidenceDir: await evidenceDirectory(root, p),
+    });
     assert.equal(result.level, 'failed');
   });
 });
@@ -333,7 +406,10 @@ test('mutation or replacement of original or staged firmware invalidates model e
       await writeFile(path.join(output, 'result.json'), JSON.stringify(passingResult(hash)));
       return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
     });
-    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    const result = await adapters.twin['labwired-sim'].execute(p, {
+      nativeArtifactSha256: hash,
+      evidenceDir: await evidenceDirectory(root, p),
+    });
     assert.equal(result.level, 'failed');
   });
 });
@@ -353,7 +429,10 @@ test('mutation or replacement of original or staged twin system invalidates mode
       await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(hash)));
       return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
     });
-    const result = await adapters.twin['labwired-sim'].execute(p, { nativeArtifactSha256: hash });
+    const result = await adapters.twin['labwired-sim'].execute(p, {
+      nativeArtifactSha256: hash,
+      evidenceDir: await evidenceDirectory(root, p),
+    });
     assert.equal(result.level, 'failed');
   });
 });
@@ -394,6 +473,7 @@ test('surrogate shared sources must be unique existing contained regular files a
       nativeArtifactSha256: nativeHash,
       twinArtifact: surrogate,
       sharedSourcePaths: sources,
+      evidenceDir: await evidenceDirectory(root, p),
     });
     assert.equal(result.level, 'failed');
     assert.equal(runs, ['mutate', 'replace'].includes(scenario) ? 1 : 0);
@@ -412,22 +492,30 @@ test('surrogate adapter output normalizes into the real evidence contract withou
   const nativeHash = await sha256File(p.build.artifact);
   const surrogateHash = await sha256File(surrogate);
   const { adapters } = harness(async (descriptor) => {
-    await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify(passingResult(surrogateHash)));
+    await writeFile(path.join(descriptor.args[4], 'result.json'), JSON.stringify({
+      ...passingResult(surrogateHash),
+      diagnostics: { credential: 'top-secret' },
+    }));
     return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
   });
+  const bundleRoot = path.join(root, 'evidence');
+  const evidence = await createEvidenceBundle(bundleRoot, p);
   const adapterResult = await adapters.twin['labwired-sim'].execute(p, {
     nativeArtifactSha256: nativeHash,
     twinArtifact: surrogate,
     sharedSourcePaths: ['src/main.cpp'],
+    evidenceDir: bundleRoot,
+    redact: ['top-secret'],
   });
   assert.deepEqual(Object.keys(adapterResult).sort(), [
-    'artifactSha256', 'level', 'provider', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
+    'artifactSha256', 'level', 'provider', 'rawEvidenceRefs', 'sharedSourcePaths', 'surrogateArtifactSha256', 'toolVersion',
   ]);
-
-  const bundleRoot = path.join(root, 'evidence');
-  const evidence = await createEvidenceBundle(bundleRoot, p);
-  await mkdir(path.join(bundleRoot, 'captures'));
-  await writeFile(path.join(bundleRoot, 'captures', 'alive.txt'), 'surrogate simulator assertion evidence\n');
+  assert.deepEqual(adapterResult.rawEvidenceRefs, ['twin/simulator-output.json']);
+  const capturePath = path.join(bundleRoot, adapterResult.rawEvidenceRefs[0]);
+  const captured = JSON.parse(await readFile(capturePath, 'utf8'));
+  assert.equal(captured.firmware_hash, surrogateHash);
+  assert.deepEqual(captured.assertions, [{ assertion: { uart_contains: 'ALIVE' }, passed: true }]);
+  assert.equal(captured.diagnostics.credential, '[REDACTED]');
   const startedAt = new Date().toISOString();
   const record = await evidence.recordBehavior('alive', {
     ...adapterResult,
@@ -436,7 +524,6 @@ test('surrogate adapter output normalizes into the real evidence contract withou
     targetIdentity: { ...p.target },
     startedAt,
     endedAt: new Date().toISOString(),
-    rawEvidenceRefs: ['captures/alive.txt'],
     diagnostics: { simulator: 'passed exact requested assertion against surrogate' },
   });
   assert.equal(record.level, 'surrogate_model_observed');
@@ -445,4 +532,10 @@ test('surrogate adapter output normalizes into the real evidence contract withou
   assert.equal(summary.result, 'FAIL');
   assert.equal(summary.reasons[0].actualLevel, 'surrogate_model_observed');
   assert.equal(summary.reasons[0].requiredLevel, 'model_observed');
+  await chmod(capturePath, 0o600);
+  await writeFile(capturePath, '{"tampered":true}\n');
+  const verified = await verifyEvidenceBundle(bundleRoot, {
+    expectedManifestSha256: summary.manifestSha256,
+  });
+  assert.equal(verified.valid, false);
 });
