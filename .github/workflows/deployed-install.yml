@@ -116,12 +116,12 @@ jobs:
           $env:LABWIRED_AGENT_CONFIG_DIR = $env:OPENCODE_CONFIG_DIR
           New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
           $installer = Join-Path $tmp 'install.ps1'
+          $powershellExe = Join-Path $PSHOME 'powershell.exe'
           Invoke-WebRequest https://labwired.com/install.ps1 -OutFile $installer
           (Get-FileHash $installer -Algorithm SHA256).Hash | Set-Content "$env:EVIDENCE_DIR\installer-sha256.txt"
-          $installStatus = Invoke-Captured -Path $installer -Arguments @('-Prefix', $env:LABWIRED_HOME, '-UserBin', $env:LABWIRED_BIN_DIR, '-AgentOnly', '-SkipPathUpdate') -OutputPath "$env:EVIDENCE_DIR\install.txt"
+          $installStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $installer, '-Prefix', $env:LABWIRED_HOME, '-UserBin', $env:LABWIRED_BIN_DIR, '-AgentOnly', '-SkipPathUpdate') -OutputPath "$env:EVIDENCE_DIR\install.txt"
           if ($installStatus -ne 0) { throw "published Windows installer failed with code $installStatus" }
           $dispatcher = Join-Path $env:LABWIRED_HOME 'bin\labwired.ps1'
-          $powershellExe = Join-Path $PSHOME 'powershell.exe'
           $dispatchFailed = $false
           $versionStatus = Invoke-Captured -Path $powershellExe -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $dispatcher, 'agent', 'version') -OutputPath "$env:EVIDENCE_DIR\version.txt"
           if ($versionStatus -ne 0) { $dispatchFailed = $true; Add-Content "$env:EVIDENCE_DIR\version.txt" 'ERROR: published version command failed' }
