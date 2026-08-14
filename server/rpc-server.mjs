@@ -255,12 +255,49 @@ const TOOLS = [
   {
     name: "hw_promote",
     title: "HW promote (flash + marker → claim)",
-    argv: ["__hw__", "promote", "${elf}", "${chip}", "${target}", "${port}", "${marker}", "${confirm}"],
-    params: ["elf", "chip", "target", "port", "marker", "confirm", "baud", "timeout"],
+    // Orchestration lives in lib/promote.sh — one promote engine, shared with the
+    // CLI. `defaults: {}` opts out of PARAM_DEFAULTS below: promote's own
+    // defaults (chip esp32c3, target virtual, no port, timeout 8) belong to the
+    // lib, and the shared editor defaults (target auto, port 1337) would silently
+    // turn an unqualified promote into a physical one.
+    argv: [
+      "promote",
+      "--elf", "${elf}",
+      "--chip", "${chip}",
+      "--target", "${target}",
+      "--port", "${port}",
+      "--marker", "${marker}",
+      "--baud", "${baud}",
+      "--timeout", "${timeout}",
+      "--confirm", "${confirm}",
+      "--dry-run", "${dry_run}",
+      "--flashed", "${flashed}",
+      "--marker-matched", "${marker_matched}",
+    ],
+    params: [
+      "elf", "chip", "target", "port", "marker", "confirm", "baud", "timeout",
+      "dry_run", "flashed", "marker_matched",
+    ],
+    defaults: {},
     group: "verify",
     timeoutMs: 180_000,
   },
 ];
+
+/** Editor-side placeholder defaults, applied when a tool does not declare its
+ *  own `defaults`. A tool whose defaults belong to the CLI sets `defaults: {}`. */
+const PARAM_DEFAULTS = {
+  query: "stm32",
+  baud: "115200",
+  marker: "LABWIRED_OK",
+  timeout: "10",
+  target: "auto",
+  expected: "model_verified",
+  port: "1337",
+  len: "16",
+  addr: "0x0",
+  chip: "STM32F401RETx",
+};
 
 function expandArgv(template, params = {}) {
   return template.map((part) =>
@@ -483,8 +520,9 @@ async function toolRun(params) {
 
   notify("chat/toolCall", { name: tool.name, title: tool.title, params: toolParams });
 
-  // In-process special tools
-  if (tool.argv[0] === "__debug__" || tool.argv[0] === "__plot__" || tool.argv[0] === "__hw__") {
+  // In-process special tools. No "__hw__": hw_claim_shape and hw_promote are
+  // plain argv rows onto the CLI (lib/claim-shape.sh, lib/promote.sh).
+  if (tool.argv[0] === "__debug__" || tool.argv[0] === "__plot__") {
     const special = await runSpecialTool(tool, toolParams);
     notify("chat/toolResult", {
       name: tool.name,
@@ -502,16 +540,7 @@ async function toolRun(params) {
   }
 
   const argv = expandArgv(tool.argv, {
-    query: "stm32",
-    baud: "115200",
-    marker: "LABWIRED_OK",
-    timeout: "10",
-    target: "auto",
-    expected: "model_verified",
-    port: "1337",
-    len: "16",
-    addr: "0x0",
-    chip: "STM32F401RETx",
+    ...(tool.defaults ?? PARAM_DEFAULTS),
     ...toolParams,
   });
   let streamed = false;
@@ -581,27 +610,6 @@ function resolveProbeRs() {
   return probeRsCached;
 }
 
-/** Hardware claim shape via `labwired-agent claim-shape` (lib/claim-shape.sh).
- *  The rules are NOT duplicated here: a second claim engine is how the editor
- *  and the terminal end up disagreeing about what counts as hardware_observed. */
-async function hwClaimShape(params = {}) {
-  const argv = [
-    "claim-shape",
-    "--status", String(params.status ?? ""),
-    "--marker-matched", String(params.marker_matched ?? "0"),
-    "--flashed", String(params.flashed ?? "0"),
-  ];
-  const r = await runLabwired(argv, { timeoutMs: 20_000 });
-  let extra = {};
-  try {
-    extra = JSON.parse(r.stdout || "{}");
-  } catch {
-    // Refusal path prints to stderr only, so there is no payload to parse.
-    extra = { status: "refused", reason: "model_verified_from_hw" };
-  }
-  return { code: r.code, stdout: r.stdout, stderr: r.stderr, extra };
-}
-
 async function runSpecialTool(tool, params) {
   const kind = tool.argv[0];
   const op = tool.argv[1];
@@ -626,120 +634,11 @@ async function runSpecialTool(tool, params) {
     };
   }
 
-  // No "__hw__ claim" branch: hw_claim_shape is a plain argv tool now
-  // (`claim-shape`), so it never reaches runSpecialTool.
-
-  if (kind === "__hw__" && op === "promote") {
-    // Desk/virtual promote: flash → optional serial marker → claim (never model_verified)
-    const elf = String(params.elf || "");
-    const chip = String(params.chip || "esp32c3");
-    const target = String(params.target || "virtual").toLowerCase();
-    const port = String(params.port || "");
-    const marker = String(params.marker || "LABWIRED_OK");
-    const baud = String(params.baud || "115200");
-    const timeout = String(params.timeout || "8");
-    const confirm = String(params.confirm || "").toLowerCase();
-    const confirmed = confirm === "1" || confirm === "yes" || confirm === "true";
-    const isVirtual = target === "virtual" || target === "sim" || target === "twin";
-
-    if (!isVirtual && !confirmed && process.env.LABWIRED_FLASH_AUTO !== "1") {
-      return {
-        code: 2,
-        stdout: "",
-        stderr:
-          "hw_promote: physical target requires confirm=1 after user approval (or target=virtual).\n",
-        extra: { status: "needs_confirm" },
-      };
-    }
-    if (!elf && !params.dry_run && params.dry_run !== "1") {
-      // allow dry_run without elf for claim pipeline test
-      if (String(params.dry_run || "") !== "1") {
-        return {
-          code: 2,
-          stdout: "",
-          stderr: "hw_promote: elf path required (or dry_run=1 for claim-shape dry run)\n",
-        };
-      }
-    }
-
-    let flashed = false;
-    let flashOut = "";
-    if (String(params.dry_run || "") === "1") {
-      flashed = String(params.flashed || "1") !== "0";
-      flashOut = "[dry_run] flash skipped\n";
-    } else {
-      const flashParams = {
-        elf,
-        chip,
-        target: isVirtual ? "virtual" : target,
-        confirm: isVirtual ? "0" : "1",
-      };
-      // re-enter labwired flash via nested toolRun path
-      const flashTool = TOOLS.find((t) => t.name === "probe_flash");
-      const argv = expandArgv(flashTool.argv, flashParams);
-      const fr = await runLabwired(argv, {
-        timeoutMs: 120_000,
-        onDelta: (stream, text) => notify("chat/toolDelta", { name: "hw_promote", stream, text }),
-      });
-      flashOut = (fr.stdout || "") + (fr.stderr || "");
-      flashed = fr.code === 0;
-    }
-
-    let marker_matched = false;
-    let captureOut = "";
-    if (String(params.dry_run || "") === "1") {
-      marker_matched = String(params.marker_matched || "1") !== "0";
-      captureOut = `[dry_run] marker ${marker} assumed matched=${marker_matched}\n`;
-    } else if (port && !isVirtual) {
-      const cap = TOOLS.find((t) => t.name === "serial_capture");
-      const argv = expandArgv(cap.argv, {
-        port,
-        baud,
-        marker,
-        timeout,
-      });
-      const cr = await runLabwired(argv, {
-        timeoutMs: 60_000,
-        onDelta: (stream, text) => notify("chat/toolDelta", { name: "hw_promote", stream, text }),
-      });
-      captureOut = (cr.stdout || "") + (cr.stderr || "");
-      marker_matched =
-        cr.code === 0 ||
-        captureOut.includes(marker) ||
-        /observed|matched|found/i.test(captureOut);
-    } else if (isVirtual) {
-      // Virtual: treat successful flash as not enough for hardware_observed;
-      // twin claims stay model_verified path. For promote dry, use capture sim text if any.
-      marker_matched = false;
-      captureOut =
-        "[virtual] flash does not yield hardware_observed; use twin verify for model_verified.\n";
-    }
-
-    const claim = await hwClaimShape({
-      flashed: flashed ? "1" : "0",
-      marker_matched: marker_matched ? "1" : "0",
-    });
-    const body = [
-      "=== flash ===",
-      flashOut.trim(),
-      "=== capture ===",
-      captureOut.trim(),
-      "=== claim ===",
-      claim.stdout.trim(),
-    ].join("\n");
-    return {
-      code: claim.code,
-      stdout: body + "\n",
-      stderr: claim.stderr || "",
-      extra: {
-        ...(claim.extra || {}),
-        flashed,
-        marker_matched,
-        target,
-        dry_run: String(params.dry_run || "") === "1",
-      },
-    };
-  }
+  // No "__hw__" branches remain: hw_claim_shape and hw_promote are plain argv
+  // rows onto the CLI (lib/claim-shape.sh, lib/promote.sh), so neither reaches
+  // runSpecialTool. Orchestration that decides a claim belongs in the CLI where
+  // a terminal and CI can run it; this server keeps only what needs a live
+  // process (GDB child, serial connection, plot series, notifications).
 
   if (kind === "__debug__") {
     return runDebugOp(op, params);

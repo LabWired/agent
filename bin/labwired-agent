@@ -910,6 +910,9 @@ Usage:
                            Exit 0 if verify JSON status matches
   labwired agent claim-shape [--flashed 0|1] [--marker-matched 0|1]
                            Hardware claim shape; exit 0 only on hardware_observed
+  labwired agent promote [--elf F] [--chip C] [--target virtual|probe] [--port P]
+                         [--marker M] [--confirm 1] [--dry-run 1]
+                           Flash → serial marker → claim; exit 0 only on hardware_observed
   labwired agent score-verify [--expect STATUS] [file]
                            Score verify JSON / matrix; print score
   labwired agent serial-capture <port> <baud> <marker> <timeout>
@@ -1136,6 +1139,14 @@ cmd_claim_shape() {
   labwired_claim_shape "$@"
 }
 
+cmd_promote() {
+  # shellcheck source=lib/claim-shape.sh
+  source "$ROOT/lib/claim-shape.sh"
+  # shellcheck source=lib/promote.sh
+  source "$ROOT/lib/promote.sh"
+  labwired_promote "$@"
+}
+
 cmd_assert_status() {
   local expected="${1:-}"
   local file="${2:-}"
@@ -1221,6 +1232,10 @@ case "${1:-}" in
   claim-shape)
     shift
     cmd_claim_shape "$@"
+    ;;
+  promote)
+    shift
+    cmd_promote "$@"
     ;;
   score-verify)
     shift
