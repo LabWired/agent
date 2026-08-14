@@ -112,6 +112,9 @@ for (const [key, runner, endpoint, artifact] of [
 requireText(deployedJobs.get('deployed-windows') || '', 'powershell.exe', 'deployed-windows');
 requireText(deployedJobs.get('deployed-windows') || '', 'pwsh.exe', 'deployed-windows');
 requireText(deployedJobs.get('deployed-windows') || '', '-cne $env:EXPECTED_VERSION', 'deployed-windows');
+requireText(deployedJobs.get('deployed-windows') || '', 'function Invoke-Captured', 'deployed-windows');
+if ((deployedJobs.get('deployed-windows') || '').includes('Tee-Object'))
+  fail('deployed-windows must not duplicate nested PowerShell output through Tee-Object');
 requireText(deployedJobs.get('deployed-ubuntu') || '', 'actual_version', 'deployed-ubuntu');
 requireText(deployedJobs.get('deployed-macos') || '', 'actual_version', 'deployed-macos');
 
