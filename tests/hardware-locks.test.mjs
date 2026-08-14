@@ -147,12 +147,22 @@ test('corrupt and symlink lock entries fail closed', async (t) => {
   assert.equal(await readFile(outside, 'utf8'), 'untouched');
 });
 
-test('rejects missing, ambiguous, or unsafe identity and root inputs', async (t) => {
+test('rejects missing or ambiguous identities and unnormalized roots', async (t) => {
   const root = await temporaryRoot(t);
   await assert.rejects(acquireHardwareLocks({}, { root }), /identity/i);
   await assert.rejects(acquireHardwareLocks({ target: '   ' }, { root }), /identity/i);
   await assert.rejects(acquireHardwareLocks({ target: 'board' }, { root: `${root}/..` }), /root/i);
 });
+
+for (const type of ['target', 'probe', 'serial']) {
+  for (const value of ['auto', ' FIRST ', 'Any', '\tDeFaUlT\n']) {
+    test(`rejects ambiguous ${type} identity ${JSON.stringify(value)}`, async (t) => {
+      const root = await temporaryRoot(t);
+      await assert.rejects(acquireHardwareLocks({ [type]: value }, { root }), /ambiguous.*identity/i);
+      assert.deepEqual(await readdir(root), []);
+    });
+  }
+}
 
 test('rejects a symlink anywhere in the supplied root ancestry', async (t) => {
   const base = await temporaryRoot(t);
@@ -252,4 +262,37 @@ test('initialization failure never removes a replacement lock', async (t) => {
   );
   const [name] = await readdir(root);
   assert.equal(await readFile(path.join(root, name), 'utf8'), replacement);
+});
+
+test('stale recovery refuses a root replaced after liveness proof', async (t) => {
+  const root = await temporaryRoot(t);
+  const moved = `${root}-stale-original`;
+  t.after(() => rm(moved, { recursive: true, force: true }));
+  const original = await acquireHardwareLocks({ target: 'stale-race' }, { root });
+  const [name] = await readdir(root);
+  const stale = JSON.parse(await readFile(path.join(root, name), 'utf8'));
+  await original.release();
+  stale.pid = 2147483647;
+  stale.processStart = 'absent';
+  await writeFile(path.join(root, name), `${JSON.stringify(stale)}\n`, { flag: 'wx' });
+
+  const replacement = '{"replacement":"must-survive"}\n';
+  let swapped = false;
+  const hooks = {
+    async beforeStaleMutation() {
+      if (swapped) return;
+      swapped = true;
+      await rename(root, moved);
+      await mkdir(root);
+      await writeFile(path.join(root, name), replacement, { flag: 'wx' });
+      await writeFile(path.join(root, 'sentinel'), 'untouched', { flag: 'wx' });
+    },
+  };
+  await assert.rejects(
+    __testing.acquireHardwareLocks({ target: 'stale-race' }, { root }, hooks),
+    /root changed|unsafe|symbolic/i,
+  );
+  assert.equal(await readFile(path.join(root, name), 'utf8'), replacement);
+  assert.equal(await readFile(path.join(root, 'sentinel'), 'utf8'), 'untouched');
+  assert.equal((await readdir(moved)).includes(name), true);
 });
