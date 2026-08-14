@@ -5,6 +5,9 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/project/.pio/build/env-one" "$TMP/desk/build dir"
 printf '[env:env-one]\n' >"$TMP/project/platformio.ini"
+mkdir -p "$TMP/project/src"
+printf 'int main(void) { return 0; }\n' >"$TMP/project/src/main.cpp"
+printf 'chip: fixture\n' >"$TMP/project/system.yaml"
 printf firmware >"$TMP/desk/build dir/firm ware.elf"
 
 cat >"$TMP/bin/labwired-agent" <<'SH'
@@ -72,6 +75,27 @@ assert calls[1][0:2] == ['hardware','run']
 assert calls[1][-2:] == ['--confirm',sys.argv[2]]
 PY
 [[ ! -e "$LEGACY_PROFILE" || -s "$LEGACY_PROFILE" ]] # fake CLI copy survives; wrapper temp does not
+
+# A combined physical cycle declares independent twin and desk requirements.
+: >"$LEGACY_ARGV"
+export LABWIRED_HW_SKIP_FLASH=0 LABWIRED_HW_SKIP_TWIN=0 LABWIRED_HW_SYSTEM="$TMP/project/system.yaml"
+export LABWIRED_HW_CONFIRM="$DIGEST_ZERO"
+bash "$ROOT/scripts/dev-cycle.sh" >/dev/null
+python3 - "$LEGACY_PROFILE" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1]))
+claims={x["id"]:x["requiredLevel"] for x in p["observations"]}
+assert claims == {"legacy-twin-serial":"surrogate_model_observed", "legacy-hardware-serial":"hardware_observed"}
+assert p["twin"]["artifactRelation"] == "surrogate"
+assert p["twin"]["artifact"].endswith("firmware.elf")
+PY
+export LEGACY_RUN_EXIT=3 LEGACY_RUN_OUTPUT='{"result":"FAIL","reasons":[{"behaviorId":"legacy-twin-serial"}]}'
+set +e; bash "$ROOT/scripts/dev-cycle.sh" >/dev/null 2>&1; rc=$?; set -e
+[[ "$rc" -eq 1 ]]
+unset LEGACY_RUN_EXIT LEGACY_RUN_OUTPUT
+
+export LABWIRED_HW_SKIP_FLASH=1 LABWIRED_HW_SKIP_TWIN=1
+unset LABWIRED_HW_SYSTEM
 
 # Non-physical build/twin plans use their own exact digest unattended.
 : >"$LEGACY_ARGV"; unset LABWIRED_HW_CONFIRM

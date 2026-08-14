@@ -93,6 +93,8 @@ if skip_twin == "0" and system:
     if not shared: raise SystemExit("dev-cycle: physical twin requires at least one regular shared source under src/")
     doc["twin"]={"provider":"labwired-sim","system":os.path.basename(system),"artifactRelation":"surrogate",
                  "artifact":f".pio/build/{environment}/firmware.elf","sharedSources":shared}
+    doc["observations"].insert(0,{"id":"legacy-twin-serial","provider":"serial","contains":marker,
+                                  "timeoutSeconds":int(timeout),"requiredLevel":"surrogate_model_observed"})
   else:
     doc["build"]["artifact"]=f".pio/build/{environment}/firmware.elf"
     doc["twin"]={"provider":"labwired-sim","system":os.path.basename(system),"artifactRelation":"exact"}

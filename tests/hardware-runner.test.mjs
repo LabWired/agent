@@ -638,3 +638,31 @@ test('surrogate twin stage authenticates A/B provenance while physical behavior 
   assert.equal(twinStage.surrogateArtifactSha256, surrogate);
   assert.deepEqual(twinStage.sharedSourcePaths, ['src/main.cpp']);
 });
+
+test('combined legacy twin and hardware behaviors remain distinct in the authenticated receipt', async (t) => {
+  for (const twinPass of [false, true]) await t.test(twinPass ? 'both pass' : 'twin fails while hardware passes', async () => {
+    const f = await fixture({ observations: [
+      { id: 'legacy-twin-serial', provider: 'serial', contains: 'alive', requiredLevel: 'surrogate_model_observed' },
+      { id: 'legacy-hardware-serial', provider: 'serial', contains: 'alive', requiredLevel: 'hardware_observed' },
+    ] });
+    f.profile.twin.artifactRelation = 'surrogate';
+    f.profile.twin.artifact = path.join(f.root, 'firmware.elf');
+    f.profile.twin.sharedSources = ['src/main.cpp'];
+    const twin = twinPass
+      ? result('surrogate_model_observed', { artifactSha256: 'a'.repeat(64), surrogateArtifactSha256: 'b'.repeat(64), sharedSourcePaths: ['src/main.cpp'], rawEvidenceRefs: ['observations/twin-failure.json'] })
+      : result('failed', { diagnostics: 'twin assertion failed', rawEvidenceRefs: ['observations/twin-failure.json'] });
+    const h = harness(f.profile, { realPhysical: true, twin });
+    h.dependencies.createEvidence = async (...args) => {
+      const { createEvidenceBundle } = await import('../lib/hardware/evidence.mjs');
+      return createEvidenceBundle(...args);
+    };
+    const planned = await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies });
+    const outcome = await executeHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, confirmDigest: planned.digest, dependencies: h.dependencies });
+    assert.equal(outcome.result, twinPass ? 'PASS' : 'FAIL');
+    const twinClaim = JSON.parse(await readFile(path.join(f.evidenceDir, 'observations', 'legacy-twin-serial', 'result.json'), 'utf8'));
+    const hardwareClaim = JSON.parse(await readFile(path.join(f.evidenceDir, 'observations', 'legacy-hardware-serial', 'result.json'), 'utf8'));
+    assert.equal(twinClaim.level, twinPass ? 'surrogate_model_observed' : 'failed');
+    assert.equal(hardwareClaim.level, 'hardware_observed');
+    assert.equal(hardwareClaim.flashedArtifactSha256, 'a'.repeat(64));
+  });
+});
