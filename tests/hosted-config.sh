@@ -18,10 +18,21 @@ test -f "$ROOT/config/opencode.json" || bad "missing opencode.json"
 python3 - <<PY
 import json, sys
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 cfg = json.loads(Path("$cfg").read_text())
 mcp = cfg.get("mcp", {}).get("labwired", {})
 assert mcp.get("type") == "remote", mcp
-assert mcp.get("url") == "https://api.labwired.com/mcp", mcp
+url = urlparse(mcp.get("url", ""))
+assert f"{url.scheme}://{url.netloc}{url.path}" == "https://api.labwired.com/mcp", mcp
+assert parse_qs(url.query).get("toolNames") == ["unprefixed"], mcp
+# OpenCode exposes MCP names as <configured-server-key>_<wire-name>. The
+# hosted profile strips the raw server prefix, so model-facing names remain
+# canonical instead of becoming labwired_labwired_*.
+raw_name = "labwired_context"
+wire_name = raw_name.removeprefix("labwired_")
+model_name = f"labwired_{wire_name}"
+assert model_name == raw_name, model_name
+assert not model_name.startswith("labwired_labwired_"), model_name
 # Bearer header is the product auth path — do not open OpenCode MCP OAuth /connect.
 assert mcp.get("oauth") is False, mcp
 auth = (mcp.get("headers") or {}).get("Authorization", "")
