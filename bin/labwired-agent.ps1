@@ -156,6 +156,11 @@ function Cmd-Hardware {
   Assert-SafePath $runner
   $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $nodeCommand) { [Console]::Error.WriteLine('labwired: Node.js 18+ is required for hardware commands'); exit 2 }
+  $nodeVersion = (& $nodeCommand.Source --version 2>$null)
+  $nodeMajor = 0
+  if (-not $nodeVersion -or -not [int]::TryParse(([string]$nodeVersion).Trim().TrimStart('v').Split('.')[0], [ref]$nodeMajor) -or $nodeMajor -lt 18) {
+    [Console]::Error.WriteLine('labwired: Node.js 18+ is required for hardware commands'); exit 2
+  }
   & $nodeCommand.Source $runner @argsRest
   exit $LASTEXITCODE
 }

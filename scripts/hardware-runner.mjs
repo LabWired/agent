@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { executeHardwareRun, planHardwareRun } from '../lib/hardware/runner.mjs';
+import { resolveLaunch, runLaunch } from '../lib/hardware/process.mjs';
+import { containsInlineCredential } from '../lib/hardware/profile.mjs';
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const AMBIGUOUS = new Set(['auto', 'first', 'any', 'default']);
@@ -28,6 +29,9 @@ export function parseHardwareArguments(argv) {
     values[flag] = rest[index + 1];
   }
   if (!values['--profile'] || !values['--out']) fail('--profile and --out are required', true);
+  if ([values['--profile'], values['--out'], values['--confirm']].some((value) => typeof value === 'string' && containsInlineCredential(value))) {
+    fail('hardware arguments must not contain credential-shaped values', true);
+  }
   if (command === 'run' && (!values['--confirm'] || !SHA256.test(values['--confirm']))) {
     fail('hardware run requires --confirm with the exact lowercase plan digest', true);
   }
@@ -56,22 +60,14 @@ function requireStat(candidate) {
 }
 
 async function runJson(executable, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd: options.cwd, env: process.env, shell: false, windowsHide: true });
-    const stdout = []; const stderr = []; let bytes = 0;
-    const collect = (chunks) => (chunk) => {
-      bytes += chunk.length;
-      if (bytes > 1024 * 1024) { child.kill(); reject(new Error('BLOCKED: provider enumeration exceeded its output limit')); return; }
-      chunks.push(chunk);
-    };
-    child.stdout.on('data', collect(stdout)); child.stderr.on('data', collect(stderr));
-    child.once('error', reject);
-    child.once('close', (code) => {
-      if (code !== 0) reject(new Error('BLOCKED: trusted provider enumeration failed'));
-      else resolve(Buffer.concat(stdout).toString('utf8'));
-    });
-    options.signal?.addEventListener('abort', () => child.kill(), { once: true });
-  });
+  if (options.signal?.aborted) throw Object.assign(new Error('hardware enumeration cancelled'), { name: 'AbortError' });
+  const descriptor = resolveLaunch({ executable, args, cwd: options.cwd ?? process.cwd(), env: process.env, shell: false });
+  const result = await runLaunch(descriptor, { timeoutMs: options.timeoutMs ?? 10_000, signal: options.signal, redact: options.redact });
+  if (result.classification === 'cancelled') throw Object.assign(new Error('hardware enumeration cancelled'), { name: 'AbortError' });
+  if (result.classification === 'timeout') throw new Error('BLOCKED: trusted provider enumeration timed out');
+  if (result.classification !== 'exit' || result.exitCode !== 0) throw new Error('BLOCKED: trusted provider enumeration failed');
+  if (result.truncated.stdout) throw new Error('BLOCKED: provider enumeration exceeded its output limit');
+  return result.stdout;
 }
 
 function serials(device) {
@@ -95,6 +91,7 @@ async function platformIoDevices(options) {
   if (!executable) throw new Error('BLOCKED: PlatformIO provider is unavailable for exact device enumeration');
   let devices;
   try { devices = JSON.parse(await runJson(executable, ['device', 'list', '--json-output'], options)); } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     if (/^BLOCKED:/.test(error.message)) throw error;
     throw new Error('BLOCKED: PlatformIO returned malformed device enumeration');
   }
@@ -161,6 +158,7 @@ export async function resolveHardwareIdentities(profile, options = {}) {
 export async function main(argv = process.argv.slice(2)) {
   let parsed;
   try {
+    if (Number(process.versions.node.split('.')[0]) < 18) fail('Node.js 18+ is required for hardware commands', true);
     parsed = parseHardwareArguments(argv);
     const abort = new AbortController();
     const stop = () => abort.abort();
@@ -168,7 +166,7 @@ export async function main(argv = process.argv.slice(2)) {
     const dependencies = { resolveHardwareIdentities };
     try {
       if (parsed.command === 'plan') {
-        const result = await planHardwareRun({ ...parsed, dependencies });
+        const result = await planHardwareRun({ ...parsed, dependencies, signal: abort.signal });
         process.stdout.write(`${JSON.stringify({ command: 'hardware plan', ...result })}\n`);
         return 0;
       }

@@ -9,6 +9,7 @@ cat >"$TMP/bin/pio" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then echo 'PlatformIO Core 6.1.0'; exit 0; fi
 if [[ "${1:-} ${2:-} ${3:-}" == 'device list --json-output' ]]; then
+  if [[ "${LABWIRED_HANG_ENUM:-}" == 1 ]]; then sleep 30 & echo $! >"$LABWIRED_HANG_PID"; wait; fi
   if [[ -n "${LABWIRED_TEST_DEVICE_JSON:-}" ]]; then printf '%s\n' "$LABWIRED_TEST_DEVICE_JSON"
   elif [[ -f "$PWD/device.json" ]]; then cat "$PWD/device.json"
   else printf '[]\n'; fi
@@ -39,6 +40,26 @@ JSON
 
 export PATH="$TMP/bin:$PATH" LABWIRED_TEST_MUTATIONS="$TMP/mutations.log"
 CLI=("$ROOT/bin/labwired-agent" hardware)
+
+# Credential-shaped paths are refused before output, mutation, or directory creation.
+secret='sk-EXPOSED1234'
+set +e
+secret_output="$("${CLI[@]}" plan --profile "/tmp/$secret/profile.json" --out "$TMP/$secret" 2>&1)"; secret_code=$?
+set -e
+[[ "$secret_code" -eq 2 && "$secret_output" != *"$secret"* && ! -e "$TMP/$secret" ]]
+
+# Native dispatch refuses an obsolete Node before it can execute the runner.
+mkdir -p "$TMP/old-node"
+cat >"$TMP/old-node/node" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == '--version' ]]; then echo v16.20.2; exit 0; fi
+touch "$LABWIRED_OLD_NODE_RAN"
+SH
+chmod +x "$TMP/old-node/node"
+set +e
+old_output="$(PATH="$TMP/old-node:/usr/bin:/bin" LABWIRED_OLD_NODE_RAN="$TMP/old-ran" "$ROOT/bin/labwired-agent" hardware plan --profile x --out y 2>&1)"; old_code=$?
+set -e
+[[ "$old_code" -eq 2 && "$old_output" == *'Node.js 18+'* && ! -e "$TMP/old-ran" ]]
 
 plan="$("${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/evidence")"
 python3 - "$plan" <<'PY'
@@ -163,6 +184,16 @@ import json,sys
 doc=json.loads(sys.argv[1]); assert doc["plan"]["identities"]["probe"] == "1366:0101:DEBUG123"
 assert doc["plan"]["identities"]["serial"] == "/dev/ttyUSB9"
 PY
+
+# SIGTERM reaches bounded provider enumeration and kills its process tree.
+LABWIRED_HANG_ENUM=1 LABWIRED_HANG_PID="$TMP/hang.pid" "${CLI[@]}" plan --profile "$TMP/project/physical.json" --out "$TMP/cancelled-evidence" >"$TMP/cancelled.json" & cli_pid=$!
+for _ in {1..100}; do [[ -s "$TMP/hang.pid" ]] && break; sleep 0.02; done
+[[ -s "$TMP/hang.pid" ]]
+child_pid="$(cat "$TMP/hang.pid")"
+kill -TERM "$cli_pid"
+set +e; wait "$cli_pid"; cancelled_code=$?; set -e
+[[ "$cancelled_code" -ne 0 && ! -e "$TMP/cancelled-evidence" ]]
+if kill -0 "$child_pid" 2>/dev/null; then echo 'cancelled provider descendant leaked' >&2; exit 1; fi
 
 # The transport is closed: no arbitrary command/adapter options are accepted.
 if "${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/nope" --command 'rm -rf /' >/dev/null 2>&1; then

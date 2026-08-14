@@ -21,6 +21,7 @@ import { resolveAgentLauncher } from "./agent-launcher.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = resolve(__dirname, "..");
 const PROTOCOL = "0.5.0";
+const SUPPORTED_MODES = Object.freeze(["act", "plan", "debug", "verify"]);
 
 /** @type {{ workspacePath: string, mode: string, autoConfirm: boolean, clientName: string }} */
 const state = {
@@ -144,7 +145,7 @@ const MANIFEST = loadToolManifest(MANIFEST_PATH);
 const TOOLS = MANIFEST.tools;
 /** argv[0] values handled in-process by this server, never handed to the CLI. */
 const SENTINELS = new Set(MANIFEST.sentinels);
-/** mode -> { message }. Modes absent here are ungated (act, debug, anything else). */
+/** Optional mode-specific refusal copy; tools[].modes is always the strict allowlist. */
 const MODE_POLICY = MANIFEST.modePolicy;
 
 function loadToolManifest(path) {
@@ -281,7 +282,11 @@ async function dispatch(method, params) {
     case "initialize":
       return initialize(params);
     case "mode/set":
-      state.mode = String(params.mode || "act").toLowerCase();
+      if (typeof params.mode !== "string" || !SUPPORTED_MODES.includes(params.mode)) {
+        state.mode = "";
+        throw new Error("mode/set requires an exact supported mode");
+      }
+      state.mode = params.mode;
       return { mode: state.mode };
     case "mode/get":
       return { mode: state.mode };
@@ -334,7 +339,7 @@ function initialize(params) {
       tools: true,
       chat: true,
       serial: true,
-      modes: ["act", "plan", "debug", "verify"],
+      modes: [...SUPPORTED_MODES],
     },
   };
 }
@@ -350,13 +355,14 @@ async function toolRun(params) {
   // hw_promote nests probe_flash; it MUST be denied in Plan in its own right
   // (denying only probe_flash would leave the nested flash reachable).
   //
-  // The policy is data: share/tools.json names the gated modes and gives each
-  // tool the list of modes allowed to run it. Modes absent from modePolicy stay
-  // ungated — act, debug, and any string a client invents — which is exactly what
-  // the old `mode === "plan"` / `mode === "verify"` tests did.
-  const policy = MODE_POLICY[state.mode];
-  if (policy && !(tool.modes || []).includes(state.mode)) {
-    throw new Error(String(policy.message).replace(/\$\{name\}/g, name));
+  // The policy is data: every tool's modes[] is a strict allowlist. Unknown or
+  // missing state is denied even when modePolicy has no custom refusal copy.
+  const allowedModes = tool.modes || [];
+  if (!SUPPORTED_MODES.includes(state.mode) || !allowedModes.includes(state.mode)) {
+    const policy = MODE_POLICY[state.mode];
+    throw new Error(policy
+      ? String(policy.message).replace(/\$\{name\}/g, name)
+      : `Mode ${state.mode || "(missing)"}: tool \`${name}\` disabled.`);
   }
   if (state.mode === "verify" && name === "probe_flash") {
     throw new Error("Verify mode: flash disabled. Use score/assert tools.");

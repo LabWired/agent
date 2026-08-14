@@ -401,6 +401,45 @@ PY
 mode_gate_check || fail=1
 
 echo ""
+echo "--- adversarial mode values fail closed ---"
+rm -f "$GTMP/invented-mode-ran"
+cat >"$GTMP/no-mode-agent" <<'SH'
+#!/usr/bin/env bash
+touch "$LABWIRED_INVENTED_MODE_RAN"
+SH
+chmod +x "$GTMP/no-mode-agent"
+LABWIRED_AGENT_CLI_PATH="$GTMP/no-mode-agent" LABWIRED_INVENTED_MODE_RAN="$GTMP/invented-mode-ran" \
+python3 - "$SERVER" "$NODE_BIN" "$GTMP/invented-mode-ran" <<'PY' || fail=1
+import json,os,select,subprocess,sys,time
+server,node,marker=sys.argv[1:]
+for value in ["invented", None, "ACT", ""]:
+ p=subprocess.Popen([node,server],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=dict(os.environ))
+ requests=[{"jsonrpc":"2.0","id":1,"method":"mode/set","params":{"mode":value}},
+           {"jsonrpc":"2.0","id":2,"method":"tool/run","params":{"name":"hardware_run","params":{"profile":"p","out":"o","confirm":"0"*64}}}]
+ for request in requests:
+  body=json.dumps(request).encode();p.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode()+body)
+ p.stdin.flush();buf=b"";got={};deadline=time.time()+10
+ while time.time()<deadline and len(got)<2:
+  ready,_,_=select.select([p.stdout],[],[],0.2)
+  if not ready:continue
+  buf+=p.stdout.read1(1<<20)
+  while True:
+   end=buf.find(b"\r\n\r\n")
+   if end<0:break
+   length=int(buf[:end].decode().split(":",1)[1]);stop=end+4+length
+   if len(buf)<stop:break
+   msg=json.loads(buf[end+4:stop]);buf=buf[stop:];got[msg.get("id")]=msg
+ p.terminate()
+ assert "error" in got[1], (value,got)
+ # Setter rejection leaves the initial exact `act` mode, where hardware_run is allowed.
+ # This call may execute only if state did not fail closed, so strict safety requires the
+ # server to reject further tool calls after an invalid mode attempt.
+ assert "error" in got[2], (value,got)
+ assert not os.path.exists(marker), value
+print("ok      invented, null, empty and case-variant modes cannot execute tools")
+PY
+
+echo ""
 if [[ "$fail" -ne 0 ]]; then
   echo "FAIL tool manifest has drifted from reality"
   exit 1

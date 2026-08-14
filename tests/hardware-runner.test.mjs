@@ -141,6 +141,15 @@ test('planning is read-only, stable, canonical, and secret-free', async () => {
   assert.equal(h.calls.includes('build'), false);
 });
 
+test('planning threads its AbortSignal into physical identity resolution', async () => {
+  const f = await fixture(); const h = harness(f.profile); const abort = new AbortController();
+  const original = h.dependencies.resolveHardwareIdentities;
+  let received;
+  h.dependencies.resolveHardwareIdentities = async (profile, options) => { received = options.signal; return original(profile, options); };
+  await planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, signal: abort.signal, dependencies: h.dependencies });
+  assert.equal(received, abort.signal);
+});
+
 test('planning redacts configured secrets from paths and capability metadata before digesting', async () => {
   const secret = 'actual-secret-value';
   const f = await fixture(); const h = harness(f.profile, { toolVersion: `pio ${secret}` });
