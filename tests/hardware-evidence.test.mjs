@@ -188,7 +188,10 @@ test('finalize passes only when every behavior meets its declared level', async 
   const evidence = await createReadyEvidence(directory);
   await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
   await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
-  assert.deepEqual(await evidence.finalize(), { result: 'PASS', reasons: [] });
+  const finalized = await evidence.finalize();
+  assert.equal(finalized.result, 'PASS');
+  assert.deepEqual(finalized.reasons, []);
+  assert.match(finalized.manifestSha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')), { result: 'PASS', reasons: [] });
 });
 
@@ -508,10 +511,23 @@ test('verifyEvidenceBundle independently validates a persisted PASS', async () =
   const evidence = await createReadyEvidence(directory);
   await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
   await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
-  await evidence.finalize();
+  const receipt = await evidence.finalize();
 
-  const verified = await verifyEvidenceBundle(directory);
-  assert.deepEqual(verified, { valid: true, result: 'PASS', reasons: [] });
+  const unverified = await verifyEvidenceBundle(directory);
+  assert.equal(unverified.valid, false);
+  assert.equal(unverified.result, 'FAIL');
+  assert.equal(unverified.authenticity, 'unverified');
+  assert.equal(unverified.structuralResult, 'PASS');
+  assert.equal(unverified.manifestSha256, receipt.manifestSha256);
+
+  const verified = await verifyEvidenceBundle(directory, { expectedManifestSha256: receipt.manifestSha256 });
+  assert.deepEqual(verified, {
+    valid: true,
+    result: 'PASS',
+    authenticity: 'verified',
+    manifestSha256: receipt.manifestSha256,
+    reasons: [],
+  });
 });
 
 test('verifyEvidenceBundle downgrades capture, record, owner, and root mutations to invalid FAIL', async () => {
@@ -553,4 +569,96 @@ test('verifyEvidenceBundle downgrades capture, record, owner, and root mutations
   verified = await verifyEvidenceBundle(directory);
   assert.equal(verified.valid, false);
   assert.equal(verified.result, 'FAIL');
+});
+
+test('typed persistence rejects unknown top-level and nested caller fields', async () => {
+  let directory = await temporaryDirectory();
+  let evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', {
+    ...verifiedResult('hardware_observed', 'led'),
+    padding: 'x'.repeat(1_000),
+  }), /unknown.*padding|allowed key/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    targetIdentity: { ...profile.target, nestedPadding: { value: 'x' } },
+  })), /target identity.*unknown|nestedPadding/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', {
+    behaviorId: 'led',
+    provider: 'logic-csv',
+    level: 'failed',
+    rawEvidenceRefs: [],
+    diagnostics: {},
+    nestedExtras: { padding: 'x' },
+  }), /unknown.*nestedExtras|allowed key/);
+
+  directory = await temporaryDirectory();
+  evidence = await createReadyEvidence(directory);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+    toolVersion: `fixture-${'x'.repeat(150_000)}`,
+  })), /size limit/);
+  assert.equal(JSON.parse(await readFile(path.join(directory, 'observations', 'led', 'result.json'), 'utf8')).level, 'not-run');
+});
+
+test('verifyEvidenceBundle bounds record and control JSON before parsing', async () => {
+  async function finalizedBundle() {
+    const directory = await temporaryDirectory();
+    const evidence = await createReadyEvidence(directory);
+    await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+    await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+    await evidence.finalize();
+    return directory;
+  }
+
+  let directory = await finalizedBundle();
+  await writeFile(path.join(directory, 'observations', 'led', 'result.json'), `{"padding":"${'x'.repeat(200_000)}"}`);
+  let verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.match(verified.reasons[0].message, /size|large|limit/);
+
+  directory = await finalizedBundle();
+  await writeFile(path.join(directory, '.owner.json'), `{"padding":"${'x'.repeat(400_000)}"}`);
+  verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.match(verified.reasons[0].message, /size|large|limit/);
+
+  directory = await finalizedBundle();
+  await writeFile(path.join(directory, 'result.json'), `{"padding":"${'x'.repeat(400_000)}"}`);
+  verified = await verifyEvidenceBundle(directory);
+  assert.equal(verified.valid, false);
+  assert.match(verified.reasons[0].message, /size|large|limit/);
+});
+
+test('external receipt detects a coherent capture and record rewrite', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  await evidence.recordBehavior('wifi', verifiedResult('hardware_observed', 'wifi'));
+  const receipt = await evidence.finalize();
+
+  const capturePath = path.join(directory, 'captures', 'led.txt');
+  const rewritten = Buffer.from('coherently rewritten capture\n');
+  await writeFile(capturePath, rewritten);
+  const recordPath = path.join(directory, 'observations', 'led', 'result.json');
+  const record = JSON.parse(await readFile(recordPath, 'utf8'));
+  record.rawEvidence[0] = {
+    ...record.rawEvidence[0],
+    sha256: await sha256File(capturePath),
+    size: rewritten.length,
+  };
+  await writeFile(recordPath, `${JSON.stringify(record, null, 2)}\n`);
+
+  const structural = await verifyEvidenceBundle(directory);
+  assert.equal(structural.authenticity, 'unverified');
+  assert.equal(structural.structuralResult, 'PASS');
+  assert.notEqual(structural.manifestSha256, receipt.manifestSha256);
+  const verified = await verifyEvidenceBundle(directory, { expectedManifestSha256: receipt.manifestSha256 });
+  assert.equal(verified.valid, false);
+  assert.equal(verified.result, 'FAIL');
+  assert.equal(verified.authenticity, 'unverified');
+  assert.match(verified.reasons[0].message, /receipt|manifest/i);
 });
