@@ -414,3 +414,40 @@ test('finalize rehashes evidence so mutated captures cannot produce stale PASS',
   await assert.rejects(evidence.finalize(), /changed|hash/);
   assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
 });
+
+test('control and mutable bundle files can never serve as raw behavioral evidence', async () => {
+  const cases = [
+    'result.json',
+    '.owner.json',
+    'observations/led/result.json',
+    'captures/.result.json.tmp-fixture',
+    'captures/session.lock',
+  ];
+  for (const reference of cases) {
+    const directory = await temporaryDirectory();
+    const evidence = await createReadyEvidence(directory);
+    if (reference.startsWith('captures/')) {
+      await writeFile(path.join(directory, reference), 'control file\n');
+    }
+    await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+      rawEvidenceRefs: [reference],
+    })), /control|mutable|raw evidence path/);
+    assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
+  }
+
+  const directory = await temporaryDirectory();
+  const modelProfile = { ...profile, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'model_observed' }] };
+  const evidence = await createReadyEvidence(directory, modelProfile);
+  await assert.rejects(evidence.recordBehavior('led', verifiedResult('model_observed', 'led', {
+    rawEvidenceRefs: ['result.json'],
+  })), /control|mutable|raw evidence path/);
+  assert.equal((await evidence.finalize()).result, 'FAIL');
+});
+
+test('a legitimate contained capture remains acceptable raw evidence', async () => {
+  const directory = await temporaryDirectory();
+  const evidence = await createReadyEvidence(directory);
+  const record = await evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led'));
+  assert.equal(record.rawEvidence[0].path, 'captures/led.txt');
+  assert.match(record.rawEvidence[0].sha256, /^[0-9a-f]{64}$/);
+});
