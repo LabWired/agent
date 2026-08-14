@@ -111,12 +111,41 @@ test('terminates descendants when timing out on POSIX', { skip: process.platform
   fs.rmSync(temporary, { recursive: true });
 });
 
+test('terminates descendants when cancelled on POSIX', { skip: process.platform === 'win32' }, async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'labwired-process-cancel-'));
+  const marker = path.join(temporary, 'descendant-survived');
+  const grandchild = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'bad'), 300)`;
+  const parent = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], {stdio:'ignore'}); process.stdout.write('READY'); setInterval(() => {}, 1000)`;
+  const controller = new AbortController();
+  const pending = runLaunch(nodeLaunch(parent), {
+    timeoutMs: 2_000,
+    signal: controller.signal,
+    onDelta: ({ data }) => { if (data.includes('READY')) controller.abort(); },
+  });
+  const result = await pending;
+  assert.equal(result.classification, 'cancelled');
+  await delay(400);
+  assert.equal(fs.existsSync(marker), false);
+  fs.rmSync(temporary, { recursive: true });
+});
+
 test('preserves leader exit when a descendant holds inherited pipes beyond the timeout', { skip: process.platform === 'win32' }, async () => {
   const descendant = "setInterval(() => {}, 1000)";
-  const parent = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'inherit'}); process.exit(0)`;
+  const parent = `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'inherit'}); console.log(child.pid); process.exit(0)`;
+  const startedAt = Date.now();
   const result = await runLaunch(nodeLaunch(parent), { timeoutMs: 100 });
-  assert.equal(result.classification, 'exit');
-  assert.equal(result.exitCode, 0);
+  const descendantPid = Number.parseInt(result.stdout, 10);
+  try {
+    assert.equal(result.classification, 'exit');
+    assert.equal(result.exitCode, 0);
+    assert.ok(Date.now() - startedAt < 1_000, 'runner must settle after a bounded local-pipe drain');
+    assert.ok(Number.isInteger(descendantPid));
+    assert.doesNotThrow(() => process.kill(descendantPid, 0), 'natural exit must not claim descendant ownership');
+  } finally {
+    if (Number.isInteger(descendantPid)) {
+      try { process.kill(descendantPid, 'SIGKILL'); } catch { /* fixture already exited */ }
+    }
+  }
 });
 
 function fakeTaskkill({ error, exitCode = 0 } = {}) {
