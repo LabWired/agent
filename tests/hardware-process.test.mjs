@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { resolveLaunch, runLaunch } from '../lib/hardware/process.mjs';
+import { resolveLaunch, runLaunch, terminateProcessTree } from '../lib/hardware/process.mjs';
 
 const nodeLaunch = (source, env = {}) => resolveLaunch({
   executable: process.execPath,
@@ -108,6 +109,52 @@ test('terminates descendants when timing out on POSIX', { skip: process.platform
   await delay(400);
   assert.equal(fs.existsSync(marker), false);
   fs.rmSync(temporary, { recursive: true });
+});
+
+test('preserves leader exit when a descendant holds inherited pipes beyond the timeout', { skip: process.platform === 'win32' }, async () => {
+  const descendant = "setInterval(() => {}, 1000)";
+  const parent = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'inherit'}); process.exit(0)`;
+  const result = await runLaunch(nodeLaunch(parent), { timeoutMs: 100 });
+  assert.equal(result.classification, 'exit');
+  assert.equal(result.exitCode, 0);
+});
+
+function fakeTaskkill({ error, exitCode = 0 } = {}) {
+  const process = new EventEmitter();
+  process.unref = () => {};
+  queueMicrotask(() => error ? process.emit('error', error) : process.emit('close', exitCode));
+  return process;
+}
+
+test('awaits successful Windows taskkill tree termination', async () => {
+  const calls = [];
+  const child = { pid: 123, exitCode: null, kill: () => assert.fail('direct kill should not be needed') };
+  await terminateProcessTree(child, 'win32', {
+    spawnProcess: (...args) => { calls.push(args); return fakeTaskkill(); },
+    timeoutMs: 100,
+  });
+  assert.deepEqual(calls[0].slice(0, 2), ['taskkill.exe', ['/pid', '123', '/t', '/f']]);
+  assert.equal(calls[0][2].shell, false);
+});
+
+test('handles Windows taskkill spawn failure and falls back to direct kill', async () => {
+  let killed = false;
+  const child = { pid: 123, exitCode: null, kill: () => { killed = true; } };
+  await terminateProcessTree(child, 'win32', {
+    spawnProcess: () => fakeTaskkill({ error: Object.assign(new Error('missing'), { code: 'ENOENT' }) }),
+    timeoutMs: 100,
+  });
+  assert.equal(killed, true);
+});
+
+test('handles nonzero Windows taskkill exit and falls back to direct kill', async () => {
+  let killed = false;
+  const child = { pid: 123, exitCode: null, kill: () => { killed = true; } };
+  await terminateProcessTree(child, 'win32', {
+    spawnProcess: () => fakeTaskkill({ exitCode: 1 }),
+    timeoutMs: 100,
+  });
+  assert.equal(killed, true);
 });
 
 test('normalizes win32 PowerShell scripts and rejects command shims', () => {
