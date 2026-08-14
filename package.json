@@ -150,6 +150,7 @@
     "test:develop:release": "LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE=1 bash tests/develop-acceptance-smoke.sh",
     "test:dispatcher": "bash tests/dispatcher.sh",
     "test:agent-lifecycle": "bash tests/agent-lifecycle.sh",
+    "test:tool-names": "bash tests/public-tool-names.sh",
     "test:public-install-safety": "bash tests/public-install-safety.sh",
     "test:install": "bash tests/install-smoke.sh",
     "test:llm": "bash tests/llm-deepinfra.sh"
