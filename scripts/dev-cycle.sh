@@ -2,6 +2,9 @@
 # Legacy LABWIRED_HW_* compatibility translator for the generic hardware runner.
 # For a board-specific example, see scripts/profiles/esp32c3-serial.sh.
 set -euo pipefail
+# Give each asynchronous CLI invocation its own process group so cancellation
+# reaches provider descendants as well as the CLI leader.
+set -m
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
 
@@ -54,13 +57,21 @@ PROFILE="$(mktemp "$WS/.labwired-legacy-profile.XXXXXX.json")"
 PLAN_OUTPUT="$(mktemp "$WS/.labwired-legacy-plan.XXXXXX.json")"
 SYSTEM_COPY=""
 CHILD_PID=""
+reap_child() {
+  local signal="${1:-TERM}" pid="$CHILD_PID"
+  [[ -n "$pid" ]] || return 0
+  kill -"$signal" -- "-$pid" 2>/dev/null || kill -"$signal" "$pid" 2>/dev/null || true
+  set +e; wait "$pid" 2>/dev/null; set -e
+  [[ "$CHILD_PID" == "$pid" ]] && CHILD_PID=""
+}
+handle_signal() { local signal="$1" code="$2"; reap_child "$signal"; exit "$code"; }
 cleanup() {
-  [[ -z "$CHILD_PID" ]] || kill -TERM "$CHILD_PID" 2>/dev/null || true
+  [[ -z "$CHILD_PID" ]] || reap_child TERM
   rm -f "$PROFILE" "$PLAN_OUTPUT" ${SYSTEM_COPY:+"$SYSTEM_COPY"}
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'handle_signal INT 130' INT
+trap 'handle_signal TERM 143' TERM
 if [[ "$SKIP_TWIN" == 0 && -n "$SYSTEM" ]]; then
   SYSTEM_COPY="$(mktemp "$WS/.labwired-legacy-system.XXXXXX.yaml")"
   cp "$SYSTEM" "$SYSTEM_COPY"
@@ -114,10 +125,8 @@ PHYSICAL="$(python3 -c 'import json,sys; p=json.load(sys.stdin)["plan"]["profile
 if [[ "$PHYSICAL" == 0 && -z "$CONFIRM" ]]; then CONFIRM="$DIGEST"; fi
 [[ -n "$CONFIRM" ]] || { echo "dev-cycle: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the physical plan" >&2; exit 2; }
 [[ "$CONFIRM" == "$DIGEST" ]] || { echo 'dev-cycle: LABWIRED_HW_CONFIRM does not match the current plan digest' >&2; exit 2; }
-set +e
-"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM"
-RUN_RC=$?
-set -e
+"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM" & CHILD_PID=$!
+set +e; wait "$CHILD_PID"; RUN_RC=$?; set -e; CHILD_PID=""
 [[ "$RUN_RC" -eq 0 ]] && exit 0
 [[ "$RUN_RC" -eq 2 ]] && exit 2
 exit 1

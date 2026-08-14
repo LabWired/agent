@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Legacy physical-desk translator. Exit 0=observed, 2=NEED_PROBE/confirmation, 1=failure.
 set -euo pipefail
+# Give each asynchronous CLI invocation its own process group so cancellation
+# reaches provider descendants as well as the CLI leader.
+set -m
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LABWIRED="${LABWIRED:-$ROOT/bin/labwired-agent}"
 ELF="${LABWIRED_HW_ELF:-}"
@@ -28,13 +31,21 @@ ARTIFACT="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1],sys.arg
 PROFILE="$(mktemp "$WORKSPACE/.labwired-legacy-profile.XXXXXX.json")"
 PLAN_OUTPUT="$(mktemp "$WORKSPACE/.labwired-legacy-plan.XXXXXX.json")"
 CHILD_PID=""
+reap_child() {
+  local signal="${1:-TERM}" pid="$CHILD_PID"
+  [[ -n "$pid" ]] || return 0
+  kill -"$signal" -- "-$pid" 2>/dev/null || kill -"$signal" "$pid" 2>/dev/null || true
+  set +e; wait "$pid" 2>/dev/null; set -e
+  [[ "$CHILD_PID" == "$pid" ]] && CHILD_PID=""
+}
+handle_signal() { local signal="$1" code="$2"; reap_child "$signal"; exit "$code"; }
 cleanup() {
-  [[ -z "$CHILD_PID" ]] || kill -TERM "$CHILD_PID" 2>/dev/null || true
+  [[ -z "$CHILD_PID" ]] || reap_child TERM
   rm -f "$PROFILE" "$PLAN_OUTPUT"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'handle_signal INT 130' INT
+trap 'handle_signal TERM 143' TERM
 python3 - "$PROFILE" "$CHIP" "$PORT" "$PROBE_SERIAL" "$MARKER" "$TIMEOUT" "$ARTIFACT" <<'PY'
 import json,sys
 profile,chip,port,probe,marker,timeout,artifact=sys.argv[1:]
@@ -54,10 +65,8 @@ printf '%s\n' "$PLAN"
 DIGEST="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' <<<"$PLAN")" || { echo 'desk-hw-physical: invalid plan response' >&2; exit 1; }
 [[ -n "$CONFIRM" ]] || { echo "desk-hw-physical: set LABWIRED_HW_CONFIRM=$DIGEST after reviewing the plan" >&2; exit 2; }
 [[ "$CONFIRM" == "$DIGEST" ]] || { echo 'desk-hw-physical: LABWIRED_HW_CONFIRM does not match the current plan digest' >&2; exit 2; }
-set +e
-"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM" >"$PLAN_OUTPUT"
-RUN_RC=$?
-set -e
+"$LABWIRED" hardware run --profile "$PROFILE" --out "$OUT" --confirm "$CONFIRM" >"$PLAN_OUTPUT" & CHILD_PID=$!
+set +e; wait "$CHILD_PID"; RUN_RC=$?; set -e; CHILD_PID=""
 cat "$PLAN_OUTPUT"
 if [[ "$RUN_RC" -eq 0 ]]; then exit 0; fi
 if [[ "$RUN_RC" -eq 2 ]] || { [[ "$RUN_RC" -eq 3 ]] && grep -q '"result":"BLOCKED"' "$PLAN_OUTPUT"; }; then exit 2; fi

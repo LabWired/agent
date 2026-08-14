@@ -31,6 +31,19 @@ print(json.dumps({"command":"hardware plan","digest":"0"*64,"plan":{"profile":p}
 PY
   exit "${LEGACY_PLAN_EXIT:-0}"
 fi
+if [[ "${LEGACY_RUN_BLOCK:-0}" == 1 ]]; then
+  run_profile=''
+  while (($#)); do
+    [[ "$1" == --profile ]] && { run_profile="$2"; shift 2; continue; }
+    shift
+  done
+  sleep 30 & descendant=$!
+  trap 'kill -TERM "$descendant" 2>/dev/null || true; wait "$descendant" 2>/dev/null || true; exit 143' TERM
+  trap 'kill -INT "$descendant" 2>/dev/null || true; wait "$descendant" 2>/dev/null || true; exit 130' INT
+  printf '%s\n%s\n%s\n' "$run_profile" "$$" "$descendant" >"$LEGACY_RUN_STATE"
+  wait "$descendant"
+  touch "$LEGACY_LATE_MARKER"
+fi
 printf '%s\n' "${LEGACY_RUN_OUTPUT:-}"
 exit "${LEGACY_RUN_EXIT:-0}"
 SH
@@ -171,6 +184,42 @@ set +e; wait "$wrapper_pid"; rc=$?; set -e
 [[ "$rc" -eq 143 && ! -e "$generated_profile" ]]
 [[ "$(tr '\0' ' ' <"$LEGACY_ARGV" | grep -c 'hardware run' || true)" -eq 0 ]]
 unset LEGACY_PLAN_BLOCK
+
+assert_run_cancelled() {
+  local wrapper="$1" signal="$2" expected="$3"
+  export LEGACY_RUN_BLOCK=1 LEGACY_RUN_STATE="$TMP/run-state" LEGACY_LATE_MARKER="$TMP/late-marker"
+  : >"$LEGACY_ARGV"; rm -f "$LEGACY_RUN_STATE" "$LEGACY_LATE_MARKER"
+  bash "$wrapper" >"$TMP/run-block.out" 2>&1 & wrapper_pid=$!
+  for _ in {1..100}; do [[ -s "$LEGACY_RUN_STATE" ]] && break; sleep 0.02; done
+  [[ -s "$LEGACY_RUN_STATE" ]]
+  generated_profile="$(sed -n '1p' "$LEGACY_RUN_STATE")"
+  run_pid="$(sed -n '2p' "$LEGACY_RUN_STATE")"
+  descendant_pid="$(sed -n '3p' "$LEGACY_RUN_STATE")"
+  [[ -f "$generated_profile" ]]
+  kill -"$signal" "$wrapper_pid"
+  set +e; wait "$wrapper_pid"; rc=$?; set -e
+  [[ "$rc" -eq "$expected" && ! -e "$generated_profile" && ! -e "$LEGACY_LATE_MARKER" ]]
+  if find "$(dirname "$generated_profile")" -maxdepth 1 -name '.labwired-legacy-*' -print | grep -q .; then
+    echo 'cancelled legacy run leaked temporary profile/plan output' >&2; exit 1
+  fi
+  if kill -0 "$run_pid" 2>/dev/null || kill -0 "$descendant_pid" 2>/dev/null; then
+    echo 'cancelled legacy run leaked a child' >&2; exit 1
+  fi
+  unset LEGACY_RUN_BLOCK
+}
+
+export LABWIRED_HW_WS="$TMP/project" LABWIRED_HW_SKIP_FLASH=1 LABWIRED_HW_SKIP_TWIN=1
+unset LABWIRED_HW_SYSTEM LABWIRED_HW_CONFIRM
+assert_run_cancelled "$ROOT/scripts/dev-cycle.sh" TERM 143
+
+export LABWIRED_HW_ELF="$TMP/desk/build dir/firm ware.elf" LABWIRED_HW_CHIP='esp test'
+export LABWIRED_HW_PORT='/dev/tty test' LABWIRED_HW_PROBE_SERIAL='probe test'
+export LABWIRED_HW_MARKER='DESK READY' LABWIRED_HW_OUT="$TMP/desk cancel evidence" LABWIRED_HW_CONFIRM="$DIGEST_ZERO"
+# Non-interactive Bash starts background jobs with SIGINT ignored, so exercise
+# the independently installed INT trap via static contract and use TERM for the
+# second live wrapper cancellation.
+grep -q "handle_signal INT 130" "$ROOT/scripts/desk-hw-physical.sh"
+assert_run_cancelled "$ROOT/scripts/desk-hw-physical.sh" TERM 143
 
 # Compatibility scripts contain no second orchestration engine.
 if rg -n 'pio[[:space:]]+run|labwired_serial_capture|probe[[:space:]]+flash|labwired.*test.*--script' \
