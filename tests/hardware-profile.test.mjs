@@ -96,6 +96,15 @@ test('rejects inline credential values before they can enter a profile', () => {
   assert.throws(() => validateHardwareProfile(minimal({
     observations: [{ ...minimal().observations[0], token: 'not-allowed' }],
   }), fixturePath), /credential|secret|token|unknown/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    build: { ...minimal().build, environment: 'password=hunter2' },
+  }), fixturePath), /inline credential/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], contains: 'api_key=sk-test' }],
+  }), fixturePath), /inline credential/i);
+  assert.doesNotThrow(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], contains: 'TOKEN_READY' }],
+  }), fixturePath));
 });
 
 test('resolves workspace, artifact, and system paths under the workspace', async () => {
@@ -141,6 +150,15 @@ test('rejects traversal and symlink escapes from the workspace', async () => {
       await rm(outside, { force: true, recursive: true });
     }
   });
+
+  await withProfile(minimal(), async ({ root, profilePath }) => {
+    await mkdir(path.join(root, 'nested'), { recursive: true });
+    await symlink(path.join(root, 'target-that-does-not-exist'), path.join(root, 'nested', 'dangling'));
+    await writeFile(profilePath, JSON.stringify(minimal({
+      build: { ...minimal().build, artifact: 'nested/dangling/firmware.elf' },
+    })));
+    await assert.rejects(loadHardwareProfile(profilePath, { realpath: true }), /dangling|symlink|reparse/i);
+  });
 });
 
 test('requires unique safe observation IDs and bounded integer timeouts', () => {
@@ -169,6 +187,25 @@ test('requires a physical profile to name the target, probe, and serial port', (
     },
     flash: { provider: 'probe-rs' },
   }), fixturePath));
+  assert.throws(() => validateHardwareProfile(minimal({
+    observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
+  }), fixturePath), /serialPort|physical.*identity/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    target: { id: 'desk-c3', chip: 'esp32c3', serialPort: '/dev/ttyACM0' },
+    observations: [{
+      id: 'rtt-marker', provider: 'rtt', contains: 'alive', timeoutSeconds: 12,
+      requiredLevel: 'hardware_observed',
+    }],
+  }), fixturePath), /probeSerial|physical.*identity/i);
+  assert.doesNotThrow(() => validateHardwareProfile(minimal({
+    target: { id: 'desk-c3', chip: 'esp32c3', serialPort: '/dev/ttyACM0' },
+    observations: [{ ...minimal().observations[0], requiredLevel: 'hardware_observed' }],
+  }), fixturePath));
+});
+
+test('allows only the intentional load options', async () => {
+  await assert.rejects(loadHardwareProfile(fixturePath, { shell: true }), /unknown.*shell/i);
+  await assert.rejects(loadHardwareProfile(fixturePath, { unexpected: true }), /unknown.*unexpected/i);
 });
 
 test('fixture remains valid JSON and contains no inline secret values', async () => {
