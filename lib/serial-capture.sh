@@ -300,6 +300,17 @@ labwired_serial_challenge() {
   [[ -n "$port" && "$baud" =~ ^[0-9]+$ && "$nonce" =~ ^[0-9a-f]{32}$ && -n "$marker" && -n "$address_key" && "$timeout" =~ ^[0-9]+$ ]] || {
     echo "usage: labwired serial-challenge <port> <baud> <32-hex-nonce> <marker> <address-key> <timeout>" >&2; return 2;
   }
+  local selected_platform="${LABWIRED_SERIAL_CHALLENGE_PLATFORM:-}"
+  [[ -n "$selected_platform" ]] || { [[ "${OS:-}" == "Windows_NT" ]] && selected_platform="win32" || selected_platform="posix"; }
+  if [[ "$selected_platform" == "win32" ]]; then
+    local powershell="${LABWIRED_SERIAL_CHALLENGE_POWERSHELL:-powershell.exe}"
+    local helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/serial-challenge.ps1"
+    "$powershell" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$helper" \
+      -Port "$port" -Baud "$baud" -Nonce "$nonce" -Marker "$marker" -AddressKey "$address_key" \
+      -TimeoutSeconds "$timeout" -Terminator "${LABWIRED_SERIAL_CHALLENGE_TERMINATOR:-LF}" -MaxBytes 65536
+    return $?
+  fi
+  [[ "$selected_platform" == "posix" ]] || { echo "serial-challenge: unsupported platform selector" >&2; return 3; }
   LABWIRED_SC_PORT="$port" LABWIRED_SC_BAUD="$baud" LABWIRED_SC_NONCE="$nonce" LABWIRED_SC_MARKER="$marker" LABWIRED_SC_ADDRESS="$address_key" LABWIRED_SC_TIMEOUT="$timeout" python3 - <<'PY'
 import os, sys, time, select, termios
 port=os.environ['LABWIRED_SC_PORT']; baud=int(os.environ['LABWIRED_SC_BAUD']); nonce=os.environ['LABWIRED_SC_NONCE']
@@ -315,7 +326,7 @@ try:
     fd=os.open(port, os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK)
     attrs=termios.tcgetattr(fd); attrs[0]=0; attrs[1]=0; attrs[2]=termios.CS8|termios.CREAD|termios.CLOCAL; attrs[3]=0
     attrs[4]=speeds[baud]; attrs[5]=speeds[baud]; termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    os.write(fd, ('LABWIRED_CHALLENGE '+nonce+'\n').encode())
+    os.write(fd, (nonce+'\n').encode())
     end=time.monotonic()+timeout; data=bytearray()
     while time.monotonic()<end and len(data)<65536:
         ready,_,_=select.select([fd],[],[],min(.25,max(0,end-time.monotonic())))

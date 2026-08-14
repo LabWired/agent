@@ -77,6 +77,7 @@ const required = [
   'scripts/agent-install.ps1', 'scripts/install.ps1',
   'scripts/public/install', 'scripts/public/install.ps1',
   'lib/dispatch.sh', 'lib/prefix.sh', 'lib/resolve-sim.sh',
+  'lib/serial-challenge.ps1',
   'server/rpc-server.mjs', 'server/agent-launcher.mjs', 'share/smoke/status-parser-model-verified.json',
   'share/smoke/status-parser-failed.json', 'scripts/profiles/esp32c3-serial.sh',
   'examples/esp32c3-serial/platformio.ini', 'examples/esp32c3-serial/src/main.cpp'

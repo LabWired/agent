@@ -94,6 +94,8 @@ Usage:
   labwired agent package info    Portable prefix info
   labwired agent package path    Print LABWIRED_HOME
   labwired agent install-deps    Refresh tools into prefix
+  labwired agent serial-challenge PORT BAUD NONCE MARKER ADDRESS_KEY TIMEOUT
+                                 Send a bounded hardware nonce challenge
   labwired agent help
 
 
@@ -102,6 +104,17 @@ Env:
   LABWIRED_CLI / LABWIRED_SIM   Simulator
   LABWIRED_PROBE_RS        probe-rs.exe
 "@
+}
+
+function Cmd-SerialChallenge {
+  if ($argsRest.Count -ne 6) { Fail "usage: serial-challenge PORT BAUD NONCE MARKER ADDRESS_KEY TIMEOUT" }
+  $helper = Join-Path $AgentHome "lib\serial-challenge.ps1"
+  if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { Fail "serial challenge helper missing" }
+  Assert-SafePath $helper
+  & $helper -Port ([string]$argsRest[0]) -Baud ([int]$argsRest[1]) -Nonce ([string]$argsRest[2]) `
+    -Marker ([string]$argsRest[3]) -AddressKey ([string]$argsRest[4]) -TimeoutSeconds ([int]$argsRest[5]) `
+    -Terminator LF -MaxBytes 65536
+  exit $LASTEXITCODE
 }
 
 function Get-LabWiredAgentConfigDir {
@@ -630,6 +643,7 @@ switch ($cmd) {
   "update" { Cmd-Update }
   "self-update" { Cmd-Update }
   "upgrade" { Cmd-Update }
+  "serial-challenge" { Cmd-SerialChallenge }
   "opencode" {
     # Internal engine alias - same product start as bare labwired agent.
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {

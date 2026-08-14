@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { rmSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -178,6 +178,27 @@ test('validated profile frequency bounds flow unchanged into the logic adapter',
   const hash = await sha256File(normalized.build.artifact);
   const result = await harness().adapters.observation['logic-csv'].execute(normalized, normalized.observations[0], { flashedArtifactSha256: hash });
   assert.equal(result.level, 'hardware_observed'); assert.equal(result.frequencyHz, 1);
+});
+
+test('physical raw evidence rejects symlink roots/directories and publication swaps', async (t) => {
+  for (const scenario of ['symlink-root', 'symlink-directory', 'swap-root', 'swap-directory']) await t.test(scenario, async () => {
+    const root = await sandbox(); const p = profile(root); const bundle = await evidence(root, p);
+    const external = await mkdtemp(path.join(os.tmpdir(), 'labwired-evidence-external-')); roots.add(external);
+    await writeFile(path.join(external, 'sentinel'), 'untouched');
+    const original = `${bundle}-original`;
+    if (scenario === 'symlink-root') { await rename(bundle, original); await symlink(external, bundle); }
+    if (scenario === 'symlink-directory') { await rm(path.join(bundle, 'observations'), { recursive: true }); await symlink(external, path.join(bundle, 'observations')); }
+    const hooks = scenario === 'swap-root' ? { async beforePublish() { await rename(bundle, original); await symlink(external, bundle); } }
+      : scenario === 'swap-directory' ? { async beforePublish() { await rename(path.join(bundle, 'observations'), path.join(bundle, 'observations-original')); await symlink(external, path.join(bundle, 'observations')); } }
+        : undefined;
+    const capture = path.join(root, 'logic.csv'); await writeFile(capture, 't,v\n0,0\n1,1\n');
+    const observation = { id: 'led', provider: 'logic-csv', file: capture, channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' };
+    const hash = await sha256File(p.build.artifact);
+    const result = await harness(undefined, { physicalEvidenceHooks: hooks }).adapters.observation['logic-csv'].execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash });
+    assert.equal(result.level, 'failed');
+    assert.equal(await readFile(path.join(external, 'sentinel'), 'utf8'), 'untouched');
+    await assert.rejects(readFile(path.join(external, 'led.csv')), /ENOENT/);
+  });
 });
 
 test('logic CSV rejects static, malformed, non-monotonic, symlinked, and raced captures', async (t) => {

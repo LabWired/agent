@@ -50,6 +50,7 @@
     "config/opencode.airgap.json",
     "config/tui.json",
     "lib/*.sh",
+    "lib/*.ps1",
     "server/rpc-server.mjs",
     "share/tools.json",
     "server/agent-launcher.mjs",
