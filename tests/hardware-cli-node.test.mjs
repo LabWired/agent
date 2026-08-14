@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { resolveHardwareIdentities } from '../scripts/hardware-runner.mjs';
+import { providerEnvironment, resolveHardwareIdentities } from '../scripts/hardware-runner.mjs';
 import { planHardwareRun } from '../lib/hardware/runner.mjs';
 
 const roots = [];
@@ -27,10 +27,48 @@ test('provider enumeration timeout kills its descendant process tree', async () 
   const oldPath = process.env.PATH; process.env.PATH = `${root}:${oldPath}`;
   const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio' }, flash: { provider: 'platformio' } };
   try {
-    await assert.rejects(resolveHardwareIdentities(profile, { timeoutMs: 500 }), /timed out/);
-    const pid = Number((await readFile(pidFile, 'utf8')).trim());
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.throws(() => process.kill(pid, 0), /ESRCH/);
+    const enumeration = resolveHardwareIdentities(profile, { timeoutMs: 5_000 });
+    const deadline = Date.now() + 4_000;
+    let pid;
+    while (Date.now() < deadline) {
+      try { pid = Number((await readFile(pidFile, 'utf8')).trim()); break; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(Number.isInteger(pid), 'provider never reached the READY/pid handshake');
+    await assert.rejects(enumeration, /timed out/);
+    const deathDeadline = Date.now() + 1_000;
+    while (Date.now() < deathDeadline) {
+      try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') return; throw error; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.fail(`provider descendant ${pid} remained alive after timeout`);
+  } finally { process.env.PATH = oldPath; }
+});
+
+test('provider environment is an explicit secret-free cross-platform allowlist', () => {
+  const selected = providerEnvironment({
+    PATH: '/safe/bin', HOME: '/safe/home', TMPDIR: '/safe/tmp', LANG: 'C.UTF-8',
+    SECRET_API_KEY: 'do-not-pass', TOKEN: 'do-not-pass', NODE_OPTIONS: '--require attacker.js',
+    TEMP: '/tmp/sk-EXPOSED1234',
+  });
+  assert.deepEqual({ ...selected }, { PATH: '/safe/bin', HOME: '/safe/home', TMPDIR: '/safe/tmp', LANG: 'C.UTF-8' });
+});
+
+test('provider process receives safe runtime variables but no ambient secrets or NODE_OPTIONS', async () => {
+  if (process.platform === 'win32') return;
+  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-env-')); roots.push(root);
+  const envFile = path.join(root, 'provider.env');
+  await writeFile(path.join(root, 'pio'), `#!/usr/bin/env bash\nenv >${JSON.stringify(envFile)}\nprintf '[]\\n'\n`, { mode: 0o755 });
+  const oldPath = process.env.PATH; process.env.PATH = `${root}:${oldPath}`;
+  const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio', workspace: root }, flash: { provider: 'platformio' } };
+  try {
+    await resolveHardwareIdentities(profile, { environment: {
+      PATH: `${root}:/usr/bin:/bin`, HOME: '/safe/home', TMPDIR: '/safe/tmp', LANG: 'C',
+      SECRET_API_KEY: 'exposed', TOKEN: 'exposed', NODE_OPTIONS: '--require attacker.js',
+    } });
+    const names = new Set((await readFile(envFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => line.split('=', 1)[0]));
+    for (const required of ['PATH', 'HOME', 'TMPDIR', 'LANG']) assert.equal(names.has(required), true, required);
+    for (const forbidden of ['SECRET_API_KEY', 'TOKEN', 'NODE_OPTIONS']) assert.equal(names.has(forbidden), false, forbidden);
   } finally { process.env.PATH = oldPath; }
 });
 

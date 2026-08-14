@@ -9,7 +9,7 @@ cat >"$TMP/bin/pio" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then echo 'PlatformIO Core 6.1.0'; exit 0; fi
 if [[ "${1:-} ${2:-} ${3:-}" == 'device list --json-output' ]]; then
-  if [[ "${LABWIRED_HANG_ENUM:-}" == 1 ]]; then sleep 30 & echo $! >"$LABWIRED_HANG_PID"; wait; fi
+  if [[ -f "$PWD/hang-enum" ]]; then sleep 30 & echo $! >"$PWD/hang.pid"; wait; fi
   if [[ -n "${LABWIRED_TEST_DEVICE_JSON:-}" ]]; then printf '%s\n' "$LABWIRED_TEST_DEVICE_JSON"
   elif [[ -f "$PWD/device.json" ]]; then cat "$PWD/device.json"
   else printf '[]\n'; fi
@@ -28,7 +28,7 @@ SH
 cat >"$TMP/bin/probe-rs" <<'SH'
 #!/usr/bin/env bash
 [[ "${1:-}" == '--version' ]] && { echo 'probe-rs 0.29'; exit 0; }
-[[ "${1:-}" == 'list' ]] && { printf '%s\n' "${LABWIRED_TEST_PROBE_LIST:-No probes found}"; exit 0; }
+[[ "${1:-}" == 'list' ]] && { if [[ -f "$PWD/probe-list.txt" ]]; then cat "$PWD/probe-list.txt"; else echo 'No probes found'; fi; exit 0; }
 exit 0
 SH
 chmod +x "$TMP/bin/cmake" "$TMP/bin/probe-rs"
@@ -160,6 +160,7 @@ doc=json.loads(sys.argv[1]); assert doc["result"] == "PASS"
 assert doc["receipt"]["result"] == "PASS"
 PY
 two="[$(printf '%s' "$one" | cut -c2- | rev | cut -c2- | rev),$(printf '%s' "$one" | cut -c2- | rev | cut -c2- | rev)]"
+printf '%s\n' "$two" >"$TMP/project/device.json"
 if LABWIRED_TEST_DEVICE_JSON="$two" "${CLI[@]}" plan --profile "$TMP/project/physical.json" --out "$TMP/nope" >"$TMP/ambiguous.out" 2>&1; then
   echo 'ambiguous physical identity was accepted' >&2; exit 1
 fi
@@ -178,6 +179,8 @@ cat >"$TMP/project/probe-rs.json" <<JSON
 JSON
 serial_only='[{"port":"/dev/ttyUSB9","serialNumber":"UART999","hwid":"USB VID:PID=10c4:ea60 SER=UART999 LOCATION=1-4"}]'
 probe_list='[0]: J-Link -- 1366:0101:DEBUG123 (J-Link)'
+printf '%s\n' "$serial_only" >"$TMP/project/device.json"
+printf '%s\n' "$probe_list" >"$TMP/project/probe-list.txt"
 probe_plan="$(LABWIRED_TEST_DEVICE_JSON="$serial_only" LABWIRED_TEST_PROBE_LIST="$probe_list" "${CLI[@]}" plan --profile "$TMP/project/probe-rs.json" --out "$TMP/probe-evidence")"
 python3 - "$probe_plan" <<'PY'
 import json,sys
@@ -186,10 +189,12 @@ assert doc["plan"]["identities"]["serial"] == "/dev/ttyUSB9"
 PY
 
 # SIGTERM reaches bounded provider enumeration and kills its process tree.
-LABWIRED_HANG_ENUM=1 LABWIRED_HANG_PID="$TMP/hang.pid" "${CLI[@]}" plan --profile "$TMP/project/physical.json" --out "$TMP/cancelled-evidence" >"$TMP/cancelled.json" & cli_pid=$!
-for _ in {1..100}; do [[ -s "$TMP/hang.pid" ]] && break; sleep 0.02; done
-[[ -s "$TMP/hang.pid" ]]
-child_pid="$(cat "$TMP/hang.pid")"
+printf '%s\n' "$one" >"$TMP/project/device.json"
+touch "$TMP/project/hang-enum"
+"${CLI[@]}" plan --profile "$TMP/project/physical.json" --out "$TMP/cancelled-evidence" >"$TMP/cancelled.json" & cli_pid=$!
+for _ in {1..100}; do [[ -s "$TMP/project/hang.pid" ]] && break; sleep 0.02; done
+[[ -s "$TMP/project/hang.pid" ]]
+child_pid="$(cat "$TMP/project/hang.pid")"
 kill -TERM "$cli_pid"
 set +e; wait "$cli_pid"; cancelled_code=$?; set -e
 [[ "$cancelled_code" -ne 0 && ! -e "$TMP/cancelled-evidence" ]]

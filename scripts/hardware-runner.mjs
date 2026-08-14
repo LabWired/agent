@@ -59,10 +59,24 @@ function requireStat(candidate) {
   return statSync(candidate).isFile();
 }
 
+const PROVIDER_ENVIRONMENT_NAMES = Object.freeze([
+  'PATH', 'PATHEXT', 'SystemRoot', 'WINDIR', 'ComSpec', 'HOME', 'USERPROFILE',
+  'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE',
+]);
+
+export function providerEnvironment(source = process.env) {
+  const selected = Object.create(null);
+  for (const name of PROVIDER_ENVIRONMENT_NAMES) {
+    const value = source[name];
+    if (typeof value === 'string' && !containsInlineCredential(value)) selected[name] = value;
+  }
+  return selected;
+}
+
 async function runJson(executable, args, options = {}) {
   if (options.signal?.aborted) throw Object.assign(new Error('hardware enumeration cancelled'), { name: 'AbortError' });
-  const descriptor = resolveLaunch({ executable, args, cwd: options.cwd ?? process.cwd(), env: process.env, shell: false });
-  const result = await runLaunch(descriptor, { timeoutMs: options.timeoutMs ?? 10_000, signal: options.signal, redact: options.redact });
+  const descriptor = resolveLaunch({ executable, args, cwd: options.cwd ?? process.cwd(), env: providerEnvironment(options.environment), shell: false });
+  const result = await runLaunch(descriptor, { timeoutMs: options.timeoutMs ?? 10_000, signal: options.signal, redact: options.redact ?? [] });
   if (result.classification === 'cancelled') throw Object.assign(new Error('hardware enumeration cancelled'), { name: 'AbortError' });
   if (result.classification === 'timeout') throw new Error('BLOCKED: trusted provider enumeration timed out');
   if (result.classification !== 'exit' || result.exitCode !== 0) throw new Error('BLOCKED: trusted provider enumeration failed');
@@ -100,7 +114,7 @@ async function platformIoDevices(options) {
 }
 
 async function platformIoIdentities(profile, options) {
-  const devices = await platformIoDevices(options);
+  const devices = await platformIoDevices({ ...options, cwd: profile.build.workspace });
   const matches = devices.filter((device) => device && device.port === profile.target.serialPort
     && serials(device).some((value) => value === profile.target.probeSerial));
   return matches.map((device) => {
@@ -122,8 +136,8 @@ async function probeRsIdentities(profile, options) {
   const probeExecutable = executableOnPath('probe-rs');
   if (!probeExecutable) throw new Error('BLOCKED: probe-rs provider is unavailable for exact probe enumeration');
   const [probeText, devices] = await Promise.all([
-    runJson(probeExecutable, ['list'], options),
-    platformIoDevices(options),
+    runJson(probeExecutable, ['list'], { ...options, cwd: profile.build.workspace }),
+    platformIoDevices({ ...options, cwd: profile.build.workspace }),
   ]);
   const configuredProbe = profile.target.probeSerial;
   const probes = probeText.split(/\r?\n/).map((line) => {
