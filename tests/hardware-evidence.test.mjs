@@ -451,3 +451,33 @@ test('a legitimate contained capture remains acceptable raw evidence', async () 
   assert.equal(record.rawEvidence[0].path, 'captures/led.txt');
   assert.match(record.rawEvidence[0].sha256, /^[0-9a-f]{64}$/);
 });
+
+test('raw evidence paths reject Windows aliases and non-portable components on every host', async () => {
+  const aliases = [
+    'result.json.',
+    'result.json ',
+    '.owner.json.',
+    'captures/RESULT.JSON',
+    'observations/led/RESULT.JSON',
+    'captures/led.txt:secret-stream',
+    'captures/CON',
+    'captures/PRN.txt',
+    'captures/AUX.log',
+    'captures/NUL.bin',
+    'captures/COM1.txt',
+    'captures/com9.data',
+    'captures/LPT1.csv',
+    'captures/lpt9.bin',
+    'captures//led.txt',
+    'captures\\led.txt',
+    'captures/./led.txt',
+  ];
+  for (const reference of aliases) {
+    const directory = await temporaryDirectory();
+    const evidence = await createReadyEvidence(directory);
+    await assert.rejects(evidence.recordBehavior('led', verifiedResult('hardware_observed', 'led', {
+      rawEvidenceRefs: [reference],
+    })), /portable|control|mutable|raw evidence path/);
+    assert.equal(JSON.parse(await readFile(path.join(directory, 'result.json'), 'utf8')).result, 'FAIL');
+  }
+});
