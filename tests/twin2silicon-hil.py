@@ -380,6 +380,151 @@ class RuntimeConfigurationTests(unittest.TestCase):
             self.assertEqual(config_path.read_text(encoding="utf-8"), codex_mcp_toml())
 
 
+class RuntimeMatrixTests(unittest.TestCase):
+    script = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "run_matrix.py"
+    task = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "tasks" / "esp32s3-gpio-hil-001"
+
+    def _fake_agent(self, directory):
+        body = textwrap.dedent("""
+            import argparse
+            import json
+            from pathlib import Path
+            import shutil
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("runtime")
+            parser.add_argument("--task", required=True)
+            parser.add_argument("--output", required=True)
+            parser.add_argument("--executable")
+            parser.add_argument("--timeout-seconds")
+            args = parser.parse_args()
+            output = Path(args.output)
+            task = Path(args.task)
+            output.mkdir(parents=True)
+            shutil.copytree(task / "public", output / "candidate")
+            status = {"opencode": "completed", "codex": "failed", "claude": "completed"}[args.runtime]
+            (output / "agent-result.json").write_text(json.dumps({
+                "schema_version": "1.0", "runtime": args.runtime,
+                "status": status, "returncode": 0 if status == "completed" else 9,
+            }))
+            (output / "usage.json").write_text(json.dumps({
+                "requests": 1 if args.runtime != "codex" else None,
+                "fresh_input": 10 if args.runtime != "codex" else None,
+                "cached_input": 0 if args.runtime != "codex" else None,
+                "reasoning": None,
+                "output": 5 if args.runtime != "codex" else None,
+                "estimated_cost_usd": None,
+                "unavailable_reason": "runtime did not expose usage" if args.runtime == "codex" else None,
+            }))
+            (output / "agent-invocation.json").write_text(json.dumps(vars(args), sort_keys=True))
+        """)
+        return executable_fixture(directory, body)
+
+    def _fake_hil(self, directory):
+        body = textwrap.dedent("""
+            import argparse
+            import json
+            from pathlib import Path
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("task")
+            parser.add_argument("--run-dir", required=True)
+            parser.add_argument("--candidate", required=True)
+            parser.add_argument("--jtag-serial", required=True)
+            parser.add_argument("--uart-device", required=True)
+            parser.add_argument("--openocd", required=True)
+            parser.add_argument("--platformio")
+            parser.add_argument("--usage-json")
+            args = parser.parse_args()
+            run_dir = Path(args.run_dir)
+            run_dir.mkdir(parents=True)
+            status = "pass" if Path(args.candidate).parent.name == "opencode" else "fail"
+            (run_dir / "run.json").write_text(json.dumps({
+                "schema_version": "1.0", "status": status, "cost": None,
+            }))
+            (run_dir / "hil-invocation.json").write_text(json.dumps(vars(args), sort_keys=True))
+        """)
+        return executable_fixture(directory, body)
+
+    def _run_cli(self, output, agent, hil, *extra):
+        return subprocess.run(
+            [
+                sys.executable, str(self.script), "--task", str(self.task),
+                "--output", str(output), "--jtag-serial", "fake-jtag",
+                "--uart-device", "/dev/fake-uart", "--openocd", "/fake/openocd",
+                "--agent-script", str(agent), "--hil-script", str(hil), *extra,
+            ],
+            cwd=REPOSITORY_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+
+    def test_matrix_preserves_runtime_order_hashes_and_failure_isolation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent"), self._fake_hil(root / "hil"),
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            matrix = json.loads((root / "matrix" / "matrix.json").read_text())
+            self.assertEqual(matrix["schema_version"], "1.0")
+            self.assertEqual(matrix["task_id"], "esp32s3-gpio-hil-001")
+            rows = matrix["trials"]
+            self.assertEqual([row["runtime"] for row in rows], ["opencode", "codex", "claude"])
+            self.assertEqual([row["agent_status"] for row in rows], ["completed", "failed", "completed"])
+            self.assertEqual([row["hil_status"] for row in rows], ["pass", "not_run", "fail"])
+            self.assertEqual(len({row["initial_public_sha256"] for row in rows}), 1)
+            self.assertIsNone(rows[1]["usage"]["requests"])
+            self.assertEqual(rows[1]["usage"]["unavailable_reason"], "runtime did not expose usage")
+            self.assertIsNone(rows[0]["hil_run"]["cost"])
+            self.assertIn("RUNTIME", completed.stdout)
+
+            hidden_name = "hil-oracle.json"
+            for trial in (path for path in (root / "matrix" / "trials").iterdir() if path.is_dir()):
+                with self.subTest(trial=trial.name):
+                    agent_invocation = (trial / "agent-invocation.json").read_text(encoding="utf-8")
+                    self.assertNotIn(hidden_name, agent_invocation)
+                    if trial.name != "codex":
+                        hil_invocation = (trial / "hil" / "hil-invocation.json").read_text(encoding="utf-8")
+                        self.assertNotIn("--usage-json", hil_invocation)
+
+    def test_agent_only_skips_hil_and_repeated_runtime_selects_trials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent"), self._fake_hil(root / "hil"),
+                "--agent-only", "--runtime", "claude", "--runtime", "opencode",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            rows = json.loads((root / "matrix" / "matrix.json").read_text())["trials"]
+            self.assertEqual([row["runtime"] for row in rows], ["claude", "opencode"])
+            self.assertEqual([row["hil_status"] for row in rows], ["not_run", "not_run"])
+            self.assertTrue(all(row["hil_run"] is None for row in rows))
+            self.assertFalse(any((root / "matrix" / "trials").glob("*/hil")))
+
+    def test_matrix_rejects_existing_output_and_invalid_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent = self._fake_agent(root / "agent")
+            hil = self._fake_hil(root / "hil")
+            output = root / "matrix"
+            output.mkdir()
+            marker = output / "keep"
+            marker.write_text("existing", encoding="utf-8")
+
+            existing = self._run_cli(output, agent, hil)
+            self.assertEqual(existing.returncode, 2)
+            self.assertIn("output path already exists", existing.stderr)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "existing")
+
+            invalid = self._run_cli(root / "new", agent, hil, "--runtime", "unknown")
+            self.assertEqual(invalid.returncode, 2)
+            self.assertIn("invalid choice", invalid.stderr)
+
+
 class FixtureContractTests(unittest.TestCase):
     def test_esp32s3_gpio_hil_fixture_contract(self):
         task_root = (
