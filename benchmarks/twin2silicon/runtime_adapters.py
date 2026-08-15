@@ -22,6 +22,12 @@ _MAX_COST_USD = 1_000_000_000.0
 _CLAUDE_MCP_CONFIG = "claude-mcp.json"
 
 
+def codex_mcp_toml() -> str:
+    """Return the isolated local LabWired MCP registration for Codex trials."""
+
+    return '[mcp_servers.labwired]\ncommand = "npx"\nargs = ["-y", "@labwired/mcp"]\n'
+
+
 @dataclass(frozen=True)
 class AdapterContext:
     """Execution inputs shared by the native runtime adapters."""

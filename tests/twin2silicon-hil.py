@@ -45,6 +45,7 @@ from benchmarks.twin2silicon.runtime_adapters import (
     AdapterContext,
     NormalizedUsage,
     build_runtime_command,
+    codex_mcp_toml,
     normalize_usage,
 )
 
@@ -307,6 +308,62 @@ class RuntimeAdapterTests(unittest.TestCase):
 
         self.assertEqual(usage.estimated_cost_usd, None)
         self.assertEqual(usage.unavailable_reason, "runtime did not expose usage")
+
+
+class RuntimeConfigurationTests(unittest.TestCase):
+    def test_shared_instructions_bound_repairs_and_evidence_to_public_workspace(self):
+        instructions_path = (
+            REPOSITORY_ROOT
+            / "benchmarks"
+            / "twin2silicon"
+            / "shared-agent-instructions.md"
+        )
+        instructions = instructions_path.read_text(encoding="utf-8")
+
+        self.assertLess(len(instructions.split()), 700)
+        for required_text in (
+            "smallest firmware repair",
+            "public workspace",
+            "hidden oracle",
+            "self-grade",
+            "compile evidence",
+            "repair_iterations",
+            "optional context and compile aids",
+            "not the final oracle",
+        ):
+            with self.subTest(required_text=required_text):
+                self.assertIn(required_text, instructions)
+
+    def test_runtime_mcp_configs_use_only_the_local_labwired_server(self):
+        config_root = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "runtime-config"
+        opencode = json.loads((config_root / "opencode.json").read_text(encoding="utf-8"))
+        claude = json.loads((config_root / "claude-mcp.json").read_text(encoding="utf-8"))
+
+        self.assertNotIn("model", opencode)
+        self.assertNotIn("provider", opencode)
+        self.assertEqual(opencode["mcp"]["labwired"]["type"], "local")
+        self.assertEqual(
+            opencode["mcp"]["labwired"]["command"],
+            ["npx", "-y", "@labwired/mcp"],
+        )
+        self.assertTrue(opencode["mcp"]["labwired"]["enabled"])
+        installed_profile = json.loads(
+            (REPOSITORY_ROOT / "config" / "opencode.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            opencode["permission"]["skill"],
+            installed_profile["permission"]["skill"],
+        )
+        self.assertEqual(claude["mcpServers"]["labwired"], {
+            "command": "npx",
+            "args": ["-y", "@labwired/mcp"],
+        })
+
+    def test_codex_mcp_toml_uses_the_local_labwired_server(self):
+        self.assertEqual(
+            codex_mcp_toml(),
+            '[mcp_servers.labwired]\ncommand = "npx"\nargs = ["-y", "@labwired/mcp"]\n',
+        )
 
 
 class FixtureContractTests(unittest.TestCase):

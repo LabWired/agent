@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "labwired": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@labwired/mcp"
+      ]
+    }
+  }
+}

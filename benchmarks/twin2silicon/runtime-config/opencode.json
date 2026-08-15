@@ -1,0 +1,46 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "labwired": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@labwired/mcp"
+      ],
+      "enabled": true,
+      "timeout": 120000,
+      "environment": {
+        "LABWIRED_CLI": "{env:LABWIRED_CLI}",
+        "LABWIRED_BUILDER_URL": "{env:LABWIRED_BUILDER_URL}"
+      }
+    }
+  },
+  "permission": {
+    "skill": {
+      "brainstorming": "allow",
+      "develop": "allow",
+      "bringup": "allow",
+      "desk-hw": "allow",
+      "dispatching-parallel-agents": "allow",
+      "executing-plans": "allow",
+      "finishing-a-development-branch": "allow",
+      "golden-path": "allow",
+      "observe": "allow",
+      "prove": "allow",
+      "receiving-code-review": "allow",
+      "requesting-code-review": "allow",
+      "subagent-driven-development": "allow",
+      "systematic-debugging": "allow",
+      "test-driven-development": "allow",
+      "using-git-worktrees": "allow",
+      "using-superpowers": "allow",
+      "verification-before-completion": "allow",
+      "writing-plans": "allow",
+      "writing-skills": "allow",
+      "customize-labwired-agent": "allow",
+      "customize-opencode": "deny",
+      "import-circuit": "allow"
+    }
+  }
+}
