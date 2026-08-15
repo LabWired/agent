@@ -1,9 +1,8 @@
 ---
 name: desk-hw
 description: >-
-  Flash via probe-rs (or virtual) and optional promote to hardware_observed
-  (flash + serial/RTT marker). Never upgrade hardware_observed to model_verified.
-  Prefer twin prove first.
+  Plan and execute confirmed physical hardware runs with explicit identities,
+  safe wiring, exact flash, and behavior-specific evidence. Prefer twin prove first.
 license: MIT
 compatibility: opencode
 metadata:
@@ -17,7 +16,8 @@ metadata:
 ## Hard rules
 
 1. **`model_verified` is twin-only** — never from flash or serial alone.  
-2. **`hardware_observed`** requires flash **and** marker in a captured window.  
+2. **`hardware_observed`** requires exact flash and independent evidence for the
+   configured behavior. A UART/RTT marker proves only that UART/RTT behavior.
 3. **Never upgrade** HW → twin green (or reverse).  
 4. Target from env/task: `LABWIRED_HW_PORT`, `LABWIRED_HW_MARKER`, `LABWIRED_HW_CHIP`  
    — not a fixed product MCU.  
@@ -30,31 +30,67 @@ metadata:
 8. Record the plan, provider versions, artifact hashes, exact identities, raw
    physical captures, behavior receipts, and the final result as evidence.
 
-## A. Flash
+## A. Simulation is nonphysical
 
-```bash
-labwired probe list
-labwired probe chips stm32
-# virtual
-labwired probe flash build/app.elf --target virtual --chip <id>
-# physical
-labwired probe flash build/app.elf --chip STM32L476RGTx
+Twin or virtual-device results are model evidence only. Keep them separate from
+physical results; simulation never proves flashing, wiring, GPIO, RF, or a real
+instrument capture.
+
+## B. Plan the exact physical run
+
+Use a reviewed `.labwired/hardware.json` with an explicit target `id`, `chip`,
+`probeSerial`, and `serialPort`. Confirm the real board voltage, common ground,
+probe connections, UART levels, and any logic-analyzer channel before planning.
+Never place credentials or machine-specific identities in a committed template.
+
+```json
+{
+  "schema": 1,
+  "target": {
+    "id": "reviewed-board-id",
+    "chip": "reviewed-chip-id",
+    "probeSerial": "exact-probe-serial",
+    "serialPort": "exact-serial-port"
+  }
+}
 ```
 
-Flash alone is **not** `hardware_observed`.
+The real profile also declares the trusted build, exact artifact, flash
+provider, and behavior observations. Generate a read-only plan:
 
-## B. Promote → hardware_observed
+```bash
+labwired agent hardware plan --profile .labwired/hardware.json --out .labwired/evidence
+```
 
-1. Flash OK.  
-2. `labwired serial-capture` (or equivalent) window contains marker
-   (default `LABWIRED_OK` / `LABWIRED_HW_MARKER`).  
-3. Emit **`hardware_observed`** with chip, tool path, marker, capture excerpt.  
-4. Report via dual-claim footer (twin status separate).
+Stop if enumeration is missing or ambiguous, if wiring is not confirmed, or if
+the plan names any unexpected identity, tool, artifact, or action.
+
+## C. Confirm and execute
+
+After the operator reviews the plan, run only its exact digest:
+
+```bash
+labwired agent hardware run --profile .labwired/hardware.json \
+  --out .labwired/evidence --confirm <exact-plan-digest>
+```
+
+A changed profile, provider version, artifact, probe, port, or plan requires a
+new review and confirmation. Flash alone is not behavior evidence.
+
+For UART or RTT observations, retain the strict raw capture and receipt. Those
+captures may prove only the configured UART/RTT assertion; they never prove a
+GPIO transition or LED frequency. An LED requires an independently wired logic
+capture. Wi-Fi requires the fresh nonce-correlated device/host challenge.
+
+Record the fail-first bundle even when a provider blocks or an assertion fails.
+Never invent, substitute, or hand-edit raw evidence.
+
+## D. Report separate claims
 
 ```text
 twin_status:       <from prove or not_run>
-hardware_status:   hardware_observed
-marker:            <string>
+hardware_status:   <from authenticated physical receipt>
+evidence_receipt:  <external receipt path and hash>
 ```
 
 ## USB-CDC notes
@@ -67,29 +103,3 @@ ESP32/RP2040 may re-enumerate after reset; re-resolve port. Baud must match firm
 |------|------|
 | Twin green first | `prove` |
 | Dual-claim write-up | `prove` (report section) or `scripts/report-evidence.py` |
-
-
-## C. UART or RTT for the marker (same claim JSON)
-
-Either path can mint **`hardware_observed`** when a marker is captured:
-
-```bash
-# UART (product default)
-labwired serial-capture <port> <baud> <marker> <timeout>
-
-# RTT (same claim shape: status, marker, excerpt, matched)
-labwired probe rtt-capture --chip <id> --marker LABWIRED_OK
-# CI / no RTT hardware:
-LABWIRED_RTT_FIXTURE=uart.log labwired probe rtt-capture --chip <id>
-# exit 2 NEED_RTT when probe-rs cannot RTT on this target — not a soft pass
-```
-
-Physical full path (hard fail without probe):
-
-```bash
-# exit 2 NEED_PROBE if probe-rs list is empty
-LABWIRED_HW_ELF=… LABWIRED_HW_CHIP=… LABWIRED_HW_PORT=… bash scripts/desk-hw-physical.sh
-```
-
-If RTT is unavailable, fall back to UART `serial-capture` and say so.  
-Never invent RTT or serial data.

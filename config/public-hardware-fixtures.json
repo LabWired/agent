@@ -1,0 +1,8 @@
+{
+  "files": [
+    "fixtures/hardware-profiles/esp32c3-acceptance.template.json",
+    "fixtures/hardware-profiles/minimal.json",
+    "fixtures/hardware-profiles/logic/led-pass.csv",
+    "fixtures/hardware-profiles/logic/led-flat.csv"
+  ]
+}

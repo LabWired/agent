@@ -3,6 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+HOST_HOME="${HOME:?HOME is required for the shared PlatformIO tool cache}"
 
 export LABWIRED_FAST="${LABWIRED_FAST:-1}"
 export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
@@ -33,12 +34,31 @@ run_command() {
   fi
 }
 
+run_hermetic() {
+  local name="$1"
+  shift
+  local lane_root
+  lane_root="$(mktemp -d)"
+  mkdir -p "$lane_root/home" "$lane_root/tmp" "$lane_root/runtime"
+  echo ""
+  echo "======== $name ========"
+  if env HOME="$lane_root/home" TMPDIR="$lane_root/tmp" TMP="$lane_root/tmp" \
+      TEMP="$lane_root/tmp" XDG_RUNTIME_DIR="$lane_root/runtime" \
+      PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$HOST_HOME/.platformio}" "$@"; then
+    echo "PASS $name"
+  else
+    echo "FAIL $name"
+    fail=1
+  fi
+  rm -rf "$lane_root"
+}
+
 run "harness"           "$ROOT/tests/harness.sh"
 run "run-bounded"       "$ROOT/tests/run-bounded.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
 run "skills-verify-all" "$ROOT/tests/skills-verify-all.sh"
 run "develop-skill"     "$ROOT/tests/develop-skill.sh"
-run "develop-acceptance-smoke" "$ROOT/tests/develop-acceptance-smoke.sh"
+run_hermetic "develop-acceptance-smoke" bash "$ROOT/tests/develop-acceptance-smoke.sh"
 run "hosted-config"     "$ROOT/tests/hosted-config.sh"
 run "public-tool-names" "$ROOT/tests/public-tool-names.sh"
 run "hosted-auth-probe" "$ROOT/tests/hosted-auth-probe.sh"
@@ -64,12 +84,13 @@ run "rpc-probe-resolution" "$ROOT/tests/rpc-probe-resolution.sh"
 run "rpc-claim-shape"   "$ROOT/tests/rpc-claim-shape.sh"
 run "rpc-promote"       "$ROOT/tests/rpc-promote.sh"
 run "tools-manifest"    "$ROOT/tests/tools-manifest.sh"
-run_command "hardware-node" node --test tests/hardware-*.test.mjs
-run "hardware-cli" "$ROOT/tests/hardware-cli.sh"
-run "hardware-legacy-compat" "$ROOT/tests/hardware-legacy-compat.sh"
-run "hardware-release-contract" "$ROOT/tests/hardware-release-contract.sh"
-run "probe-exact-flash" "$ROOT/tests/probe-exact-flash.sh"
+run_hermetic "hardware-node" node --test tests/hardware-*.test.mjs
+run_hermetic "hardware-cli" bash "$ROOT/tests/hardware-cli.sh"
+run_hermetic "hardware-legacy-compat" bash "$ROOT/tests/hardware-legacy-compat.sh"
+run_hermetic "hardware-release-contract" bash "$ROOT/tests/hardware-release-contract.sh"
+run_hermetic "probe-exact-flash" bash "$ROOT/tests/probe-exact-flash.sh"
 run "hardware-public-docs" "$ROOT/tests/hardware-public-docs.sh"
+run "hardware-matrix-order" "$ROOT/tests/hardware-matrix-order.sh"
 run_command "hardware-node18-min" npm run test:node18-min
 if command -v pwsh >/dev/null 2>&1; then
   run_command "windows-hardware-contract" pwsh -NoProfile -File "$ROOT/tests/windows-hardware-contract.ps1"

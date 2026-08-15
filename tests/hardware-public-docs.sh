@@ -50,12 +50,19 @@ require_text skills/develop/SKILL.md 'never.*auto-confirm|must not.*auto-confirm
 require_text skills/desk-hw/SKILL.md 'ambiguous' 'desk-hw does not stop on ambiguous identity'
 require_text skills/desk-hw/SKILL.md '[Ss]erial.*(not|never).*GPIO|GPIO.*(not|never).*[Ss]erial' 'desk-hw confuses serial with GPIO evidence'
 require_text skills/desk-hw/SKILL.md 'plan.*first|plan before' 'desk-hw does not plan first'
+require_text skills/desk-hw/SKILL.md 'probeSerial' 'desk-hw omits explicit probe identity'
+require_text skills/desk-hw/SKILL.md 'serialPort' 'desk-hw omits explicit port identity'
+if grep -Eq -- '--target virtual|LABWIRED_RTT_FIXTURE|serial-capture.*mint.*hardware_observed|Either path can mint' "$ROOT/skills/desk-hw/SKILL.md"; then
+  echo 'FAIL skills/desk-hw/SKILL.md: nonphysical shortcut remains in physical promotion guidance' >&2
+  exit 1
+fi
 
 for lane in \
   'node --test tests/hardware-\*\.test\.mjs' \
   'tests/hardware-cli\.sh' \
   'tests/hardware-legacy-compat\.sh' \
   'tests/hardware-release-contract\.sh' \
+  'tests/hardware-matrix-order\.sh' \
   'tests/probe-exact-flash\.sh' \
   'tests/windows-hardware-contract\.ps1'; do
   require_text tests/all.sh "$lane" "hardware matrix lane $lane is not registered"

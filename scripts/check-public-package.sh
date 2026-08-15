@@ -73,7 +73,7 @@ const required = [
   'README.md', 'LICENSE', 'CHANGELOG.md', 'VERSION',
   'bin/labwired', 'bin/labwired-agent', 'bin/labwired.cmd',
   'bin/labwired.ps1', 'bin/labwired-agent.ps1',
-  'config/AGENTS.md',
+  'config/AGENTS.md', 'config/public-hardware-fixtures.json',
   'docs/INSTALL.md', 'docs/USAGE.md', 'docs/VERIFY.md',
   'docs/DEVELOPMENT.md', 'docs/TESTING.md',
   'install.sh', 'scripts/npm-install.js', 'scripts/agent-install.sh',
