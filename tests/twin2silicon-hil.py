@@ -593,6 +593,61 @@ class RuntimeMatrixTests(unittest.TestCase):
             self.assertIn("invalid choice", invalid.stderr)
 
 
+class RuntimePackagingTests(unittest.TestCase):
+    script = REPOSITORY_ROOT / "tests" / "twin2silicon-runtime-smoke.sh"
+
+    def test_runtime_smoke_entry_points_are_opt_in_and_documented(self):
+        package = json.loads((REPOSITORY_ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            package["scripts"]["test:runtime-smoke:offline"],
+            "python3 tests/twin2silicon-hil.py",
+        )
+        self.assertEqual(
+            package["scripts"]["test:runtime-smoke:hardware"],
+            "bash tests/twin2silicon-runtime-smoke.sh",
+        )
+
+        source = self.script.read_text(encoding="utf-8")
+        for variable in (
+            "LABWIRED_HIL",
+            "LABWIRED_UART_DEVICE",
+            "LABWIRED_JTAG_SERIAL",
+            "LABWIRED_OPENOCD",
+            "LABWIRED_MATRIX_OUTPUT",
+            "/Volumes/LabWired",
+        ):
+            with self.subTest(variable=variable):
+                self.assertIn(variable, source)
+        self.assertNotRegex(source.lower(), r"api[_-]?key|credential|secret|token")
+
+        refused = subprocess.run(
+            ["bash", str(self.script)],
+            cwd=REPOSITORY_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("LABWIRED_HIL=1 required", refused.stderr)
+
+    def test_runtime_smoke_readme_states_the_comparison_limits_and_hardware_effect(self):
+        readme = (
+            REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "README.md"
+        ).read_text(encoding="utf-8").lower()
+        for wording in (
+            "smoke comparison",
+            "not a leaderboard",
+            "not overridden",
+            "opencode model matrix",
+            "unknown",
+            "flash",
+            "multiple tasks",
+            "repeated fresh trials",
+        ):
+            with self.subTest(wording=wording):
+                self.assertIn(wording, readme)
+
+
 class FixtureContractTests(unittest.TestCase):
     def test_esp32s3_gpio_hil_fixture_contract(self):
         task_root = (

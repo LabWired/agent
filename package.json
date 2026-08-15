@@ -151,7 +151,9 @@
     "test:tool-names": "bash tests/public-tool-names.sh",
     "test:public-install-safety": "bash tests/public-install-safety.sh",
     "test:install": "bash tests/install-smoke.sh",
-    "test:llm": "bash tests/llm-deepinfra.sh"
+    "test:llm": "bash tests/llm-deepinfra.sh",
+    "test:runtime-smoke:offline": "python3 tests/twin2silicon-hil.py",
+    "test:runtime-smoke:hardware": "bash tests/twin2silicon-runtime-smoke.sh"
   },
   "publishConfig": {
     "access": "public"
