@@ -10,7 +10,7 @@ $artifact=Join-Path $temp 'firmware.bin';[IO.File]::WriteAllBytes($artifact,[Tex
 $pio=Join-Path $temp 'pio.ps1';$uploadLog=Join-Path $temp 'upload.log';$deviceJson=Join-Path $temp 'devices.json';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog;$env:LABWIRED_TEST_DEVICE_FILE=$deviceJson
 Set-Content $pio @'
 if($args.Count -ge 2 -and $args[0] -eq 'device' -and $args[1] -eq 'list'){
-  [Console]::Out.Write((Get-Content -LiteralPath $env:LABWIRED_TEST_DEVICE_FILE -Raw))
+  Write-Output (Get-Content -LiteralPath $env:LABWIRED_TEST_DEVICE_FILE -Raw)
   exit 0
 }
 [IO.File]::AppendAllText($env:LABWIRED_TEST_UPLOAD_LOG,($args -join ' ')+[Environment]::NewLine)
