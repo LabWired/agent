@@ -34,13 +34,9 @@ labwired_cloud_session_path() {
 }
 
 labwired_cloud_disclosure_ack_dir() {
-  local h
-  if declare -F labwired_prefix_home >/dev/null 2>&1; then
-    h="$(labwired_prefix_home)"
-  else
-    h="${LABWIRED_HOME:-$HOME/.labwired}"
-  fi
-  echo "${h%/}/state/agent"
+  local config_dir
+  config_dir="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/labwired-agent}}"
+  echo "${config_dir%/}/state"
 }
 
 # Print the hosted conversation disclosure once per local disclosure version.

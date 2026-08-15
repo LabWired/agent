@@ -55,8 +55,11 @@ function isHostedLabWiredEnv(env) {
 /** Return the notice only when this disclosure version has not been acknowledged. */
 function hostedDisclosureMessage(env = process.env, version = exports.HOSTED_DISCLOSURE_VERSION) {
     const safeVersion = /^[A-Za-z0-9._-]+$/.test(version) ? version : exports.HOSTED_DISCLOSURE_VERSION;
-    const home = env.LABWIRED_HOME || path.join(os.homedir(), ".labwired");
-    const dir = path.join(home, "state", "agent");
+    const configHome = env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), ".config");
+    const configDir = env.OPENCODE_CONFIG_DIR ||
+        env.LABWIRED_AGENT_CONFIG_DIR ||
+        path.join(configHome, "labwired-agent");
+    const dir = path.join(configDir, "state");
     const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
     try {
         if (fs.statSync(ack).isDirectory())

@@ -53,8 +53,8 @@ Kit sources live under the install prefix, e.g. `~/.labwired/agent/config/`, `pl
 Hosted uses the single public model id `labwired/labwired-default` in `opencode.json`.
 On first hosted start for each disclosure version, LabWired explains that hosted
 conversations are stored under the Privacy Policy and customer content is not
-used for training by default. The acknowledgement belongs in LabWired user
-state, never in a firmware repository.
+used for training by default. The acknowledgement belongs in the LabWired Agent
+config directory, never in a firmware repository.
 
 ### Local / BYO model
 User sets `LABWIRED_MODEL_URL` + `LABWIRED_MODEL_KEY` and uses local config profile — do not force Ollama defaults.

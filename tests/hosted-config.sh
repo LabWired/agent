@@ -88,6 +88,7 @@ if [[ -f "$(labwired_cloud_session_path)" ]]; then bad "session clear"; else ok 
 # Hosted disclosure is stored under user state, shown once per version, and a
 # failed acknowledgement write never blocks a hosted session.
 export LABWIRED_HOSTED_DISCLOSURE_VERSION=1
+export LABWIRED_AGENT_CONFIG_DIR="$TMP/agent-config"
 first="$(labwired_cloud_hosted_disclosure)"
 second="$(labwired_cloud_hosted_disclosure)"
 [[ "$first" == *"Hosted conversations are stored by LabWired under the Privacy Policy."* \
@@ -105,16 +106,26 @@ wait
 shown="$(cat "$TMP"/disclosure-* | grep -c '^Hosted conversations' || true)"
 [[ "$shown" -eq 1 ]] && ok "concurrent launches disclose once" || bad "concurrent launches disclosed $shown times"
 ack="$(labwired_cloud_disclosure_ack_dir)"
-case "$ack" in
-  "$LABWIRED_HOME"/*) ok "disclosure acknowledgement is user state" ;;
-  *) bad "disclosure acknowledgement escaped user state: $ack" ;;
-esac
+[[ "$ack" == "$LABWIRED_AGENT_CONFIG_DIR/state" ]] \
+  && ok "disclosure acknowledgement uses agent config" \
+  || bad "disclosure acknowledgement path mismatch: $ack"
+override_ack="$(OPENCODE_CONFIG_DIR="$TMP/opencode-override" labwired_cloud_disclosure_ack_dir)"
+[[ "$override_ack" == "$TMP/opencode-override/state" ]] \
+  && ok "explicit OpenCode config override accepted" \
+  || bad "OpenCode config override ignored: $override_ack"
+default_ack="$(
+  unset OPENCODE_CONFIG_DIR LABWIRED_AGENT_CONFIG_DIR
+  HOME="$TMP/default-home" XDG_CONFIG_HOME="$TMP/xdg" labwired_cloud_disclosure_ack_dir
+)"
+[[ "$default_ack" == "$TMP/xdg/labwired-agent/state" ]] \
+  && ok "XDG agent config default" \
+  || bad "XDG agent config path mismatch: $default_ack"
 
 readonly_home="$TMP/read-only-home"
 mkdir -p "$readonly_home"
 chmod 500 "$readonly_home"
 fallback="$(
-  LABWIRED_HOME="$readonly_home/missing" \
+  LABWIRED_AGENT_CONFIG_DIR="$readonly_home/missing" \
   LABWIRED_HOSTED_DISCLOSURE_VERSION=3 \
   labwired_cloud_hosted_disclosure
 )"
