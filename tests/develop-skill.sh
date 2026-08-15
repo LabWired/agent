@@ -44,6 +44,7 @@ fi
 need 'labwired_context' 'context tool'
 need 'empty[_ -]?context.*(resolve|import|select|labwired_list|labwired_describe).*(labwired_context.*(again|re-run)|re-run.*labwired_context).*before.*compil' 'empty context must be resolved and refreshed before compile'
 need 'labwired_context.*pack.*board.*mcu' 'catalog board context is refreshed with an explicit pack'
+need '(second|refreshed).*(labwired_context|context).*(must|mandatory).*(succeed|ok|design_context_ok).*before.*compil' 'refreshed context success is a hard compile gate'
 need '(ok.*false|design_context_ok.*false).*(do not|never|must not).*compil' 'failed context blocks compile'
 need 'catalog:board:.*returned.*board|returned.*board.*catalog:board:' 'catalog board citations use the canonical returned id'
 need 'labwired_(part|datasheet|search)' 'grounding tool'

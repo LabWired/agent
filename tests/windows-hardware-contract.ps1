@@ -7,12 +7,14 @@ $engine=(Get-Process -Id $PID).Path
 function Run-Real([string]$helper,[string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n")}}
 $workspace=Join-Path $temp 'real-work';New-Item -ItemType Directory -Path $workspace|Out-Null;Set-Content (Join-Path $workspace 'platformio.ini') '[env:release]' -Encoding ASCII
 $artifact=Join-Path $temp 'firmware.bin';[IO.File]::WriteAllBytes($artifact,[Text.Encoding]::ASCII.GetBytes('exact-bin'));$sha=(Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-$pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$deviceJson=Join-Path $temp 'devices.json';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog;$env:LABWIRED_TEST_DEVICE_FILE=$deviceJson
+$pio=Join-Path $temp 'pio.ps1';$uploadLog=Join-Path $temp 'upload.log';$deviceJson=Join-Path $temp 'devices.json';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog;$env:LABWIRED_TEST_DEVICE_FILE=$deviceJson
 Set-Content $pio @'
-@echo off
-if "%1 %2"=="device list" type "%LABWIRED_TEST_DEVICE_FILE%"& exit /b 0
-echo %*>>"%LABWIRED_TEST_UPLOAD_LOG%"
-exit /b 0
+if($args.Count -ge 2 -and $args[0] -eq 'device' -and $args[1] -eq 'list'){
+  [Console]::Out.Write((Get-Content -LiteralPath $env:LABWIRED_TEST_DEVICE_FILE -Raw))
+  exit 0
+}
+[IO.File]::AppendAllText($env:LABWIRED_TEST_UPLOAD_LOG,($args -join ' ')+[Environment]::NewLine)
+exit 0
 '@ -Encoding ASCII
 $flashArgs=@('-Provider','platformio','-Artifact',$artifact,'-ExpectedSha256',$sha,'-Chip','esp32c3','-Port','COM7','-Environment','release','-Workspace',$workspace,'-Pio',$pio)
 foreach($case in @(
@@ -46,7 +48,7 @@ $PSBoundParameters|ConvertTo-Json -Compress|Set-Content $env:LABWIRED_TEST_HW_LO
 if($env:LABWIRED_TEST_HW_FAIL){exit 9};Write-Output 'mock-ok';exit 0
 '@
 foreach($name in @('probe-flash.ps1','serial-capture.ps1','rtt-capture.ps1')){Set-Content (Join-Path $agent ('lib\'+$name)) $fake -Encoding ASCII}
-function Run([string[]]$argv){$out=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $agent 'bin\labwired-agent.ps1') @argv 2>&1;return @{Code=$LASTEXITCODE;Out=($out-join "`n");Args=(Get-Content $log -Raw)}}
+function Run([string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $agent 'bin\labwired-agent.ps1') @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n");Args=(Get-Content $log -Raw)}}
 try{
  $r=Run @('serial-capture','COM 7','115200','ready value','3');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'COM 7') -or ($r.Args -notmatch 'ready value')){throw 'serial-capture route failed'}
  $r=Run @('probe','rtt-capture','--chip','chip one','--probe','probe two','--elf','C:\firm ware.elf','--marker','ready','--timeout','4');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'probe two')){throw 'RTT route failed'}
