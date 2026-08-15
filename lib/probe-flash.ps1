@@ -24,7 +24,11 @@ if($Provider -eq 'probe-rs'){
 } else {
   if([IO.Path]::GetExtension($artifactPath) -ine '.bin'){Fail 'PlatformIO requires BIN'}
   $devicesText=(& $Pio device list --json-output | Out-String);if($LASTEXITCODE -ne 0){Fail 'device enumeration failed'}
-  $matches=@($devicesText|ConvertFrom-Json|Where-Object{([string]$_.port -ceq $Port) -and (@((Get-DeviceSerials $_)|Where-Object{$_ -ceq $Probe}).Count -gt 0)})
+  # ConvertFrom-Json differs across Windows PowerShell and PowerShell Core:
+  # one may emit the top-level JSON array as a single pipeline object. The
+  # identity filter needs device records, so explicitly unroll that value.
+  $devices=@($devicesText|ConvertFrom-Json|ForEach-Object{$_})
+  $matches=@($devices|Where-Object{([string]$_.port -ceq $Port) -and (@((Get-DeviceSerials $_)|Where-Object{$_ -ceq $Probe}).Count -gt 0)})
   if($matches.Count -ne 1){Fail 'port does not map uniquely to serial identity'}
   $stage=Join-Path $workspacePath ('.pio\build\'+$Environment+'\firmware.bin');$parent=Split-Path -Parent $stage;New-Item -ItemType Directory -Path $parent -Force|Out-Null
   foreach($candidate in @($workspacePath,(Join-Path $workspacePath '.pio'),(Join-Path $workspacePath '.pio\build'),$parent,$stage)){if(Test-Path -LiteralPath $candidate){if((Get-Item -LiteralPath $candidate -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){Fail 'staging path contains a reparse point'}}}
