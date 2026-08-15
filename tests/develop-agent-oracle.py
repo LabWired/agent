@@ -346,6 +346,18 @@ def report_payload(report: dict) -> dict:
                 parsed = None
             if isinstance(parsed, dict):
                 return parsed
+            fenced_objects = []
+            for fenced in re.findall(r"```(?:json)?\s*([\s\S]*?)```", text, flags=re.I):
+                try:
+                    fenced_parsed = json.loads(fenced.strip())
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(fenced_parsed, dict):
+                    fenced_objects.append(fenced_parsed)
+            # One unambiguous fenced report may be surrounded by ordinary
+            # explanatory prose. Multiple objects are not merged or guessed.
+            if len(fenced_objects) == 1:
+                return fenced_objects[0]
     return report
 
 
