@@ -96,6 +96,16 @@ test('build plans exact shell-free PlatformIO, Make, and CMake descriptors', asy
   });
 });
 
+test('tool environments canonicalize Windows runtime key casing and reject conflicting aliases', async () => {
+  const root = await sandbox();
+  const { adapters } = harness(undefined, { env: { Path: '/trusted', PathExt: '.EXE', SystemRoot: 'C:\\Windows' } });
+  const ready = await adapters.build.platformio.preflight(profile(root));
+  const descriptor = adapters.build.platformio.plan(profile(root), ready);
+  assert.deepEqual(descriptor.env, { PATH: '/trusted', PATHEXT: '.EXE', SystemRoot: 'C:\\Windows' });
+
+  assert.throws(() => harness(undefined, { env: { PATH: '/one', Path: '/two' } }), /conflicting environment aliases/i);
+});
+
 test('successful build requires a freshly produced regular artifact and hashes exact bytes', async (t) => {
   const root = await sandbox();
   const artifact = profile(root).build.artifact;
