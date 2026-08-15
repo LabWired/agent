@@ -16,6 +16,7 @@ import math
 import os
 from pathlib import Path
 import stat
+import tempfile
 import secrets
 import sys
 import time
@@ -39,9 +40,15 @@ from benchmarks.twin2silicon.hil.results import sha256_file, write_json_atomic
 ROOT = Path(__file__).resolve().parent
 TASKS = ROOT / "tasks"
 HARNESS_REVISION = "twin2silicon-hil-1"
+MAX_REGULAR_FILE_BYTES = 32 * 1024 * 1024
+MAX_TREE_BYTES = 128 * 1024 * 1024
 
 
 class UartWorkerFatal(BaseException):
+    pass
+
+
+class UnsafeWorkspaceError(ValueError):
     pass
 
 
@@ -149,24 +156,70 @@ def _safe_tree(source: Path, field: str) -> Path:
     return source
 
 
-def _safe_files(root: Path) -> list[Path]:
+def _safe_files(root: Path, deadline: float | None = None) -> list[Path]:
     root = root.absolute()
     files: list[Path] = []
+    total = 0
     def visit(directory: Path) -> None:
+        nonlocal total
+        if deadline is not None and time.monotonic() >= deadline:
+            raise UnsafeWorkspaceError("validation deadline exhausted")
         with os.scandir(directory) as entries:
             for entry in entries:
                 info = entry.stat(follow_symlinks=False)
                 path = directory / entry.name
                 if stat.S_ISLNK(info.st_mode):
-                    raise ValueError(f"unsafe symlink: {path.relative_to(root)}")
+                    raise UnsafeWorkspaceError(f"unsafe symlink: {path.relative_to(root)}")
                 if stat.S_ISDIR(info.st_mode):
                     visit(path)
                 elif stat.S_ISREG(info.st_mode):
+                    if info.st_size > MAX_REGULAR_FILE_BYTES:
+                        raise UnsafeWorkspaceError(f"oversize file: {path.relative_to(root)}")
+                    total += info.st_size
+                    if total > MAX_TREE_BYTES:
+                        raise UnsafeWorkspaceError("tree size limit exceeded")
                     files.append(path)
                 else:
-                    raise ValueError(f"unsafe non-regular file: {path.relative_to(root)}")
+                    raise UnsafeWorkspaceError(f"unsafe non-regular file: {path.relative_to(root)}")
     visit(root)
     return sorted(files)
+
+
+def _safe_remove_tree(path: Path) -> None:
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        path.unlink(missing_ok=True)
+        return
+    with os.scandir(path) as entries:
+        children = [path / entry.name for entry in entries]
+    for child in children:
+        _safe_remove_tree(child)
+    try: path.rmdir()
+    except FileNotFoundError: pass
+
+
+def _quarantine_workspace(workspace: Path) -> None:
+    if not workspace.exists() and not workspace.is_symlink():
+        return
+    root = Path(tempfile.mkdtemp(prefix="hil-quarantine-", dir=workspace.parent.parent))
+    quarantined = root / "workspace"
+    os.rename(workspace, quarantined)
+    _safe_remove_tree(quarantined)
+    _safe_remove_tree(root)
+
+
+def _freeze_workspace(workspace: Path, deadline: float | None) -> None:
+    root = Path(tempfile.mkdtemp(prefix="hil-snapshot-", dir=workspace.parent.parent))
+    frozen = root / "workspace"
+    try:
+        _copy_public(workspace, frozen, deadline)
+        _quarantine_workspace(workspace)
+        os.rename(frozen, workspace)
+    finally:
+        _safe_remove_tree(root)
 
 
 def _safe_hash(path: Path) -> str:
@@ -184,6 +237,19 @@ def _safe_hash(path: Path) -> str:
         os.close(fd)
 
 
+def _safe_copy_file(source: Path, destination: Path) -> None:
+    source_fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        info = os.fstat(source_fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_REGULAR_FILE_BYTES:
+            raise UnsafeWorkspaceError("firmware artifact is unsafe or oversized")
+        destination_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            while chunk := os.read(source_fd, 1024 * 1024): os.write(destination_fd, chunk)
+        finally: os.close(destination_fd)
+    finally: os.close(source_fd)
+
+
 def _resolve_task(value: str) -> Path:
     supplied = Path(value)
     candidate = supplied if supplied.is_absolute() or len(supplied.parts) > 1 else TASKS / supplied
@@ -195,10 +261,10 @@ def _resolve_task(value: str) -> Path:
     return resolved
 
 
-def _copy_public(source: Path, destination: Path) -> None:
+def _copy_public(source: Path, destination: Path, deadline: float | None = None) -> None:
     source = _safe_tree(source, "candidate/public workspace")
     destination.mkdir()
-    for path in _safe_files(source):
+    for path in _safe_files(source, deadline):
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
         source_fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -206,6 +272,8 @@ def _copy_public(source: Path, destination: Path) -> None:
             target_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             try:
                 while chunk := os.read(source_fd, 1024 * 1024):
+                    if deadline is not None and time.monotonic() >= deadline:
+                        raise UnsafeWorkspaceError("copy deadline exhausted")
                     os.write(target_fd, chunk)
             finally:
                 os.close(target_fd)
@@ -217,7 +285,7 @@ def _command_record(result: Any, run_dir: Path, redactions: tuple[str, ...] = ()
     def sanitize(value: str) -> str:
         for secret in redactions:
             if secret:
-                value = value.replace(secret, "<redacted>")
+                value = value.replace(secret, "[REDACTED]")
         return value
     def relative(value: str) -> str:
         try:
@@ -266,11 +334,13 @@ def _reject_secret_files(root: Path, secret_values: tuple[str, ...]) -> None:
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(path, flags)
         try:
-            contents = bytearray()
+            overlap = b""
+            width = max((len(needle) for needle in needles), default=1) - 1
             while chunk := os.read(fd, 1024 * 1024):
-                contents.extend(chunk)
-            if any(needle in contents for needle in needles):
-                raise ValueError(f"credential value found in workspace artifact: {path.relative_to(root)}")
+                window = overlap + chunk
+                if any(needle in window for needle in needles):
+                    raise UnsafeWorkspaceError(f"credential value found in workspace artifact: {path.relative_to(root)}")
+                overlap = window[-width:] if width else b""
         finally:
             os.close(fd)
 
@@ -323,8 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         "register_assertions": [], "termination": "running", "failure_category": None,
         "hashes": {}, "artifacts": [], "environment": {}, "phases": [],
     }
-    def persist() -> None:
-        write_json_atomic(run_dir / "run.json", manifest)
+    workspace: Path | None = None
     overall_deadline: float | None = None
     def bounded_timeout(cap: float) -> float:
         if overall_deadline is None:
@@ -339,6 +408,17 @@ def main(argv: list[str] | None = None) -> int:
         "LABWIRED_ACCESS_TOKEN", "LABWIRED_PROJECT", "LABWIRED_MODEL_URL", "LABWIRED_MODEL_KEY"))))
     tool_env = _tool_environment()
     tool_runner = partial(run_command, env=tool_env, redact_values=credential_values)
+    def sanitize(value: Any) -> Any:
+        if isinstance(value, str):
+            for secret in (*redactions, *credential_values):
+                value = value.replace(secret, "[REDACTED]")
+            return value
+        if isinstance(value, list): return [sanitize(item) for item in value]
+        if isinstance(value, tuple): return [sanitize(item) for item in value]
+        if isinstance(value, dict): return {key: sanitize(item) for key, item in value.items()}
+        return value
+    def persist() -> None:
+        write_json_atomic(run_dir / "run.json", sanitize(manifest))
     def record_phase(name: str, result: Any = None, **details: Any) -> None:
         phase = {"name": name, **details}
         if result is not None:
@@ -376,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
             config = replace(config, identity_timeout_seconds=fixture_timeout)
         source = _safe_tree(args.candidate, "candidate") if args.evaluate_only else _safe_tree(public, "public")
         workspace = run_dir / "workspace"
-        _copy_public(source, workspace)
+        _copy_public(source, workspace, overall_deadline)
         nonce = secrets.token_hex(16)
         nonce_header = workspace / "firmware/include/run_nonce.h"
         nonce_header.parent.mkdir(parents=True, exist_ok=True)
@@ -392,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
                 configured = manifest["budget_validity"][name]["configured"]
                 manifest["budget_validity"][name].update(observed=0, within_budget=0 <= configured)
         manifest["environment"] = {"jtag_serial_sha256": hashlib.sha256(args.jtag_serial.encode()).hexdigest(),
-                                   "uart_device": Path(args.uart_device).name}
+                                   "uart_device_sha256": hashlib.sha256(args.uart_device.encode()).hexdigest()}
         manifest["hashes"]["oracle_descriptor"] = sha256_file(oracle_path)
         manifest["hashes"]["source_initial"] = _tree_hash(workspace)
         record_phase("prepared")
@@ -439,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
                 return _finalize(run_dir, manifest, run_started_monotonic)
             record_phase("agent", agent)
             _reject_secret_files(workspace, credential_values)
+            _freeze_workspace(workspace, overall_deadline)
         else:
             manifest["model_status"] = "not_run"
         manifest["hashes"]["source_final"] = _tree_hash(workspace)
@@ -478,7 +559,8 @@ def main(argv: list[str] | None = None) -> int:
         artifact = firmware / config.flash_artifact
         if not artifact.is_file():
             raise RuntimeError("successful build produced no firmware artifact")
-        manifest["hashes"]["firmware"] = sha256_file(artifact)
+        manifest["hashes"]["firmware"] = _safe_hash(artifact)
+        _safe_copy_file(artifact, run_dir / "firmware.bin")
         persist()
 
         if args.identity_command_json:
@@ -577,38 +659,52 @@ def main(argv: list[str] | None = None) -> int:
             record_phase("register", registers.command_result, status=registers.status,
                          assertions=manifest["register_assertions"])
         return _finalize(run_dir, manifest, run_started_monotonic)
+    except UnsafeWorkspaceError as error:
+        if workspace is not None:
+            _quarantine_workspace(workspace)
+        manifest["infrastructure_status"] = "error"
+        manifest["termination"] = "invalid"
+        manifest["failure_category"] = "unsafe_workspace"
+        manifest["detail"] = sanitize(str(error))
+        persist()
+        return 2
     except UartWorkerFatal as error:
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "invalid"
         manifest["failure_category"] = "uart_cleanup"
-        manifest["detail"] = str(error)
+        manifest["detail"] = sanitize(str(error))
         persist()
         return 2
     except (KeyboardInterrupt, SystemExit) as error:
+        if args.agent_bin and workspace is not None:
+            _quarantine_workspace(workspace)
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "interrupted"
         manifest["failure_category"] = "interrupt"
-        manifest["detail"] = type(error).__name__
+        manifest["detail"] = sanitize(type(error).__name__)
         try:
             _finalize(run_dir, manifest, run_started_monotonic)
         except (OSError, ValueError):
             persist()
         return 2
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError, RuntimeError, BoardLockTimeout) as error:
+        if args.agent_bin and workspace is not None:
+            _quarantine_workspace(workspace)
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "invalid"
         manifest["failure_category"] = "infrastructure"
-        manifest["detail"] = str(error)
+        manifest["detail"] = sanitize(str(error))
         try:
             _finalize(run_dir, manifest, run_started_monotonic)
         except (OSError, ValueError) as final_error:
-            manifest["detail"] = f"{error}; evidence rejected: {final_error}"
+            manifest["detail"] = sanitize(f"{error}; evidence rejected: {final_error}")
             persist()
-        print(str(error), file=sys.stderr)
+        print(sanitize(str(error)), file=sys.stderr)
         return 2
 
 
 def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float) -> int:
+    _safe_remove_tree(run_dir / "workspace/firmware/.pio")
     credential_values = tuple(filter(None, (os.environ.get(name, "") for name in (
         "LABWIRED_ACCESS_TOKEN", "LABWIRED_PROJECT", "LABWIRED_MODEL_URL", "LABWIRED_MODEL_KEY"))))
     _reject_secret_files(run_dir, credential_values)

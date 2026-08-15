@@ -7,6 +7,7 @@ from pathlib import Path
 import pty
 import signal
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1079,6 +1080,10 @@ class HilOrchestrationTests(unittest.TestCase):
             manifest_text = (run_dir / "run.json").read_text()
             self.assertNotIn("EXTERNAL_SECRET_SENTINEL", manifest_text)
             self.assertNotIn("escape", json.loads(manifest_text).get("artifacts", []))
+            for path in run_dir.rglob("*"):
+                info = path.lstat()
+                self.assertFalse(stat.S_ISLNK(info.st_mode) or stat.S_ISFIFO(info.st_mode))
+                if stat.S_ISREG(info.st_mode): self.assertNotIn(b"EXTERNAL_SECRET_SENTINEL", path.read_bytes())
 
     def test_agent_credential_written_to_workspace_is_rejected_before_hash_or_build(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
@@ -1098,6 +1103,51 @@ pathlib.Path('credential.txt').write_text(os.environ['LABWIRED_ACCESS_TOKEN'])
             manifest_text = (run_dir / "run.json").read_text()
             self.assertNotIn("WORKSPACE_TOKEN_SENTINEL", manifest_text)
             self.assertNotIn("credential.txt", json.loads(manifest_text).get("artifacts", []))
+            self.assertFalse((run_dir / "workspace").exists())
+
+    def test_agent_oversize_sparse_file_is_bounded_and_workspace_quarantined(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); agent_dir = root / "agent"; agent_dir.mkdir()
+            agent = executable_fixture(agent_dir, """import pathlib,sys
+if '--version' in sys.argv: print('v'); raise SystemExit(0)
+with pathlib.Path('huge.bin').open('wb') as out: out.truncate(40 * 1024 * 1024)
+""")
+            tool_dir=root/'tool'; tool_dir.mkdir(); tool=executable_fixture(tool_dir,"print('v')\n")
+            run_dir=root/'run'; started=time.monotonic()
+            result=self._run_cli(task,'--run-dir',run_dir,'--agent-bin',agent,'--model','m','--jtag-serial','J',
+                '--uart-device','/dev/null','--openocd',tool,'--platformio',tool)
+            self.assertEqual(result.returncode,2); self.assertLess(time.monotonic()-started,3)
+            self.assertFalse((run_dir/'workspace').exists())
+            self.assertEqual(json.loads((run_dir/'run.json').read_text())["failure_category"],"unsafe_workspace")
+
+    def test_detached_agent_mutator_cannot_change_frozen_workspace(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); pid_path=root/'child.pid'; agent_dir=root/'agent'; agent_dir.mkdir()
+            child = "import os,pathlib,time; f=open('firmware/src/main.c','ab',buffering=0); pathlib.Path(%r).write_text(str(os.getpid()));\nwhile True: f.write(b'X'); time.sleep(.01)" % str(pid_path)
+            agent=executable_fixture(agent_dir, textwrap.dedent(f"""
+                import subprocess,sys,time
+                if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                subprocess.Popen([sys.executable,'-c',{child!r}], start_new_session=True)
+                import pathlib
+                while not pathlib.Path({str(pid_path)!r}).exists(): time.sleep(.01)
+            """))
+            tool_dir=root/'tool'; tool_dir.mkdir()
+            tool=executable_fixture(tool_dir,"import sys\nif '--version' in sys.argv: print('v'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
+            run_dir=root/'run'
+            try:
+                result=self._run_cli(task,'--run-dir',run_dir,'--agent-bin',agent,'--model','m','--jtag-serial','J',
+                    '--uart-device','/dev/null','--openocd',tool,'--platformio',tool)
+                self.assertEqual(result.returncode,0,result.stderr)
+                sys.path.insert(0,str(REPOSITORY_ROOT/'benchmarks/twin2silicon')); import run_hil
+                before=run_hil._tree_hash(run_dir/'workspace'); time.sleep(.2)
+                self.assertEqual(before,run_hil._tree_hash(run_dir/'workspace'))
+                self.assertEqual(before,json.loads((run_dir/'run.json').read_text())["hashes"]["source_final"])
+            finally:
+                if pid_path.exists():
+                    try: os.kill(int(pid_path.read_text()),signal.SIGKILL)
+                    except ProcessLookupError: pass
 
     def test_cli_physical_pass_uses_pty_and_records_ordered_evidence(self):
         task = self._short_task()
@@ -1182,6 +1232,24 @@ pathlib.Path('credential.txt').write_text(os.environ['LABWIRED_ACCESS_TOKEN'])
             manifest = json.loads((run_dir / "run.json").read_text())
             self.assertEqual((manifest["compile_status"], manifest["infrastructure_status"]), ("not_run", "error"))
             self.assertEqual([phase["name"] for phase in manifest["phases"]], ["prepared", "clean"])
+
+    def test_identity_launch_detail_redacts_serial_device_and_credentials(self):
+        task=REPOSITORY_ROOT/'benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001'
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); tool_dir=root/'tool'; tool_dir.mkdir()
+            tool=executable_fixture(tool_dir,"""import pathlib,sys
+if '--version' in sys.argv: print('v'); raise SystemExit(0)
+if '--target' not in sys.argv:
+ p=pathlib.Path(sys.argv[sys.argv.index('--project-dir')+1])/'.pio/build/esp32s3/firmware.bin'; p.parent.mkdir(parents=True); p.write_bytes(b'fw')
+""")
+            serial='RAW_SERIAL_SENTINEL'; device='/dev/RAW_DEVICE_SENTINEL'; credential='RAW_CREDENTIAL_SENTINEL'
+            env={**os.environ,'LABWIRED_ACCESS_TOKEN':credential}; run_dir=root/'run'
+            result=self._run_cli(task,'--run-dir',run_dir,'--evaluate-only','--candidate',task/'public',
+                '--jtag-serial',serial,'--uart-device',device,'--openocd',tool,'--platformio',tool,
+                '--identity-command-json',json.dumps([f'/missing/{serial}/{credential}']),env=env)
+            self.assertEqual(result.returncode,2)
+            combined=(run_dir/'run.json').read_text()+result.stderr
+            for value in (serial,device,credential): self.assertNotIn(value,combined)
 
     def test_overall_wall_deadline_bounds_cumulative_phases(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
