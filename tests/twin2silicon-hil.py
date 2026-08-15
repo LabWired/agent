@@ -52,6 +52,7 @@ from benchmarks.twin2silicon.runtime_adapters import (
 
 
 def executable_fixture(directory, body):
+    Path(directory).mkdir(parents=True, exist_ok=True)
     path = Path(directory) / "fixture.py"
     path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
     path.chmod(0o755)
@@ -1227,6 +1228,192 @@ class SimpleHilRunnerTests(unittest.TestCase):
             self.assertEqual(manifest["compile_status"], "fail")
             self.assertEqual(manifest["hardware_status"], "not_run")
             self.assertFalse(marker.exists())
+
+
+class RunAgentTests(unittest.TestCase):
+    task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+    script = REPOSITORY_ROOT / "benchmarks/twin2silicon/run_agent.py"
+
+    def _fake_runtime(self, directory, runtime, mode="success"):
+        workspace_code = {
+            "codex": "workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert args[args.index('-s') + 1] == 'workspace-write'\nassert os.environ['CODEX_HOME'] == str(Path(os.environ['EXPECTED_CONFIG']))",
+            "claude": "workspace = Path.cwd()\nassert args[:2] == ['--print', '--output-format']\nassert args[args.index('--output-format') + 1] == 'stream-json'\nassert args[args.index('--mcp-config') + 1] == str(Path(os.environ['EXPECTED_CONFIG']) / 'claude-mcp.json')\nassert '--strict-mcp-config' in args",
+            "opencode": "workspace = Path(args[args.index('--dir') + 1])\nassert args[:2] == ['run', '--format']\nassert args[args.index('--format') + 1] == 'json'\nassert os.environ['OPENCODE_CONFIG'] == str(Path(os.environ['EXPECTED_CONFIG']) / 'opencode.json')",
+        }[runtime]
+        output = {
+            "codex": "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 12, 'output_tokens': 3}}))",
+            "claude": "print(json.dumps({'type': 'result', 'usage': {'input_tokens': 12, 'output_tokens': 3}, 'total_cost_usd': 0.01}))",
+            "opencode": "print(json.dumps({'type': 'step_finish', 'part': {'tokens': {'input': 12, 'output': 3}, 'cost': 0.01}}))",
+        }[runtime]
+        body = textwrap.dedent(f"""
+            import json
+            import os
+            from pathlib import Path
+            import sys
+            import time
+
+            args = sys.argv[1:]
+            if args == ['--version']:
+                print('fake-{runtime} 1.0')
+                raise SystemExit(0)
+            assert '--model' not in args
+            assert Path(os.environ['EXPECTED_INSTRUCTIONS']).read_text(encoding='utf-8') in args[-1]
+            assert 'GPIO 2 is driven high' in args[-1]
+            assert 'hil-oracle.json' not in args[-1]
+            # workspace checks
+            source = workspace / 'firmware/src/main.c'
+            contents = source.read_text(encoding='utf-8')
+            assert 'GPIO_MODE_INPUT' in contents
+            assert 'GPIO_MODE_OUTPUT' not in contents
+            assert not (workspace / 'hidden').exists()
+            instruction = workspace / {'CLAUDE.md' if runtime == 'claude' else 'AGENTS.md'!r}
+            assert instruction.read_text(encoding='utf-8') == Path(os.environ['EXPECTED_INSTRUCTIONS']).read_text(encoding='utf-8')
+            if {mode!r} == 'timeout':
+                time.sleep(30)
+            source.write_text(contents.replace('GPIO_MODE_INPUT', 'GPIO_MODE_OUTPUT'), encoding='utf-8')
+            if {mode!r} == 'nonzero':
+                raise SystemExit(9)
+            if {mode!r} == 'malformed':
+                print('not json')
+            elif {mode!r} == 'missing':
+                pass
+            else:
+                {output}
+        """).replace("# workspace checks", workspace_code)
+        return executable_fixture(directory, body)
+
+    def _run_cli(self, runtime, executable, trial, timeout_seconds=2):
+        environment = os.environ.copy()
+        environment.update({
+            "EXPECTED_CONFIG": str((trial / "runtime-config").resolve()),
+            "EXPECTED_INSTRUCTIONS": str(
+                REPOSITORY_ROOT / "benchmarks/twin2silicon/shared-agent-instructions.md"
+            ),
+        })
+        return subprocess.run(
+            [
+                sys.executable, str(self.script), runtime,
+                "--task", str(self.task), "--output", str(trial),
+                "--executable", str(executable),
+                "--timeout-seconds", str(timeout_seconds),
+            ],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+
+    def _assert_trial_does_not_expose_hidden_oracle(self, trial):
+        hidden_name = "hil-oracle.json"
+        for path in trial.rglob("*"):
+            with self.subTest(path=path):
+                self.assertNotIn(hidden_name, str(path))
+                if path.is_file():
+                    self.assertNotIn(hidden_name, path.read_text(encoding="utf-8", errors="replace"))
+        self.assertFalse((trial / "candidate/hidden").exists())
+
+    def test_native_runtimes_create_completed_public_candidates(self):
+        for runtime in ("opencode", "codex", "claude"):
+            with self.subTest(runtime=runtime), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                executable = self._fake_runtime(root / runtime, runtime)
+                trial = root / "trial"
+
+                completed = self._run_cli(runtime, executable, trial)
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads((trial / "agent-result.json").read_text())
+                usage = json.loads((trial / "usage.json").read_text())
+                candidate_source = (trial / "candidate/firmware/src/main.c").read_text()
+                self.assertEqual(result["status"], "completed")
+                self.assertEqual(result["runtime"], runtime)
+                self.assertIsNone(result["model_override"])
+                self.assertEqual(result["returncode"], 0)
+                self.assertFalse(result["timed_out"])
+                self.assertGreaterEqual(result["elapsed_seconds"], 0)
+                self.assertEqual(result["executable_version"], f"fake-{runtime} 1.0")
+                self.assertIn("GPIO_MODE_OUTPUT", candidate_source)
+                self.assertTrue((trial / "agent.stdout.log").is_file())
+                self.assertTrue((trial / "agent.stderr.log").is_file())
+                self.assertTrue((trial / "runtime-config").is_dir())
+                self.assertEqual(usage["requests"], 1)
+                self.assertIsNone(usage["unavailable_reason"])
+                self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_nonzero_runtime_is_failed_but_retains_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = self._fake_runtime(root / "runtime", "codex", "nonzero")
+            trial = root / "trial"
+
+            completed = self._run_cli("codex", executable, trial)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["returncode"], 9)
+            self.assertFalse(result["timed_out"])
+            self.assertTrue((trial / "agent.stdout.log").is_file())
+            self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_timeout_runtime_is_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = self._fake_runtime(root / "runtime", "opencode", "timeout")
+            trial = root / "trial"
+
+            completed = self._run_cli("opencode", executable, trial, timeout_seconds=0.1)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "timeout")
+            self.assertTrue(result["timed_out"])
+            self.assertNotEqual(result["returncode"], 0)
+            self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_missing_executable_is_an_infrastructure_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trial = Path(directory) / "trial"
+
+            completed = self._run_cli("claude", Path(directory) / "missing", trial)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "infrastructure_error")
+            self.assertIsNone(result["returncode"])
+            self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_missing_or_malformed_usage_does_not_fail_a_completed_trial(self):
+        for mode in ("malformed", "missing"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                executable = self._fake_runtime(root / "runtime", "claude", mode)
+                trial = root / "trial"
+
+                completed = self._run_cli("claude", executable, trial)
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads((trial / "agent-result.json").read_text())
+                usage = json.loads((trial / "usage.json").read_text())
+                self.assertEqual(result["status"], "completed")
+                self.assertEqual(usage["unavailable_reason"], "runtime did not expose usage")
+                self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_existing_output_is_rejected_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trial = root / "trial"
+            trial.mkdir()
+            marker = trial / "keep"
+            marker.write_text("existing")
+
+            completed = self._run_cli("codex", root / "missing", trial)
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("output path already exists", completed.stderr)
+            self.assertEqual(marker.read_text(), "existing")
+            self.assertFalse((trial / "agent-result.json").exists())
 
 
 if __name__ == "__main__":
