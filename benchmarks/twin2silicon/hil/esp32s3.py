@@ -13,7 +13,6 @@ import termios
 import time
 import tty
 from typing import Callable, Literal, Mapping, Optional, Sequence
-import threading
 
 from .process import run_command
 from .results import CommandResult, PathLike
@@ -273,13 +272,11 @@ class UartResult:
     matched: bool
     bytes_captured: int
     timed_out: bool
-    termination_reason: Literal["matched", "timeout", "max_bytes", "cancelled"]
+    termination_reason: Literal["matched", "timeout", "max_bytes"]
 
 
 def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds: float,
-                       log: PathLike, *, max_bytes: int = 65536,
-                       cancel_event: Optional[threading.Event] = None,
-                       started_event: Optional[threading.Event] = None) -> UartResult:
+                       log: PathLike, *, max_bytes: int = 65536) -> UartResult:
     fd = os.open(device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     try:
         speeds = {9600: termios.B9600, 115200: termios.B115200}
@@ -293,23 +290,17 @@ def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds:
         attrs[4] = attrs[5] = speeds[baud]
         attrs[2] = (attrs[2] & ~(termios.CSIZE | termios.PARENB | termios.CSTOPB)) | termios.CS8 | termios.CLOCAL | termios.CREAD
         termios.tcsetattr(fd, termios.TCSANOW, attrs)
-        if started_event is not None:
-            started_event.set()
         deadline = time.monotonic() + timeout_seconds
         captured = bytearray()
         pending = bytearray()
         matched = False
         expected = f"LABWIRED_READY:{nonce}".encode()
         while not matched and len(captured) < max_bytes:
-            if cancel_event is not None and cancel_event.is_set():
-                break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            readable, _, _ = select.select([fd], [], [], min(remaining, 0.05) if cancel_event else remaining)
+            readable, _, _ = select.select([fd], [], [], remaining)
             if not readable:
-                if cancel_event is not None:
-                    continue
                 break
             try:
                 chunk = os.read(fd, min(4096, max_bytes - len(captured)))
@@ -329,11 +320,9 @@ def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds:
                     break
         Path(log).parent.mkdir(parents=True, exist_ok=True)
         Path(log).write_bytes(captured)
-        reason: Literal["matched", "timeout", "max_bytes", "cancelled"]
+        reason: Literal["matched", "timeout", "max_bytes"]
         if matched:
             reason = "matched"
-        elif cancel_event is not None and cancel_event.is_set():
-            reason = "cancelled"
         elif len(captured) >= max_bytes:
             reason = "max_bytes"
         else:
