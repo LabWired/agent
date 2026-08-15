@@ -41,6 +41,24 @@ for required in (
     "compile the exact repaired file content",
 ):
     assert required in recovery_prompt
+partial_prompt = prompts["partial-led-wifi"]
+for required in (
+    "upload the complete project with labwired_put_source",
+    "compile its returned source_tree_ref",
+    "target esp32-c3-supermini and the returned flash_image_refs",
+    "serial contains `Connecting to Wi-Fi` plus GPIO8 toggled",
+    'refresh context with exactly pack.board `esp32-c3-supermini` and pack.mcu `esp32c3`',
+    "do not include false context flags",
+):
+    assert required in partial_prompt
+unsupported_prompt = prompts["unsupported-custom-board"]
+for required in (
+    "nucleo-f401re only as a compiler surrogate",
+    "attempt labwired_verify with target custom-board",
+    "Physical confirmation is still required",
+    '"hardware_sensitive_facts":[{"fact":"PA5 is the surrogate board LED pin","source":"catalog:board:nucleo-f401re"}]',
+):
+    assert required in unsupported_prompt
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["partial-led-wifi"]
 for name in ("greenfield-esp32c3", "existing-stm32f103", "compile-recovery-esp32c3", "partial-led-wifi"):
     assert "GPIO oracle state must be toggled" in prompts[name]
