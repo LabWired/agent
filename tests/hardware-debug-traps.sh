@@ -66,6 +66,12 @@ grep -q TRACE "${TMPDIR:-/tmp}/hardware-release-debug-1.log"
 ! grep -q TRACE "${TMPDIR:-/tmp}/hardware-cli-debug-0.log"
 ! grep -q TRACE "${TMPDIR:-/tmp}/hardware-release-debug-0.log"
 
+# Unexpected plan failures must retain the runner's machine-readable reason;
+# otherwise the full matrix reports only an opaque command-substitution rc.
+grep -q 'plan=.*2>&1' "$ROOT/tests/hardware-cli.sh"
+grep -q 'plan_rc=\$?' "$ROOT/tests/hardware-cli.sh"
+grep -q 'BLOCKED hardware-cli: compiled-only plan failed:' "$ROOT/tests/hardware-cli.sh"
+
 # Loaded runners must not turn a briefly delayed local fixture into a silent
 # contract failure. Three seconds exceeds the historical one/two-second polls.
 LABWIRED_TEST_FIXTURE_DELAY=3 bash "$ROOT/tests/hardware-cli.sh" \

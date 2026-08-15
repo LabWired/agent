@@ -62,8 +62,9 @@ behavior:
   requirement.
 - `hardware_observed`: a trusted physical provider produced independent,
   identity-bound evidence after exact flash.
-- `untrusted_observation`: an imported, pre-existing logic CSV was parsed, but
-  no provider-owned capture operation established physical provenance. It can
+- `untrusted_observation` is reserved and non-operational for release claims in
+  schema v1: an imported, pre-existing logic CSV may be parsed, but no
+  provider-owned capture operation established physical provenance. It can
   never satisfy `hardware_observed`.
 - `blocked`: a required capability, identity, confirmation, secret, artifact,
   instrument, or piece of evidence was absent.

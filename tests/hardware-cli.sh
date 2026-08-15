@@ -64,7 +64,15 @@ old_output="$(PATH="$TMP/old-node:/usr/bin:/bin" LABWIRED_OLD_NODE_RAN="$TMP/old
 set -e
 [[ "$old_code" -eq 2 && "$old_output" == *'Node.js 18+'* && ! -e "$TMP/old-ran" ]]
 
-plan="$("${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/evidence")"
+set +e
+plan="$("${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/evidence" 2>&1)"
+plan_rc=$?
+set -e
+if [[ "$plan_rc" -ne 0 ]]; then
+  plan_detail="${plan//$'\n'/ }"
+  printf 'BLOCKED hardware-cli: compiled-only plan failed: %.2048s\n' "$plan_detail" >&2
+  exit "$plan_rc"
+fi
 python3 - "$plan" <<'PY'
 import json,re,sys
 doc=json.loads(sys.argv[1])
