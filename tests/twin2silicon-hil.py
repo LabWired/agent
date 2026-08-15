@@ -90,7 +90,6 @@ class RuntimeAdapterTests(unittest.TestCase):
             commands["codex"],
             [
                 "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check",
-                "-c", 'mcp_servers={labwired={command="npx",args=["-y","@labwired/mcp"]}}',
                 "-s", "workspace-write", "-C", str(contexts["codex"].workspace),
                 contexts["codex"].prompt,
             ],
@@ -1235,10 +1234,19 @@ class RunAgentTests(unittest.TestCase):
     task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
     script = REPOSITORY_ROOT / "benchmarks/twin2silicon/run_agent.py"
 
-    def _fake_runtime(self, directory, runtime, mode="success", repair_iterations=6):
-        codex_override = 'mcp_servers={labwired={command="npx",args=["-y","@labwired/mcp"]}}'
+    def _fake_runtime(self, directory, runtime, mode="success", repair_iterations=6, expects_auth=True):
+        codex_auth_assertion = (
+            "assert (codex_home / 'auth.json').read_text(encoding='utf-8') == os.environ['EXPECTED_AUTH']"
+            if expects_auth
+            else "assert not (codex_home / 'auth.json').exists()"
+        )
+        codex_auth_mode_assertion = (
+            "assert (codex_home / 'auth.json').stat().st_mode & 0o777 == 0o600"
+            if expects_auth
+            else ""
+        )
         workspace_code = {
-            "codex": f"workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert args[args.index('-c') + 1] == {codex_override!r}\nassert args[args.index('-s') + 1] == 'workspace-write'\nassert os.environ['CODEX_HOME'] == os.environ['EXPECTED_CODEX_HOME']",
+            "codex": f"workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert '-c' not in args\ncodex_home = Path(os.environ['CODEX_HOME'])\nassert codex_home != Path(os.environ['SOURCE_CODEX_HOME'])\nassert codex_home != Path(os.environ['EXPECTED_TRIAL'])\nassert codex_home != Path(os.environ['EXPECTED_CONFIG'])\nassert (codex_home / 'config.toml').read_text(encoding='utf-8') == '[mcp_servers.labwired]\\ncommand = \"npx\"\\nargs = [\"-y\", \"@labwired/mcp\"]\\n'\n{codex_auth_assertion}\n{codex_auth_mode_assertion}\n(workspace / 'effective-codex-home').write_text(str(codex_home), encoding='utf-8')",
             "claude": "workspace = Path.cwd()\nassert args[:3] == ['--print', '--verbose', '--output-format']\nassert args[args.index('--output-format') + 1] == 'stream-json'\nassert args[args.index('--mcp-config') + 1] == str(Path(os.environ['EXPECTED_CONFIG']) / 'claude-mcp.json')\nassert '--strict-mcp-config' in args",
             "opencode": "workspace = Path(args[args.index('--dir') + 1])\nassert args[:2] == ['run', '--format']\nassert args[args.index('--format') + 1] == 'json'\nassert os.environ['OPENCODE_CONFIG'] == str(Path(os.environ['EXPECTED_CONFIG']) / 'opencode.json')",
         }[runtime]
@@ -1285,12 +1293,21 @@ class RunAgentTests(unittest.TestCase):
         """).replace("# workspace checks", workspace_code)
         return executable_fixture(directory, body)
 
-    def _run_cli(self, runtime, executable, trial, timeout_seconds=2, task=None):
+    def _run_cli(self, runtime, executable, trial, timeout_seconds=2, task=None, source_auth=True):
+        source_codex_home = (trial.parent / "source-codex-home").resolve()
+        source_codex_home.mkdir(parents=True)
+        auth_contents = "sentinel-codex-auth-credential"
+        auth_path = source_codex_home / "auth.json"
+        if source_auth:
+            auth_path.write_text(auth_contents, encoding="utf-8")
+            auth_path.chmod(0o600)
         environment = os.environ.copy()
         environment.update({
             "EXPECTED_CONFIG": str((trial / "runtime-config").resolve()),
-            "CODEX_HOME": str((trial.parent / "native-codex-home").resolve()),
-            "EXPECTED_CODEX_HOME": str((trial.parent / "native-codex-home").resolve()),
+            "CODEX_HOME": str(source_codex_home),
+            "SOURCE_CODEX_HOME": str(source_codex_home),
+            "EXPECTED_TRIAL": str(trial.resolve()),
+            "EXPECTED_AUTH": auth_contents,
             "EXPECTED_INSTRUCTIONS": str(
                 REPOSITORY_ROOT / "benchmarks/twin2silicon/shared-agent-instructions.md"
             ),
@@ -1346,6 +1363,31 @@ class RunAgentTests(unittest.TestCase):
                 self.assertEqual(usage["requests"], 1)
                 self.assertIsNone(usage["unavailable_reason"])
                 self._assert_trial_does_not_expose_hidden_oracle(trial)
+                if runtime == "codex":
+                    isolated_home = Path((trial / "candidate/effective-codex-home").read_text())
+                    self.assertFalse(isolated_home.exists())
+                    for path in trial.rglob("*"):
+                        if path.is_file():
+                            self.assertNotIn(
+                                "sentinel-codex-auth-credential",
+                                path.read_text(encoding="utf-8", errors="replace"),
+                            )
+
+    def test_codex_without_source_auth_keeps_an_isolated_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = self._fake_runtime(
+                root / "runtime", "codex", expects_auth=False,
+            )
+            trial = root / "trial"
+
+            completed = self._run_cli("codex", executable, trial, source_auth=False)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "completed")
+            isolated_home = Path((trial / "candidate/effective-codex-home").read_text())
+            self.assertFalse(isolated_home.exists())
 
     def test_nonzero_runtime_is_failed_but_retains_evidence(self):
         with tempfile.TemporaryDirectory() as directory:

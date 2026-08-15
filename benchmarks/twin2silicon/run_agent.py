@@ -14,6 +14,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Iterator
 
@@ -111,8 +112,11 @@ def _prepare_runtime_config(runtime: str, config_dir: Path) -> None:
 
 @contextmanager
 def _runtime_environment(runtime: str, config_dir: Path) -> Iterator[None]:
+    if runtime == "codex":
+        with _isolated_codex_home():
+            yield
+        return
     values = {
-        "codex": {},
         "opencode": {"OPENCODE_CONFIG": str(config_dir / "opencode.json")},
         "claude": {},
     }[runtime]
@@ -126,6 +130,34 @@ def _runtime_environment(runtime: str, config_dir: Path) -> Iterator[None]:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+@contextmanager
+def _isolated_codex_home() -> Iterator[None]:
+    configured_home = os.environ.get("CODEX_HOME")
+    source_home = (
+        Path(configured_home).expanduser()
+        if configured_home
+        else Path.home() / ".codex"
+    )
+    with tempfile.TemporaryDirectory(prefix="twin2silicon-codex-") as directory:
+        isolated_home = Path(directory)
+        config_path = write_codex_mcp_config(isolated_home)
+        config_path.chmod(0o600)
+        source_auth = source_home / "auth.json"
+        if source_auth.is_file():
+            destination_auth = isolated_home / "auth.json"
+            shutil.copyfile(source_auth, destination_auth)
+            destination_auth.chmod(0o600)
+        previous = os.environ.get("CODEX_HOME")
+        os.environ["CODEX_HOME"] = str(isolated_home)
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("CODEX_HOME", None)
+            else:
+                os.environ["CODEX_HOME"] = previous
 
 
 def _version(executable: str, cwd: Path, timeout_seconds: float) -> str | None:
