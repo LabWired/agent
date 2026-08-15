@@ -74,7 +74,7 @@ public static class FakeNode {
  & $csc /nologo /target:exe "/out:$fakeNode" $fakeNodeSourcePath
  if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $fakeNode -PathType Leaf)){throw 'fake Node fixture compilation failed'}
  $oldPath=$env:PATH;$env:PATH=$nodeDir+';'+$oldPath;$env:LABWIRED_FAKE_NODE_ARGS=Join-Path $temp 'node-args.txt';$env:LABWIRED_FAKE_NODE_EXIT='7'
- $r=Run @('hardware','run','--profile','C:\profile one.json','--out','C:\evidence one','--confirm',('a'*64));if($r.Code -ne 7 -or $r.Out -notmatch '"fake":true'){throw 'native hardware dispatcher did not preserve output/exit'}
+ $r=Run @('hardware','run','--profile','C:\profile one.json','--out','C:\evidence one','--confirm',('a'*64));if($r.Code -ne 7 -or $r.Out -notmatch '"fake":true'){throw ('native hardware dispatcher did not preserve output/exit: code='+$r.Code+' output='+$r.Out)}
  $nodeArgs=Get-Content $env:LABWIRED_FAKE_NODE_ARGS;if($nodeArgs.Count -ne 8 -or $nodeArgs[1] -cne 'run' -or $nodeArgs[3] -cne 'C:\profile one.json' -or $nodeArgs[5] -cne 'C:\evidence one'){throw 'native hardware dispatcher changed argv'}
  Remove-Item $env:LABWIRED_FAKE_NODE_ARGS -Force;$env:LABWIRED_OLD_NODE='1';$r=Run @('hardware','plan','--profile','x','--out','y');if($r.Code -ne 2 -or $r.Out -notmatch 'Node.js 18\+'){throw 'native hardware dispatcher accepted old Node'};if(Test-Path $env:LABWIRED_FAKE_NODE_ARGS){throw 'old Node executed hardware runner'}
  $env:PATH=$oldPath;Remove-Item Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue

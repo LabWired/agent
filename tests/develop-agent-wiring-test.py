@@ -18,5 +18,6 @@ assert "agent_invoked=false" in mechanics
 assert "mechanics-only" in mechanics
 prompts = json.loads((root / "tests" / "fixtures" / "develop-agent" / "prompts.json").read_text())
 assert len(prompts) == 5
-assert all("hardware_sensitive_facts" in prompt and "returned citation" in prompt for prompt in prompts.values())
+assert all("hardware_sensitive_facts" in prompt and "citation token returned" in prompt for prompt in prompts.values())
+assert all("Do not delegate" in prompt and "this session" in prompt for prompt in prompts.values())
 print("ok   develop-agent wiring")
