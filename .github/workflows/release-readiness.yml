@@ -36,6 +36,24 @@ on:
         type: string
 
 jobs:
+  grounded-agent-certification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install pinned agent runtime
+        run: npm install --global opencode-ai@1.18.7
+      - name: Certify grounded hosted-agent loop
+        env:
+          LABWIRED_ACCESS_TOKEN: ${{ secrets.LABWIRED_RELEASE_ACCESS_TOKEN }}
+          LABWIRED_PROJECT: ${{ secrets.LABWIRED_RELEASE_PROJECT }}
+          LABWIRED_DEVELOP_KNOWLEDGE_READY: ${{ secrets.LABWIRED_RELEASE_KNOWLEDGE_READY }}
+          LABWIRED_DEVELOP_TWIN_READY: ${{ secrets.LABWIRED_RELEASE_TWIN_READY }}
+          LABWIRED_DEVELOP_EVIDENCE_DIR: ${{ runner.temp }}/labwired-grounded-agent-certification
+        run: npm run test:develop:release
+
   hosted-release-ubuntu:
     runs-on: ubuntu-latest
     steps:

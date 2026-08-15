@@ -1,0 +1,5 @@
+{"type":"tool_use","part":{"id":"e1","tool":"bash","state":{"status":"completed","input":{"command":"echo labwired_context project:fake"},"output":"project:fake"}}}
+{"type":"tool_use","part":{"id":"e2","tool":"bash","state":{"status":"completed","input":{"command":"echo datasheet https://fake.invalid/gpio"},"output":"https://fake.invalid/gpio"}}}
+{"type":"tool_use","part":{"id":"e3","tool":"bash","state":{"status":"completed","input":{"command":"echo pio run firmware.elf"},"output":"firmware.elf"}}}
+{"type":"tool_use","part":{"id":"e4","tool":"bash","state":{"status":"completed","input":{"command":"echo labwired_verify model_verified"},"output":"model_verified"}}}
+{"type":"text","part":{"id":"e5","text":"{\"claim\":\"model_verified\",\"hardware_sensitive_facts\":[{\"fact\":\"GPIO8\",\"source\":\"https://fake.invalid/gpio\"}]}"}}

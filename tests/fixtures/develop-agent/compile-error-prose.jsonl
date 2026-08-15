@@ -1,0 +1,5 @@
+{"type":"tool_use","part":{"id":"e1","tool":"labwired_context","state":{"status":"completed","output":"{\"ok\":true,\"project\":\"fixture\"}"}}}
+{"type":"tool_use","part":{"id":"e2","tool":"labwired_datasheet","state":{"status":"completed","output":"{\"ok\":true,\"citation\":\"doc:part\"}"}}}
+{"type":"tool_use","part":{"id":"e3","tool":"labwired_compile","state":{"status":"completed","output":"ERROR failed to produce firmware.elf"}}}
+{"type":"tool_use","part":{"id":"e4","tool":"labwired_verify","state":{"status":"completed","output":"{\"ok\":true,\"status\":\"model_verified\",\"evidence\":{\"type\":\"verify\",\"id\":\"v1\"}}"}}}
+{"type":"text","part":{"id":"e5","text":"{\"claim\":\"model_verified\",\"hardware_sensitive_facts\":[{\"fact\":\"GPIO8\",\"source\":\"doc:part\"}]}"}}

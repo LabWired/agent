@@ -13,7 +13,7 @@
 #
 # If hosted mode does not light up under that env, the desktop app silently runs
 # the LOCAL profile: no LabWired Agent persona, no skill permission allowlist, no
-# labwired-fast, and opencode.hosted.json never applied. The app still "works",
+# the hosted model, and opencode.hosted.json never applied. The app still "works",
 # which is why this went unnoticed — hence a test rather than a doc note.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -121,7 +121,7 @@ import json, os, sys
 cfg = json.load(open(os.environ["CONFIG"]))
 provider = cfg.get("provider", {}).get("labwired", {})
 problems = []
-if sorted(provider.get("models", {})) != ["labwired-default", "labwired-fast"]:
+if sorted(provider.get("models", {})) != ["labwired-default"]:
     problems.append(f"models={sorted(provider.get('models', {}))}")
 if cfg.get("default_agent") != "build":
     problems.append(f"default_agent={cfg.get('default_agent')}")
@@ -142,6 +142,15 @@ PY
 else
 	bad "the real CLI failed to start under desktop env"
 fi
+
+# VS Code's in-panel hosted path must use the same versioned disclosure helper;
+# local/BYOK traffic must not show a hosted-storage claim.
+grep -q 'hostedDisclosureMessage' "$ROOT/extensions/labwired-vscode/src/agent/session.ts" \
+	&& ok "VS Code agent invokes hosted disclosure" \
+	|| bad "VS Code agent missing hosted disclosure"
+grep -q 'isHostedLabWiredEnv' "$ROOT/extensions/labwired-vscode/src/agent/session.ts" \
+	&& ok "VS Code disclosure is hosted-only" \
+	|| bad "VS Code disclosure is not hosted-gated"
 
 if [[ "$fail" -ne 0 ]]; then
 	echo "desktop-session: FAILED"

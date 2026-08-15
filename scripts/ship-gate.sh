@@ -339,5 +339,34 @@ else
   bad "knowledge MCP skipped — not signed in (golden path requires login)"
 fi
 
+# 13 grounded hosted-agent certification. A normal local gate records an honest
+# not-run unless both hosted credentials and explicit knowledge/twin provisioning
+# are present. Release intent is strict: the certifier itself identifies every
+# missing prerequisite and returns non-zero; there is no SKIP-to-green path.
+hosted_release_creds=0
+develop_prereqs=0
+if [[ -n "${LABWIRED_ACCESS_TOKEN:-}" && -n "${LABWIRED_PROJECT:-}" ]]; then
+  hosted_release_creds=1
+fi
+if [[ "${LABWIRED_DEVELOP_KNOWLEDGE_READY:-0}" == "1" \
+   && "${LABWIRED_DEVELOP_TWIN_READY:-0}" == "1" ]]; then
+  develop_prereqs=1
+fi
+if [[ "${LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE:-0}" == "1" \
+   || ( "$hosted_release_creds" -eq 1 && "$develop_prereqs" -eq 1 ) ]]; then
+  if run_stage "develop-agent" "$OUT/develop-agent.txt" \
+    bash "$ROOT/tests/develop-agent-e2e.sh"; then
+    pass "grounded hosted-agent certification"
+  else
+    if [[ "$stage_timed_out" -eq 0 ]]; then
+      bad "grounded hosted-agent certification"
+    fi
+    show_diagnostics 30 "$OUT/develop-agent.txt"
+  fi
+else
+  echo "grounded hosted-agent certification NOT RUN — local gate lacks hosted-release credentials and/or explicitly provisioned knowledge+twin prerequisites" \
+    | tee "$OUT/develop-agent.txt"
+fi
+
 finalize
 exit $?

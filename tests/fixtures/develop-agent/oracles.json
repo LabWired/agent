@@ -1,0 +1,7 @@
+{
+  "greenfield-esp32c3": {"allowed_claims": ["model_verified"], "requires_compile_recovery": false},
+  "existing-stm32f103": {"allowed_claims": ["model_verified"], "requires_compile_recovery": false},
+  "compile-recovery-esp32c3": {"allowed_claims": ["model_verified"], "requires_compile_recovery": true},
+  "partial-led-wifi": {"allowed_claims": ["partially_verified", "compiled_only"], "requires_compile_recovery": false},
+  "unsupported-custom-board": {"allowed_claims": ["compiled_only"], "requires_compile_recovery": false}
+}
