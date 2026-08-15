@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HOSTED_DISCLOSURE_VERSION = exports.HOSTED_DISCLOSURE = void 0;
 exports.isHostedLabWiredEnv = isHostedLabWiredEnv;
+exports.ensurePrivateOwnedDirectory = ensurePrivateOwnedDirectory;
 exports.hostedDisclosureMessage = hostedDisclosureMessage;
 exports.loadCloudSession = loadCloudSession;
 exports.cloudSessionEnv = cloudSessionEnv;
@@ -86,6 +87,19 @@ function privateOwnedDirectory(directory) {
         return undefined;
     }
 }
+function ensurePrivateOwnedDirectory(directory, recursive = false, mkdir = fs.mkdirSync) {
+    const existing = privateOwnedDirectory(directory);
+    if (existing)
+        return existing;
+    try {
+        mkdir(directory, { recursive, mode: 0o700 });
+    }
+    catch (err) {
+        if (err.code !== "EEXIST")
+            return undefined;
+    }
+    return privateOwnedDirectory(directory);
+}
 function sameDirectory(directory, expected) {
     const current = privateOwnedDirectory(directory);
     return !!current && current.dev === expected.dev && current.ino === expected.ino;
@@ -102,22 +116,9 @@ function hostedDisclosureMessage(env = process.env, version) {
     let temp;
     let stateIdentity;
     try {
-        if (fs.existsSync(configDir)) {
-            if (!privateOwnedDirectory(configDir))
-                return exports.HOSTED_DISCLOSURE;
-        }
-        else {
-            fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-            if (!privateOwnedDirectory(configDir))
-                return exports.HOSTED_DISCLOSURE;
-        }
-        if (fs.existsSync(dir)) {
-            stateIdentity = privateOwnedDirectory(dir);
-        }
-        else {
-            fs.mkdirSync(dir, { mode: 0o700 });
-            stateIdentity = privateOwnedDirectory(dir);
-        }
+        if (!ensurePrivateOwnedDirectory(configDir, true))
+            return exports.HOSTED_DISCLOSURE;
+        stateIdentity = ensurePrivateOwnedDirectory(dir);
         if (!stateIdentity)
             return exports.HOSTED_DISCLOSURE;
         if (trustedMarker(ack, safeVersion))

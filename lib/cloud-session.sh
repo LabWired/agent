@@ -81,27 +81,28 @@ def trusted_at(directory_fd, name):
     except OSError:
         return False
 
+def ensure_private_directory(path, parents=False):
+    if not os.path.lexists(path):
+        try:
+            if parents:
+                os.makedirs(path, mode=0o700)
+            else:
+                os.mkdir(path, 0o700)
+        except FileExistsError:
+            pass
+    st = os.lstat(path)
+    if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
+        raise OSError("unsafe directory")
+    if uid is not None and st.st_uid != uid:
+        raise OSError("unowned directory")
+    os.chmod(path, 0o700)
+    return os.lstat(path)
+
 config = os.path.dirname(directory)
 directory_fd = None
 try:
-    if os.path.lexists(config):
-        st = os.lstat(config)
-        if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
-            raise OSError("unsafe config directory")
-        if uid is not None and st.st_uid != uid:
-            raise OSError("unowned config directory")
-        os.chmod(config, 0o700)
-    else:
-        os.makedirs(config, mode=0o700)
-    if os.path.lexists(directory):
-        st = os.lstat(directory)
-        if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
-            raise OSError("unsafe state directory")
-        if uid is not None and st.st_uid != uid:
-            raise OSError("unowned state directory")
-        os.chmod(directory, 0o700)
-    else:
-        os.mkdir(directory, 0o700)
+    ensure_private_directory(config, parents=True)
+    ensure_private_directory(directory)
 
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     directory_fd = os.open(directory, directory_flags)

@@ -48,6 +48,21 @@ function privateOwnedDirectory(directory: string): fs.Stats | undefined {
   }
 }
 
+export function ensurePrivateOwnedDirectory(
+  directory: string,
+  recursive = false,
+  mkdir: typeof fs.mkdirSync = fs.mkdirSync
+): fs.Stats | undefined {
+  const existing = privateOwnedDirectory(directory);
+  if (existing) return existing;
+  try {
+    mkdir(directory, { recursive, mode: 0o700 });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+  }
+  return privateOwnedDirectory(directory);
+}
+
 function sameDirectory(directory: string, expected: fs.Stats): boolean {
   const current = privateOwnedDirectory(directory);
   return !!current && current.dev === expected.dev && current.ino === expected.ino;
@@ -69,18 +84,8 @@ export function hostedDisclosureMessage(
   let temp: string | undefined;
   let stateIdentity: fs.Stats | undefined;
   try {
-    if (fs.existsSync(configDir)) {
-      if (!privateOwnedDirectory(configDir)) return HOSTED_DISCLOSURE;
-    } else {
-      fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-      if (!privateOwnedDirectory(configDir)) return HOSTED_DISCLOSURE;
-    }
-    if (fs.existsSync(dir)) {
-      stateIdentity = privateOwnedDirectory(dir);
-    } else {
-      fs.mkdirSync(dir, { mode: 0o700 });
-      stateIdentity = privateOwnedDirectory(dir);
-    }
+    if (!ensurePrivateOwnedDirectory(configDir, true)) return HOSTED_DISCLOSURE;
+    stateIdentity = ensurePrivateOwnedDirectory(dir);
     if (!stateIdentity) return HOSTED_DISCLOSURE;
     if (trustedMarker(ack, safeVersion)) return undefined;
     temp = path.join(dir, `.hosted-disclosure-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);

@@ -6,6 +6,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import {
   HOSTED_DISCLOSURE,
+  ensurePrivateOwnedDirectory,
   hostedDisclosureMessage,
   isHostedLabWiredEnv,
 } from "../../cli/cloudSession";
@@ -127,6 +128,22 @@ suite("hosted conversation disclosure", () => {
       )
     );
     assert.strictEqual(results.filter(({ stdout }) => stdout === HOSTED_DISCLOSURE).length, 1);
+  });
+
+  test("continues when another launch wins the state-directory mkdir race", () => {
+    const config = path.join(root, "mkdir-race-config");
+    fs.mkdirSync(config, { mode: 0o700 });
+    const state = path.join(config, "state");
+    const identity = ensurePrivateOwnedDirectory(state, false, (target, options) => {
+      fs.mkdirSync(target, options);
+      const error = new Error("simulated concurrent mkdir") as NodeJS.ErrnoException;
+      error.code = "EEXIST";
+      throw error;
+    });
+    assert.ok(identity?.isDirectory());
+    const env = { LABWIRED_AGENT_CONFIG_DIR: config } as NodeJS.ProcessEnv;
+    assert.strictEqual(hostedDisclosureMessage(env, "mkdir-race"), HOSTED_DISCLOSURE);
+    assert.strictEqual(hostedDisclosureMessage(env, "mkdir-race"), undefined);
   });
 
   test("shows honestly when acknowledgement cannot be persisted", () => {
