@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop';$temp=Join-Path ([IO.Path]::GetTempPath()) ('labwi
 Copy-Item (Join-Path $Root 'bin\labwired-agent.ps1') (Join-Path $agent 'bin\labwired-agent.ps1');$log=Join-Path $temp 'args.json';$env:LABWIRED_HOME=$temp;$env:LABWIRED_TEST_HW_LOG=$log;$fakeProbe=Join-Path $temp 'probe-rs.exe';Set-Content $fakeProbe '' -Encoding ASCII;$env:LABWIRED_PROBE_RS=$fakeProbe
 Set-Content (Join-Path $agent 'scripts\hardware-runner.mjs') '// fake runner path' -Encoding ASCII
 $engine=(Get-Process -Id $PID).Path
-function Run-Real([string]$helper,[string[]]$argv){$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;return @{Code=$LASTEXITCODE;Out=($out-join "`n")}}
+function Run-Real([string]$helper,[string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n")}}
 $workspace=Join-Path $temp 'real-work';New-Item -ItemType Directory -Path $workspace|Out-Null;Set-Content (Join-Path $workspace 'platformio.ini') '[env:release]' -Encoding ASCII
 $artifact=Join-Path $temp 'firmware.bin';[IO.File]::WriteAllBytes($artifact,[Text.Encoding]::ASCII.GetBytes('exact-bin'));$sha=(Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
 $pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog
@@ -52,7 +52,7 @@ try{
  $r=Run @('probe','rtt-capture','--chip','chip one','--probe','probe two','--elf','C:\firm ware.elf','--marker','ready','--timeout','4');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'probe two')){throw 'RTT route failed'}
  $r=Run @('probe','flash','C:\firm ware.bin','--provider','platformio','--chip','chip one','--probe','serial two','--port','COM 7','--expected-sha256',('a'*64),'--environment','release env','--workspace','C:\work space');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'serial two') -or ($r.Args -notmatch 'COM 7')){throw 'flash route failed'}
  $nodeDir=Join-Path $temp 'fake-node';New-Item -ItemType Directory -Path $nodeDir|Out-Null;$fakeNode=Join-Path $nodeDir 'node.exe'
- Add-Type -TypeDefinition @'
+ $fakeNodeSource=@'
 using System;
 using System.IO;
 public static class FakeNode {
@@ -64,7 +64,13 @@ public static class FakeNode {
   Environment.ExitCode=code;
  }
 }
-'@ -OutputAssembly $fakeNode -OutputType ConsoleApplication
+'@
+ $fakeNodeSourcePath=Join-Path $nodeDir 'fake-node.cs';Set-Content $fakeNodeSourcePath $fakeNodeSource -Encoding ASCII
+ $cscCandidates=@((Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),(Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'))
+ $csc=$cscCandidates|Where-Object{Test-Path -LiteralPath $_ -PathType Leaf}|Select-Object -First 1
+ if(-not $csc){throw 'C# compiler fixture dependency unavailable'}
+ & $csc /nologo /target:exe "/out:$fakeNode" $fakeNodeSourcePath
+ if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $fakeNode -PathType Leaf)){throw 'fake Node fixture compilation failed'}
  $oldPath=$env:PATH;$env:PATH=$nodeDir+';'+$oldPath;$env:LABWIRED_FAKE_NODE_ARGS=Join-Path $temp 'node-args.txt';$env:LABWIRED_FAKE_NODE_EXIT='7'
  $r=Run @('hardware','run','--profile','C:\profile one.json','--out','C:\evidence one','--confirm',('a'*64));if($r.Code -ne 7 -or $r.Out -notmatch '"fake":true'){throw 'native hardware dispatcher did not preserve output/exit'}
  $nodeArgs=Get-Content $env:LABWIRED_FAKE_NODE_ARGS;if($nodeArgs.Count -ne 8 -or $nodeArgs[1] -cne 'run' -or $nodeArgs[3] -cne 'C:\profile one.json' -or $nodeArgs[5] -cne 'C:\evidence one'){throw 'native hardware dispatcher changed argv'}
