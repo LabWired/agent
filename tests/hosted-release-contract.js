@@ -63,6 +63,15 @@ if (!fs.existsSync(path.join(root, workflowPath))) {
   }
 
   const workflowJobs = jobs(workflow);
+  const grounded = workflowJobs.get('grounded-agent-certification') || '';
+  requireText(grounded, 'runs-on: ubuntu-latest', 'grounded-agent-certification');
+  requireText(grounded, 'npm run test:develop:release', 'grounded-agent-certification');
+  requireText(grounded, 'secrets.LABWIRED_RELEASE_ACCESS_TOKEN', 'grounded-agent-certification');
+  requireText(grounded, 'secrets.LABWIRED_RELEASE_PROJECT', 'grounded-agent-certification');
+  requireText(grounded, 'secrets.LABWIRED_RELEASE_KNOWLEDGE_READY', 'grounded-agent-certification');
+  requireText(grounded, 'secrets.LABWIRED_RELEASE_TWIN_READY', 'grounded-agent-certification');
+  forbidText(grounded, 'continue-on-error', 'grounded-agent-certification');
+  forbidText(grounded, 'if:', 'grounded-agent-certification mandatory release path');
   for (const [key, runner, archiveUrl, archiveSha, upgradeCommand, artifact, artifactRoot] of [
     [
       'hosted-release-ubuntu',

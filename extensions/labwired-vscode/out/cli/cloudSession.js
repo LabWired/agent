@@ -33,6 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.HOSTED_DISCLOSURE_VERSION = exports.HOSTED_DISCLOSURE = void 0;
+exports.isHostedLabWiredEnv = isHostedLabWiredEnv;
+exports.ensurePrivateOwnedDirectory = ensurePrivateOwnedDirectory;
+exports.hostedDisclosureMessage = hostedDisclosureMessage;
 exports.loadCloudSession = loadCloudSession;
 exports.cloudSessionEnv = cloudSessionEnv;
 /**
@@ -43,6 +47,108 @@ const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
+const hostedModel_1 = require("./hostedModel");
+exports.HOSTED_DISCLOSURE = "Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.";
+exports.HOSTED_DISCLOSURE_VERSION = "1";
+function isHostedLabWiredEnv(env) {
+    return (0, hostedModel_1.isTrustedHostedModelUrl)(env.LABWIRED_MODEL_URL);
+}
+function disclosureVersion(env, requested) {
+    const value = requested || env.LABWIRED_HOSTED_DISCLOSURE_VERSION || exports.HOSTED_DISCLOSURE_VERSION;
+    return /^[A-Za-z0-9._-]+$/.test(value) ? value : exports.HOSTED_DISCLOSURE_VERSION;
+}
+function markerPayload(version) {
+    return `labwired-hosted-disclosure:${version}\n`;
+}
+function trustedMarker(marker, version) {
+    try {
+        const stat = fs.lstatSync(marker);
+        if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0)
+            return false;
+        if (typeof process.getuid === "function" && stat.uid !== process.getuid())
+            return false;
+        return fs.readFileSync(marker, "utf8") === markerPayload(version);
+    }
+    catch {
+        return false;
+    }
+}
+function privateOwnedDirectory(directory) {
+    try {
+        const stat = fs.lstatSync(directory);
+        if (!stat.isDirectory() || stat.isSymbolicLink())
+            return undefined;
+        if (typeof process.getuid === "function" && stat.uid !== process.getuid())
+            return undefined;
+        fs.chmodSync(directory, 0o700);
+        return fs.lstatSync(directory);
+    }
+    catch {
+        return undefined;
+    }
+}
+function ensurePrivateOwnedDirectory(directory, recursive = false, mkdir = fs.mkdirSync) {
+    const existing = privateOwnedDirectory(directory);
+    if (existing)
+        return existing;
+    try {
+        mkdir(directory, { recursive, mode: 0o700 });
+    }
+    catch (err) {
+        if (err.code !== "EEXIST")
+            return undefined;
+    }
+    return privateOwnedDirectory(directory);
+}
+function sameDirectory(directory, expected) {
+    const current = privateOwnedDirectory(directory);
+    return !!current && current.dev === expected.dev && current.ino === expected.ino;
+}
+/** Return the notice only when this disclosure version has not been acknowledged. */
+function hostedDisclosureMessage(env = process.env, version) {
+    const safeVersion = disclosureVersion(env, version);
+    const configHome = env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), ".config");
+    const configDir = env.OPENCODE_CONFIG_DIR ||
+        env.LABWIRED_AGENT_CONFIG_DIR ||
+        path.join(configHome, "labwired-agent");
+    const dir = path.join(configDir, "state");
+    const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
+    let temp;
+    let stateIdentity;
+    try {
+        if (!ensurePrivateOwnedDirectory(configDir, true))
+            return exports.HOSTED_DISCLOSURE;
+        stateIdentity = ensurePrivateOwnedDirectory(dir);
+        if (!stateIdentity)
+            return exports.HOSTED_DISCLOSURE;
+        if (trustedMarker(ack, safeVersion))
+            return undefined;
+        temp = path.join(dir, `.hosted-disclosure-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        fs.writeFileSync(temp, markerPayload(safeVersion), { flag: "wx", mode: 0o600 });
+        if (!sameDirectory(dir, stateIdentity))
+            return exports.HOSTED_DISCLOSURE;
+        fs.linkSync(temp, ack);
+        if (!sameDirectory(dir, stateIdentity))
+            return exports.HOSTED_DISCLOSURE;
+    }
+    catch (err) {
+        if (err.code === "EEXIST" &&
+            stateIdentity &&
+            sameDirectory(dir, stateIdentity) &&
+            trustedMarker(ack, safeVersion)) {
+            return undefined;
+        }
+    }
+    finally {
+        if (temp && stateIdentity && sameDirectory(dir, stateIdentity)) {
+            try {
+                fs.unlinkSync(temp);
+            }
+            catch { /* best effort */ }
+        }
+    }
+    return exports.HOSTED_DISCLOSURE;
+}
 function sessionCandidates() {
     const home = os.homedir();
     const out = [];
@@ -140,7 +246,9 @@ function cloudSessionEnv(base = {}, opts) {
     set("LABWIRED_API_URL", s.apiBase);
     set("LABWIRED_MODEL_URL", s.modelUrl);
     set("LABWIRED_MODEL_KEY", s.accessToken);
-    set("LABWIRED_MODEL", "labwired-default");
+    if ((0, hostedModel_1.isTrustedHostedModelUrl)(base.LABWIRED_MODEL_URL || env.LABWIRED_MODEL_URL)) {
+        env.LABWIRED_MODEL = "labwired-default";
+    }
     return env;
 }
 //# sourceMappingURL=cloudSession.js.map

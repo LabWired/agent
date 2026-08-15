@@ -1,0 +1,4 @@
+{"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true,"project":"fixture"}}
+{"type":"tool","id":"e2","tool":"labwired_datasheet","result":{"ok":true,"citation":"doc:part"}}
+{"type":"tool","id":"e3","tool":"labwired_compile","result":{"ok":true,"artifact":{"type":"firmware","path":"firmware.elf"}}}
+{"type":"final","id":"e4","claim":"model_verified"}

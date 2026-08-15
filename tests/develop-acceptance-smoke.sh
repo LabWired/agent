@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Develop prompt mechanics acceptance.
+# Develop prompt mechanics-only acceptance. This never certifies the agent loop.
 # Default: bash tests/develop-acceptance-smoke.sh
-# Strict release gate: LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE=1 bash tests/develop-acceptance-smoke.sh
+# Release certification lives in tests/develop-agent-e2e.sh.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/fixtures/develop-acceptance"

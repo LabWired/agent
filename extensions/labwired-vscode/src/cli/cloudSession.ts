@@ -6,6 +6,109 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { isTrustedHostedModelUrl } from "./hostedModel";
+
+export const HOSTED_DISCLOSURE =
+  "Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.";
+export const HOSTED_DISCLOSURE_VERSION = "1";
+
+export function isHostedLabWiredEnv(env: NodeJS.ProcessEnv): boolean {
+  return isTrustedHostedModelUrl(env.LABWIRED_MODEL_URL);
+}
+
+function disclosureVersion(env: NodeJS.ProcessEnv, requested?: string): string {
+  const value = requested || env.LABWIRED_HOSTED_DISCLOSURE_VERSION || HOSTED_DISCLOSURE_VERSION;
+  return /^[A-Za-z0-9._-]+$/.test(value) ? value : HOSTED_DISCLOSURE_VERSION;
+}
+
+function markerPayload(version: string): string {
+  return `labwired-hosted-disclosure:${version}\n`;
+}
+
+function trustedMarker(marker: string, version: string): boolean {
+  try {
+    const stat = fs.lstatSync(marker);
+    if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) return false;
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return false;
+    return fs.readFileSync(marker, "utf8") === markerPayload(version);
+  } catch {
+    return false;
+  }
+}
+
+function privateOwnedDirectory(directory: string): fs.Stats | undefined {
+  try {
+    const stat = fs.lstatSync(directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return undefined;
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return undefined;
+    fs.chmodSync(directory, 0o700);
+    return fs.lstatSync(directory);
+  } catch {
+    return undefined;
+  }
+}
+
+export function ensurePrivateOwnedDirectory(
+  directory: string,
+  recursive = false,
+  mkdir: typeof fs.mkdirSync = fs.mkdirSync
+): fs.Stats | undefined {
+  const existing = privateOwnedDirectory(directory);
+  if (existing) return existing;
+  try {
+    mkdir(directory, { recursive, mode: 0o700 });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+  }
+  return privateOwnedDirectory(directory);
+}
+
+function sameDirectory(directory: string, expected: fs.Stats): boolean {
+  const current = privateOwnedDirectory(directory);
+  return !!current && current.dev === expected.dev && current.ino === expected.ino;
+}
+
+/** Return the notice only when this disclosure version has not been acknowledged. */
+export function hostedDisclosureMessage(
+  env: NodeJS.ProcessEnv = process.env,
+  version?: string
+): string | undefined {
+  const safeVersion = disclosureVersion(env, version);
+  const configHome = env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), ".config");
+  const configDir =
+    env.OPENCODE_CONFIG_DIR ||
+    env.LABWIRED_AGENT_CONFIG_DIR ||
+    path.join(configHome, "labwired-agent");
+  const dir = path.join(configDir, "state");
+  const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
+  let temp: string | undefined;
+  let stateIdentity: fs.Stats | undefined;
+  try {
+    if (!ensurePrivateOwnedDirectory(configDir, true)) return HOSTED_DISCLOSURE;
+    stateIdentity = ensurePrivateOwnedDirectory(dir);
+    if (!stateIdentity) return HOSTED_DISCLOSURE;
+    if (trustedMarker(ack, safeVersion)) return undefined;
+    temp = path.join(dir, `.hosted-disclosure-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    fs.writeFileSync(temp, markerPayload(safeVersion), { flag: "wx", mode: 0o600 });
+    if (!sameDirectory(dir, stateIdentity)) return HOSTED_DISCLOSURE;
+    fs.linkSync(temp, ack);
+    if (!sameDirectory(dir, stateIdentity)) return HOSTED_DISCLOSURE;
+  } catch (err) {
+    if (
+      (err as NodeJS.ErrnoException).code === "EEXIST" &&
+      stateIdentity &&
+      sameDirectory(dir, stateIdentity) &&
+      trustedMarker(ack, safeVersion)
+    ) {
+      return undefined;
+    }
+  } finally {
+    if (temp && stateIdentity && sameDirectory(dir, stateIdentity)) {
+      try { fs.unlinkSync(temp); } catch { /* best effort */ }
+    }
+  }
+  return HOSTED_DISCLOSURE;
+}
 
 export type CloudSession = {
   accessToken: string;
@@ -128,6 +231,8 @@ export function cloudSessionEnv(
   set("LABWIRED_API_URL", s.apiBase);
   set("LABWIRED_MODEL_URL", s.modelUrl);
   set("LABWIRED_MODEL_KEY", s.accessToken);
-  set("LABWIRED_MODEL", "labwired-default");
+  if (isTrustedHostedModelUrl(base.LABWIRED_MODEL_URL || env.LABWIRED_MODEL_URL)) {
+    env.LABWIRED_MODEL = "labwired-default";
+  }
   return env;
 }

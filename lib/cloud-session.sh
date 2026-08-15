@@ -33,6 +33,134 @@ labwired_cloud_session_path() {
   echo "$(labwired_cloud_session_dir)/cloud.json"
 }
 
+labwired_cloud_disclosure_ack_dir() {
+  local config_dir
+  config_dir="${OPENCODE_CONFIG_DIR:-${LABWIRED_AGENT_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/labwired-agent}}"
+  echo "${config_dir%/}/state"
+}
+
+# Print the hosted conversation disclosure once per local disclosure version.
+# A private, content-validated marker is linked atomically so concurrent starts
+# show once. Unsafe/unavailable state fails open: show and keep starting.
+labwired_cloud_hosted_disclosure() {
+  local version="${LABWIRED_HOSTED_DISCLOSURE_VERSION:-1}" dir ack
+  case "$version" in
+    *[!A-Za-z0-9._-]*) version=1 ;;
+  esac
+  dir="$(labwired_cloud_disclosure_ack_dir)"
+  ack="$dir/hosted-disclosure-v$version"
+  if command -v python3 >/dev/null 2>&1; then
+    local result
+    result="$(
+      LABWIRED_DISCLOSURE_DIR="$dir" LABWIRED_DISCLOSURE_ACK="$ack" \
+      LABWIRED_DISCLOSURE_VERSION="$version" python3 - <<'PY' 2>/dev/null
+import os, secrets, stat
+
+directory = os.environ["LABWIRED_DISCLOSURE_DIR"]
+marker = os.environ["LABWIRED_DISCLOSURE_ACK"]
+marker_name = os.path.basename(marker)
+version = os.environ["LABWIRED_DISCLOSURE_VERSION"]
+payload = f"labwired-hosted-disclosure:{version}\n".encode()
+uid = os.getuid() if hasattr(os, "getuid") else None
+
+def trusted_at(directory_fd, name):
+    try:
+        st = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+            return False
+        if st.st_mode & 0o077:
+            return False
+        if uid is not None and st.st_uid != uid:
+            return False
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(name, flags, dir_fd=directory_fd)
+        try:
+            return os.read(fd, len(payload) + 1) == payload
+        finally:
+            os.close(fd)
+    except OSError:
+        return False
+
+def ensure_private_directory(path, parents=False):
+    if not os.path.lexists(path):
+        try:
+            if parents:
+                os.makedirs(path, mode=0o700)
+            else:
+                os.mkdir(path, 0o700)
+        except FileExistsError:
+            pass
+    st = os.lstat(path)
+    if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
+        raise OSError("unsafe directory")
+    if uid is not None and st.st_uid != uid:
+        raise OSError("unowned directory")
+    os.chmod(path, 0o700)
+    return os.lstat(path)
+
+config = os.path.dirname(directory)
+directory_fd = None
+try:
+    ensure_private_directory(config, parents=True)
+    ensure_private_directory(directory)
+
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory_fd = os.open(directory, directory_flags)
+    opened = os.fstat(directory_fd)
+    current = os.lstat(directory)
+    if opened.st_dev != current.st_dev or opened.st_ino != current.st_ino:
+        raise OSError("state directory changed")
+    if trusted_at(directory_fd, marker_name):
+        print("suppress")
+        raise SystemExit
+
+    temporary = f".hosted-disclosure-{os.getpid()}-{secrets.token_hex(8)}"
+    file_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(temporary, file_flags, 0o600, dir_fd=directory_fd)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, payload)
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
+        current = os.lstat(directory)
+        if opened.st_dev != current.st_dev or opened.st_ino != current.st_ino:
+            raise OSError("state directory changed before publish")
+        try:
+            os.link(
+                temporary,
+                marker_name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            current = os.lstat(directory)
+            if opened.st_dev != current.st_dev or opened.st_ino != current.st_ino:
+                raise OSError("state directory changed during publish")
+            print("show")
+        except FileExistsError:
+            print("suppress" if trusted_at(directory_fd, marker_name) else "show")
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+        except OSError:
+            pass
+except OSError:
+    print("show")
+finally:
+    if directory_fd is not None:
+        os.close(directory_fd)
+PY
+    )" || result=show
+    if [[ "$result" == "suppress" ]]; then
+      return 0
+    fi
+  fi
+  printf '%s\n' 'Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.'
+}
+
 # Write session JSON. Args: access refresh expires_in [project] [email]
 labwired_cloud_session_save() {
   local access="$1" refresh="${2:-}" expires_in="${3:-3600}" project="${4:-}" email="${5:-}"
@@ -362,7 +490,7 @@ labwired_cloud_export_runtime() {
   export LABWIRED_API_URL="$api"
   export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-$api/v1}"
   export LABWIRED_MODEL_KEY="${LABWIRED_ACCESS_TOKEN}"
-  export LABWIRED_MODEL="${LABWIRED_MODEL:-labwired-default}"
+  export LABWIRED_MODEL="labwired-default"
   export LABWIRED_PROJECT="${LABWIRED_PROJECT:-}"
   # Auto-heal empty project so gateway + MCP work after older logins
   if [[ -z "${LABWIRED_PROJECT:-}" ]]; then
