@@ -12,7 +12,7 @@ import select
 import termios
 import time
 import tty
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Callable, Literal, Mapping, Optional, Sequence
 
 from .process import run_command
 from .results import CommandResult, PathLike
@@ -71,20 +71,36 @@ class RegisterAssertion:
 
 @dataclass(frozen=True)
 class Esp32S3Config:
-    uart_device: str
     uart_baud: int
+    uart_ready_prefix: str
     uart_timeout_seconds: float
-    jtag_serial: str
-    openocd_config: str
+    identity_command: tuple[str, ...]
+    identity_expected_board: str
+    identity_timeout_seconds: float
+    flash_target: str
+    flash_artifact: str
+    flash_timeout_seconds: float
+    openocd_board_config: str
+    openocd_startup_timeout_seconds: float
+    openocd_command_timeout_seconds: float
+    platformio_project_dir: Optional[str]
+    platformio_environment: Optional[str]
     assertions: tuple[RegisterAssertion, ...]
 
     @classmethod
     def from_oracle(cls, oracle: Mapping[str, object]) -> "Esp32S3Config":
         uart = oracle.get("uart")
-        jtag = oracle.get("jtag", oracle.get("openocd"))
+        identity = oracle.get("identity")
+        flash = oracle.get("flash")
+        openocd = oracle.get("openocd")
+        platformio = oracle.get("platformio")
         records = oracle.get("register_assertions")
-        if not isinstance(uart, Mapping) or not isinstance(jtag, Mapping) or not isinstance(records, list):
-            raise TypeError("oracle uart, jtag/openocd, and register_assertions are required")
+        if (not isinstance(uart, Mapping) or not isinstance(identity, Mapping)
+                or not isinstance(flash, Mapping) or not isinstance(openocd, Mapping)
+                or not isinstance(records, list)):
+            raise TypeError("oracle phase mappings and register_assertions are required")
+        if platformio is not None and not isinstance(platformio, Mapping):
+            raise TypeError("platformio must be a mapping")
         assertions = tuple(RegisterAssertion.from_json(record) for record in records)
         if not assertions:
             raise ValueError("at least one register assertion is required")
@@ -93,15 +109,31 @@ class Esp32S3Config:
         if len(names) != len(set(names)) or len(addresses) != len(set(addresses)):
             raise ValueError("register assertion names and addresses must be unique")
         baud = _positive_int(uart.get("baud"), "uart baud")
-        timeout = _positive_float(uart.get("timeout_seconds"), "uart timeout")
-        device = uart.get("device", "")
-        serial = jtag.get("serial", "")
-        config = jtag.get("config", jtag.get("board_config", ""))
-        if not all(isinstance(value, str) for value in (device, serial, config)):
-            raise TypeError("device, serial, and config must be strings")
-        if not device or not serial or not config:
-            raise ValueError("device, serial, and config must not be empty")
-        return cls(device, baud, timeout, serial, config, assertions)
+        command = identity.get("command")
+        if not isinstance(command, list) or not command:
+            raise ValueError("identity command must be a nonempty list")
+        normalized_command = tuple(_safe_string(item, "identity command item") for item in command)
+        project_dir = environment = None
+        if platformio is not None:
+            project_dir = _safe_string(platformio.get("project_dir"), "platformio project_dir")
+            environment = _safe_string(platformio.get("environment"), "platformio environment")
+        return cls(
+            baud,
+            _safe_string(uart.get("ready_prefix"), "uart ready_prefix"),
+            _nonnegative_float(uart.get("timeout_seconds"), "uart timeout"),
+            normalized_command,
+            _safe_string(identity.get("expected_board"), "identity expected_board"),
+            _nonnegative_float(identity.get("timeout_seconds"), "identity timeout"),
+            _safe_string(flash.get("target"), "flash target"),
+            _safe_string(flash.get("artifact"), "flash artifact"),
+            _nonnegative_float(flash.get("timeout_seconds"), "flash timeout"),
+            _safe_string(openocd.get("board_config"), "openocd board_config"),
+            _nonnegative_float(openocd.get("startup_timeout_seconds"), "openocd startup timeout"),
+            _nonnegative_float(openocd.get("command_timeout_seconds"), "openocd command timeout"),
+            project_dir,
+            environment,
+            assertions,
+        )
 
 
 def _positive_int(value: object, field: str) -> int:
@@ -110,11 +142,19 @@ def _positive_int(value: object, field: str) -> int:
     return value
 
 
-def _positive_float(value: object, field: str) -> float:
+def _nonnegative_float(value: object, field: str) -> float:
     if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isfinite(value) or value <= 0):
-        raise ValueError(f"{field} must be positive")
+            or not math.isfinite(value) or value < 0):
+        raise ValueError(f"{field} must be finite and nonnegative")
     return float(value)
+
+
+def _safe_string(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string")
+    if not value or any(character in value for character in "\r\n\x00"):
+        raise ValueError(f"{field} must be a nonempty safe string")
+    return value
 
 
 class BoardLockTimeout(TimeoutError):
@@ -178,7 +218,7 @@ class BoardLock:
 
 @dataclass(frozen=True)
 class PhaseResult:
-    status: str
+    status: Literal["pass", "hardware_fail", "infrastructure_error"]
     category: Optional[str] = None
     detail: Optional[str] = None
     command_result: Optional[CommandResult] = None
@@ -286,6 +326,8 @@ def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds:
 
 def build_openocd_command(executable: str, config: str, adapter_serial: str,
                           assertions: Sequence[RegisterAssertion]) -> list[str]:
+    if not assertions:
+        raise ValueError("at least one register assertion is required")
     if not _SERIAL.fullmatch(adapter_serial):
         raise ValueError("unsafe adapter serial")
     if any(character in config for character in "\r\n\x00"):
@@ -293,13 +335,15 @@ def build_openocd_command(executable: str, config: str, adapter_serial: str,
     commands = [f"adapter serial {adapter_serial}", "adapter speed 4000", "init", "reset run",
                 "sleep 750", "halt"]
     for assertion in assertions:
-        commands.extend((f"echo @@REG {assertion.name} 0x{assertion.address:08x}",
-                         f"mdw 0x{assertion.address:08x}"))
+        commands.extend((f'echo "@@REG {assertion.name} 0x{assertion.address:08x}"',
+                         f"mdw 0x{assertion.address:08x} 1"))
     commands.append("exit")
     return [executable, "-f", config, "-c", "; ".join(commands)]
 
 
 def parse_openocd_registers(text: str, requested: Sequence[RegisterAssertion]) -> dict[str, int]:
+    if not requested:
+        raise ValueError("at least one register assertion is required")
     by_name = {item.name: item for item in requested}
     if len(by_name) != len(requested):
         raise ValueError("requested assertion names are not unique")
@@ -343,14 +387,57 @@ class RegisterObservation:
 
 @dataclass(frozen=True)
 class RegisterEvaluation:
-    status: str
+    status: Literal["pass", "hardware_fail"]
     observations: tuple[RegisterObservation, ...]
 
 
 def evaluate_registers(observed: Mapping[str, int], assertions: Sequence[RegisterAssertion]) -> RegisterEvaluation:
+    if not assertions:
+        raise ValueError("at least one register assertion is required")
     if set(observed) != {item.name for item in assertions}:
         raise ValueError("observed registers do not exactly match assertions")
     results = tuple(RegisterObservation(item.name, item.address, observed[item.name], item.mask,
                                         item.expected, (observed[item.name] & item.mask) == item.expected)
                     for item in assertions)
     return RegisterEvaluation("pass" if all(item.passed for item in results) else "hardware_fail", results)
+
+
+@dataclass(frozen=True)
+class OpenOcdResult:
+    status: Literal["pass", "hardware_fail", "infrastructure_error"]
+    category: Optional[Literal["openocd"]]
+    detail: Optional[str]
+    observed: Optional[dict[str, int]]
+    evaluation: Optional[RegisterEvaluation]
+    command_result: Optional[CommandResult]
+
+
+def read_registers(executable: str, config: str, adapter_serial: str,
+                   assertions: Sequence[RegisterAssertion], *, cwd: PathLike,
+                   evidence_dir: PathLike, timeout_seconds: float,
+                   runner: Runner = run_command) -> OpenOcdResult:
+    if not math.isfinite(timeout_seconds) or timeout_seconds < 0:
+        raise ValueError("OpenOCD timeout must be finite and nonnegative")
+    command = build_openocd_command(executable, config, adapter_serial, assertions)
+    evidence = Path(evidence_dir)
+    try:
+        result = runner(command, cwd=cwd, stdout_path=evidence / "openocd.stdout.log",
+                        stderr_path=evidence / "openocd.stderr.log", timeout_seconds=timeout_seconds)
+    except OSError as error:
+        return OpenOcdResult("infrastructure_error", "openocd", str(error), None, None, None)
+    if result.cleanup_error:
+        return OpenOcdResult("infrastructure_error", "openocd", result.cleanup_error,
+                             None, None, result)
+    if result.timed_out:
+        return OpenOcdResult("infrastructure_error", "openocd", "OpenOCD timed out",
+                             None, None, result)
+    if result.returncode:
+        return OpenOcdResult("infrastructure_error", "openocd",
+                             f"OpenOCD exited {result.returncode}", None, None, result)
+    try:
+        transcript = Path(result.stderr_path).read_text(encoding="utf-8")
+        observed = parse_openocd_registers(transcript, assertions)
+        evaluation = evaluate_registers(observed, assertions)
+    except (OSError, UnicodeError, ValueError) as error:
+        return OpenOcdResult("infrastructure_error", "openocd", str(error), None, None, result)
+    return OpenOcdResult(evaluation.status, None, None, observed, evaluation, result)

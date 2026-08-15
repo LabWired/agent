@@ -38,6 +38,7 @@ from benchmarks.twin2silicon.hil.esp32s3 import (
     evaluate_registers,
     flash_firmware,
     parse_openocd_registers,
+    read_registers,
     validate_identity,
 )
 
@@ -367,11 +368,30 @@ class ProcessContractTests(unittest.TestCase):
 
 
 class Esp32S3ConfigTests(unittest.TestCase):
+    def test_parses_shipped_oracle_exactly(self):
+        oracle_path = (REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001/hidden/hil-oracle.json")
+        config = Esp32S3Config.from_oracle(json.loads(oracle_path.read_text()))
+        self.assertEqual(config.uart_ready_prefix, "LABWIRED_READY:")
+        self.assertEqual((config.uart_baud, config.uart_timeout_seconds), (115200, 30))
+        self.assertEqual(config.identity_command, ("__LABWIRED_IDENTITY_RUNNER__",))
+        self.assertEqual((config.identity_expected_board, config.identity_timeout_seconds),
+                         ("esp32-s3-devkitc-1", 10))
+        self.assertEqual((config.flash_target, config.flash_artifact, config.flash_timeout_seconds),
+                         ("upload", ".pio/build/esp32s3/firmware.bin", 120))
+        self.assertEqual((config.openocd_board_config, config.openocd_startup_timeout_seconds,
+                          config.openocd_command_timeout_seconds), ("esp32s3-builtin.cfg", 20, 10))
+        self.assertEqual((config.platformio_project_dir, config.platformio_environment),
+                         ("public/firmware", "esp32s3"))
+        self.assertEqual(len(config.assertions), 2)
+
     def test_parses_valid_oracle_and_hex_register_values(self):
         config = Esp32S3Config.from_oracle(
             {
-                "uart": {"device": "/dev/cu.board", "baud": 115200, "timeout_seconds": 1},
-                "jtag": {"serial": "JTAG-1", "config": "board/esp32s3.cfg"},
+                "uart": {"ready_prefix": "READY:", "baud": 115200, "timeout_seconds": 1},
+                "identity": {"command": ["identity"], "expected_board": "board", "timeout_seconds": 0},
+                "flash": {"target": "upload", "artifact": "firmware.bin", "timeout_seconds": 0},
+                "openocd": {"board_config": "board.cfg", "startup_timeout_seconds": 0,
+                            "command_timeout_seconds": 0},
                 "register_assertions": [
                     {"name": "gpio", "address": "0x60004020", "mask": "0x4", "expected": "0x4"}
                 ],
@@ -396,14 +416,18 @@ class Esp32S3ConfigTests(unittest.TestCase):
                 RegisterAssertion.from_json(record)
         with self.assertRaises(ValueError):
             Esp32S3Config.from_oracle({
-                "uart": {"device": "x", "baud": 115200, "timeout_seconds": 1},
-                "jtag": {"serial": "s", "config": "c"},
+                "uart": {"ready_prefix": "READY:", "baud": 115200, "timeout_seconds": 1},
+                "identity": {"command": ["id"], "expected_board": "board", "timeout_seconds": 0},
+                "flash": {"target": "upload", "artifact": "fw", "timeout_seconds": 0},
+                "openocd": {"board_config": "cfg", "startup_timeout_seconds": 0, "command_timeout_seconds": 0},
                 "register_assertions": [good, {**good, "address": "0x60004024"}],
             })
         with self.assertRaises(ValueError):
             Esp32S3Config.from_oracle({
-                "uart": {"device": "x", "baud": 115200, "timeout_seconds": 1},
-                "jtag": {"serial": "s", "config": "c"},
+                "uart": {"ready_prefix": "READY:", "baud": 115200, "timeout_seconds": 1},
+                "identity": {"command": ["id"], "expected_board": "board", "timeout_seconds": 0},
+                "flash": {"target": "upload", "artifact": "fw", "timeout_seconds": 0},
+                "openocd": {"board_config": "cfg", "startup_timeout_seconds": 0, "command_timeout_seconds": 0},
                 "register_assertions": [good, {**good, "name": "gpio2"}],
             })
 
@@ -411,14 +435,18 @@ class Esp32S3ConfigTests(unittest.TestCase):
         for timeout in (float("nan"), float("inf")):
             with self.subTest(timeout=timeout), self.assertRaises(ValueError):
                 Esp32S3Config.from_oracle({
-                    "uart": {"device": "device", "baud": 115200, "timeout_seconds": timeout},
-                    "jtag": {"serial": "serial", "config": "config"},
+                    "uart": {"ready_prefix": "READY:", "baud": 115200, "timeout_seconds": timeout},
+                    "identity": {"command": ["id"], "expected_board": "board", "timeout_seconds": 0},
+                    "flash": {"target": "upload", "artifact": "fw", "timeout_seconds": 0},
+                    "openocd": {"board_config": "cfg", "startup_timeout_seconds": 0, "command_timeout_seconds": 0},
                     "register_assertions": [{"name": "gpio", "address": "0x4", "mask": "0x4", "expected": "0x4"}],
                 })
         with self.assertRaises(ValueError):
             Esp32S3Config.from_oracle({
-                "uart": {"device": "", "baud": 115200, "timeout_seconds": 1},
-                "jtag": {"serial": "", "config": ""},
+                "uart": {"ready_prefix": "", "baud": 115200, "timeout_seconds": 1},
+                "identity": {"command": [], "expected_board": "", "timeout_seconds": 0},
+                "flash": {"target": "", "artifact": "", "timeout_seconds": 0},
+                "openocd": {"board_config": "", "startup_timeout_seconds": 0, "command_timeout_seconds": 0},
                 "register_assertions": [],
             })
 
@@ -437,7 +465,25 @@ class BoardIdentityAndFlashTests(unittest.TestCase):
                 tool = executable_fixture(directory, f"print({output!r}, end='')\n")
                 result = validate_identity([tool], "JTAG-1", cwd=directory, evidence_dir=directory, timeout_seconds=1)
                 self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
+                flash = executable_fixture(directory, f"from pathlib import Path; Path({str(marker)!r}).write_text('flashed')\n")
+                with self.assertRaises(ValueError):
+                    flash_firmware([flash], cwd=directory, evidence_dir=directory, timeout_seconds=1,
+                                   identity_validated=False)
                 self.assertFalse(marker.exists())
+
+    def test_identity_success_then_flash_executes_in_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "flashed"
+            identity_tool = executable_fixture(directory, "print('JTAG-1')\n")
+            identity = validate_identity([identity_tool], "JTAG-1", cwd=directory,
+                                         evidence_dir=directory, timeout_seconds=1)
+            flash_tool = Path(directory) / "flash.py"
+            flash_tool.write_text("#!/usr/bin/env python3\nfrom pathlib import Path\nPath(%r).write_text('flashed')\n" % str(marker))
+            flash_tool.chmod(0o755)
+            flashed = flash_firmware([flash_tool], cwd=directory, evidence_dir=directory,
+                                     timeout_seconds=1, identity_validated=identity.status == "pass")
+            self.assertEqual(flashed.status, "pass")
+            self.assertEqual(marker.read_text(), "flashed")
 
     def test_identity_tool_timeout_nonzero_and_cleanup_are_infrastructure(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -573,6 +619,24 @@ class UartNonceTests(unittest.TestCase):
         real_close(master)
         self.assertTrue(closed)
 
+    def test_timeout_closes_the_opened_uart_fd(self):
+        master, slave = pty.openpty()
+        device = os.ttyname(slave)
+        opened = []
+        real_open = os.open
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "benchmarks.twin2silicon.hil.esp32s3.os.open",
+            side_effect=lambda *args, **kwargs: (lambda fd: (opened.append(fd), fd)[1])(real_open(*args, **kwargs)),
+        ):
+            result = capture_uart_nonce(device, 115200, "never", .01, Path(directory) / "uart.log")
+        os.close(master)
+        os.close(slave)
+        self.assertFalse(result.matched)
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(OSError) as error:
+            os.fstat(opened[0])
+        self.assertEqual(error.exception.errno, 9)
+
 
 class OpenOcdEvidenceTests(unittest.TestCase):
     def setUp(self):
@@ -583,12 +647,18 @@ class OpenOcdEvidenceTests(unittest.TestCase):
 
     def test_command_is_argv_and_requests_marked_records_at_fixed_speed(self):
         command = build_openocd_command("openocd", "board.cfg", "JTAG-1", self.assertions)
-        self.assertEqual(command[:3], ["openocd", "-f", "board.cfg"])
-        script = command[command.index("-c") + 1]
-        for fragment in ("adapter serial JTAG-1", "adapter speed 4000", "reset run", "sleep 750", "halt",
-                         "echo @@REG enable 0x60004020", "mdw 0x60004020", "exit"):
-            self.assertIn(fragment, script)
-        self.assertNotIn(";", command[:-1])
+        self.assertEqual(command, ["openocd", "-f", "board.cfg", "-c",
+            'adapter serial JTAG-1; adapter speed 4000; init; reset run; sleep 750; halt; '
+            'echo "@@REG enable 0x60004020"; mdw 0x60004020 1; '
+            'echo "@@REG high 0x60004004"; mdw 0x60004004 1; exit'])
+
+    def test_empty_assertions_are_rejected_by_all_register_paths(self):
+        with self.assertRaises(ValueError):
+            build_openocd_command("openocd", "board.cfg", "serial", ())
+        with self.assertRaises(ValueError):
+            parse_openocd_registers("", ())
+        with self.assertRaises(ValueError):
+            evaluate_registers({}, ())
 
     def test_parser_accepts_only_immediately_paired_canonical_requested_records(self):
         text = "noise\n@@REG enable 0x60004020\n0x60004020: 0x00000004\n@@REG high 0x60004004\n0x60004004: 0x00000004\n"
@@ -614,6 +684,68 @@ class OpenOcdEvidenceTests(unittest.TestCase):
         self.assertEqual(passing.status, "pass")
         self.assertEqual(failing.status, "hardware_fail")
         self.assertFalse(failing.observations[0].passed)
+
+
+class OpenOcdExecutionTests(unittest.TestCase):
+    def setUp(self):
+        self.assertions = (RegisterAssertion("gpio", 0x60004020, 4, 4),)
+
+    def _run(self, directory, body, timeout=1):
+        tool = executable_fixture(directory, body)
+        return read_registers(tool, "board.cfg", "JTAG-1", self.assertions, cwd=directory,
+                              evidence_dir=directory, timeout_seconds=timeout)
+
+    def test_reads_openocd_stderr_and_returns_typed_evaluation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._run(directory, "import sys\nprint('@@REG gpio 0x60004020', file=sys.stderr)\nprint('0x60004020: 0x00000004', file=sys.stderr)\n")
+        self.assertEqual((result.status, result.category), ("pass", None))
+        self.assertEqual(result.observed, {"gpio": 4})
+        self.assertEqual(result.evaluation.status, "pass")
+        self.assertEqual(result.command_result.returncode, 0)
+
+    def test_classifies_nonzero_timeout_cleanup_launch_and_parse_as_infrastructure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nonzero = self._run(directory, "raise SystemExit(2)\n")
+            timeout = self._run(directory, "import time; time.sleep(30)\n", timeout=.05)
+            malformed = self._run(directory, "import sys; print('@@REG gpio bad', file=sys.stderr)\n")
+            fake = CommandResult(("x",), "/", 0, False, "", "", 0, "/tmp/o", "/tmp/e", "stuck")
+            cleanup = read_registers("x", "c", "s", self.assertions, cwd=directory,
+                                     evidence_dir=directory, timeout_seconds=1, runner=lambda *a, **k: fake)
+            launch = read_registers("x", "c", "s", self.assertions, cwd=directory,
+                                    evidence_dir=directory, timeout_seconds=1,
+                                    runner=lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("missing")))
+        for result in (nonzero, timeout, malformed, cleanup, launch):
+            with self.subTest(result=result):
+                self.assertEqual((result.status, result.category), ("infrastructure_error", "openocd"))
+
+    def test_timeout_terminates_openocd_process_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            terminated = Path(directory) / "child-terminated"
+            ready = Path(directory) / "child-ready"
+            body = textwrap.dedent(f"""
+                import pathlib, signal, subprocess, sys, time
+                child = '''
+                import pathlib, signal, time
+                terminated = pathlib.Path({str(terminated)!r})
+                def stop(signum, frame):
+                    terminated.write_text("terminated")
+                    raise SystemExit(0)
+                signal.signal(signal.SIGTERM, stop)
+                pathlib.Path({str(ready)!r}).write_text("ready")
+                while True: time.sleep(1)
+                '''
+                subprocess.Popen([sys.executable, "-c", child])
+                while not pathlib.Path({str(ready)!r}).exists(): pass
+                def stop(signum, frame):
+                    while not pathlib.Path({str(terminated)!r}).exists(): pass
+                    raise SystemExit(0)
+                signal.signal(signal.SIGTERM, stop)
+                print("ready", flush=True)
+                while True: time.sleep(1)
+            """)
+            result = self._run(directory, body, timeout=.5)
+            self.assertEqual(result.status, "infrastructure_error")
+            self.assertEqual(terminated.read_text(), "terminated")
 
 
 if __name__ == "__main__":
