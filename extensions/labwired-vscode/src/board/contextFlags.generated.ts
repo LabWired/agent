@@ -88,8 +88,21 @@ function nonEmptyString(value: unknown): string | undefined {
   return t.length ? t : undefined;
 }
 
+function hasContextProvenance(pack: LabwiredContextPack): boolean {
+  return !!(
+    nonEmptyString(pack.source_kind) ||
+    pack.diagram ||
+    pack.mapping?.length ||
+    pack.catalog_hits?.length ||
+    typeof pack.mint_ok === 'boolean' ||
+    typeof pack.supported_part_count === 'number'
+  );
+}
+
 function meetsMvc(pack: LabwiredContextPack, board: string | undefined): boolean {
-  if (typeof pack.design_context_ok === 'boolean') return pack.design_context_ok;
+  if (hasContextProvenance(pack) && typeof pack.design_context_ok === 'boolean') {
+    return pack.design_context_ok;
+  }
   if (board) return true;
   if (pack.mint_ok === true) return true;
   const mapping = pack.mapping ?? [];
@@ -116,7 +129,9 @@ function hasAnyText(pack: LabwiredContextPack): boolean {
 }
 
 function computeTwinBuildable(pack: LabwiredContextPack): boolean {
-  if (typeof pack.twin_buildable === 'boolean') return pack.twin_buildable;
+  if (hasContextProvenance(pack) && typeof pack.twin_buildable === 'boolean') {
+    return pack.twin_buildable;
+  }
   const supported = pack.supported_part_count ?? 0;
   return pack.mint_ok === true && supported >= 1;
 }
