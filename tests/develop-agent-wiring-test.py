@@ -28,6 +28,8 @@ assert "output summary" in prompts["greenfield-esp32c3"]
 assert "never request full" in prompts["greenfield-esp32c3"]
 assert "call labwired_verify directly" in prompts["existing-stm32f103"]
 assert "output summary" in prompts["existing-stm32f103"]
+assert "max_steps 50000000" in prompts["existing-stm32f103"]
+assert "no external LED part" in prompts["existing-stm32f103"]
 for name in ("greenfield-esp32c3", "existing-stm32f103", "compile-recovery-esp32c3", "partial-led-wifi"):
     assert "use the exact catalog:board:" in prompts[name].lower()
 print("ok   develop-agent wiring")
