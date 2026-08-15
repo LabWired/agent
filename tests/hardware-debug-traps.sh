@@ -44,6 +44,19 @@ set -e
 [[ "$redacted" == *'[REDACTED]'* ]]
 [[ "$redacted" != *fixture-value* && "$redacted" != *sk-FAKE123* ]]
 
+trace_file="${TMPDIR:-/tmp}/hardware-trap-file.log"
+: >"$trace_file"
+set +e
+LABWIRED_TEST_DEBUG=0 LABWIRED_TEST_TRACE_FILE="$trace_file" bash -c '
+  source "$1"
+  hardware_test_err_trace 3 10 "password=fixture-value" probe
+' _ "$HELPER" >/dev/null 2>&1
+trace_rc=$?
+set -e
+[[ "$trace_rc" -eq 3 ]]
+grep -q 'probe: TRACE line=10 rc=3' "$trace_file"
+! grep -q fixture-value "$trace_file"
+
 for debug in 0 1; do
   LABWIRED_TEST_DEBUG="$debug" bash "$ROOT/tests/hardware-cli.sh" >"${TMPDIR:-/tmp}/hardware-cli-debug-$debug.log" 2>&1
   LABWIRED_TEST_DEBUG="$debug" bash "$ROOT/tests/hardware-release-contract.sh" >"${TMPDIR:-/tmp}/hardware-release-debug-$debug.log" 2>&1

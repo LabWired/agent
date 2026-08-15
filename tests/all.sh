@@ -41,20 +41,28 @@ run_command() {
 run_hermetic() {
   local name="$1"
   shift
-  local lane_root
+  local lane_root trace_file
   # Keep heavyweight firmware builds on the checkout volume. Developer system
   # temp partitions can be small even when the workspace volume has room.
   lane_root="$(mktemp -d "$ROOT/.labwired-test.XXXXXX")"
+  trace_file="$lane_root/hardware-trace.log"
   mkdir -p "$lane_root/home" "$lane_root/tmp" "$lane_root/runtime"
   echo ""
   echo "======== $name ========"
   if env -u TMP -u TEMP HOME="$lane_root/home" TMPDIR="$lane_root/tmp" \
       PATH="$ROOT/tests/helpers:$PATH" \
       XDG_RUNTIME_DIR="$lane_root/runtime" \
+      LABWIRED_TEST_TRACE_FILE="$trace_file" \
       PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$HOST_HOME/.platformio}" "$@"; then
     echo "PASS $name"
   else
     echo "FAIL $name"
+    if [[ -s "$trace_file" ]]; then
+      echo "hardware trace for failed lane $name (last 80 lines):"
+      tail -n 80 "$trace_file"
+    else
+      echo "hardware trace for failed lane $name: empty"
+    fi
     fail=1
   fi
   rm -rf "$lane_root"
