@@ -27,6 +27,10 @@ npm run test:runtime-smoke:offline
 
 Run a connected-board comparison only with explicit hardware and output
 locations. Existing authenticated runtime sessions are used as-is.
+The trial instructions are noninteractive: this command authorizes inspection,
+the smallest in-scope repair, and compilation without a confirmation prompt.
+Before any flash, the harness checks that the selected UART's PlatformIO device
+entry reports the supplied JTAG serial.
 
 ```bash
 LABWIRED_HIL=1 \

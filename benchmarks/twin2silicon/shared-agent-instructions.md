@@ -1,5 +1,8 @@
 # Firmware repair trial
 
+This trial is noninteractive. This prompt authorizes you to inspect, make the
+smallest in-scope repair, and compile. Do not pause or ask for confirmation.
+
 Work only inside the public workspace provided for this trial. Do not read,
 search for, copy, modify, or infer from hidden task files, hidden oracle files,
 or HIL result directories. Do not self-grade the repair or claim that it passes

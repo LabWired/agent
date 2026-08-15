@@ -64,10 +64,19 @@ print_version openocd "$LABWIRED_OPENOCD" --version
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 task="${LABWIRED_TASK:-esp32s3-gpio-hil-001}"
+identity_command_json="$(python3 - "$repository_root/benchmarks/twin2silicon/identify_pio_device.py" "$LABWIRED_UART_DEVICE" "$LABWIRED_JTAG_SERIAL" <<'PY'
+import json
+import sys
+
+print(json.dumps([sys.executable, sys.argv[1], "--uart-device", sys.argv[2],
+                  "--jtag-serial", sys.argv[3]]))
+PY
+)"
 
 python3 "$repository_root/benchmarks/twin2silicon/run_matrix.py" \
   --task "$task" \
   --output "$LABWIRED_MATRIX_OUTPUT" \
   --jtag-serial "$LABWIRED_JTAG_SERIAL" \
   --uart-device "$LABWIRED_UART_DEVICE" \
-  --openocd "$LABWIRED_OPENOCD"
+  --openocd "$LABWIRED_OPENOCD" \
+  --identity-command-json "$identity_command_json"

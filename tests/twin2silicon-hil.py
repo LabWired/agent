@@ -448,6 +448,7 @@ class RuntimeMatrixTests(unittest.TestCase):
             parser.add_argument("--uart-device", required=True)
             parser.add_argument("--openocd", required=True)
             parser.add_argument("--platformio")
+            parser.add_argument("--identity-command-json")
             parser.add_argument("--usage-json")
             args = parser.parse_args()
             run_dir = Path(args.run_dir)
@@ -460,14 +461,17 @@ class RuntimeMatrixTests(unittest.TestCase):
         """)
         return executable_fixture(directory, body)
 
-    def _run_cli(self, output, agent, hil, *extra):
-        return subprocess.run(
-            [
+    def _run_cli(self, output, agent, hil, *extra, identity_command_json='["fake-identity"]'):
+        command = [
                 sys.executable, str(self.script), "--task", str(self.task),
                 "--output", str(output), "--jtag-serial", "fake-jtag",
                 "--uart-device", "/dev/fake-uart", "--openocd", "/fake/openocd",
                 "--agent-script", str(agent), "--hil-script", str(hil), *extra,
-            ],
+            ]
+        if identity_command_json is not None and "--identity-command-json" not in extra:
+            command.extend(("--identity-command-json", identity_command_json))
+        return subprocess.run(
+            command,
             cwd=REPOSITORY_ROOT,
             text=True,
             capture_output=True,
@@ -518,6 +522,49 @@ class RuntimeMatrixTests(unittest.TestCase):
             self.assertEqual([row["hil_status"] for row in rows], ["not_run", "not_run"])
             self.assertTrue(all(row["hil_run"] is None for row in rows))
             self.assertFalse(any((root / "matrix" / "trials").glob("*/hil")))
+
+    def test_matrix_requires_identity_unless_agent_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            agent = self._fake_agent(root / "agent")
+            hil = self._fake_hil(root / "hil")
+
+            missing = self._run_cli(root / "missing", agent, hil, identity_command_json=None)
+            self.assertEqual(missing.returncode, 2)
+            self.assertIn("--identity-command-json is required unless --agent-only", missing.stderr)
+            self.assertFalse((root / "missing").exists())
+
+            empty = self._run_cli(root / "empty", agent, hil, identity_command_json="")
+            self.assertEqual(empty.returncode, 2)
+            self.assertIn("--identity-command-json is required unless --agent-only", empty.stderr)
+            self.assertFalse((root / "empty").exists())
+
+            agent_only = self._run_cli(
+                root / "agent-only", agent, hil, "--agent-only", "--runtime", "opencode",
+                identity_command_json=None,
+            )
+            self.assertEqual(agent_only.returncode, 0, agent_only.stderr)
+            self.assertFalse((root / "agent-only" / "trials" / "opencode" / "hil").exists())
+
+    def test_matrix_forwards_identity_only_to_hil(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            identity_command_json = json.dumps([
+                sys.executable, "identify_pio_device.py", "--uart-device", "/dev/fake-uart",
+                "--jtag-serial", "fake-jtag",
+            ])
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent"), self._fake_hil(root / "hil"),
+                "--runtime", "opencode", identity_command_json=identity_command_json,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            trial = root / "matrix" / "trials" / "opencode"
+            invocation = json.loads((trial / "hil" / "hil-invocation.json").read_text())
+            self.assertEqual(invocation["identity_command_json"], identity_command_json)
+            agent_invocation = (trial / "agent-invocation.json").read_text(encoding="utf-8")
+            self.assertNotIn("identity_command_json", agent_invocation)
+            self.assertNotIn("identify_pio_device.py", agent_invocation)
 
     def test_matrix_forwards_only_usage_that_the_hil_cost_schema_accepts(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -615,6 +662,8 @@ class RuntimePackagingTests(unittest.TestCase):
             "LABWIRED_OPENOCD",
             "LABWIRED_MATRIX_OUTPUT",
             "/Volumes/LabWired",
+            "identify_pio_device.py",
+            "--identity-command-json",
         ):
             with self.subTest(variable=variable):
                 self.assertIn(variable, source)
@@ -648,6 +697,77 @@ class RuntimePackagingTests(unittest.TestCase):
             with self.subTest(wording=wording):
                 self.assertIn(wording, readme)
         self.assertNotIn("records their versions", readme)
+
+    def test_runtime_smoke_constructs_a_pio_identity_command_for_the_selected_uart_and_jtag(self):
+        source = self.script.read_text(encoding="utf-8")
+
+        self.assertIn("json.dumps([sys.executable, sys.argv[1], \"--uart-device\", sys.argv[2],", source)
+        self.assertIn('"--jtag-serial", sys.argv[3]])', source)
+        self.assertIn('"$LABWIRED_UART_DEVICE"', source)
+        self.assertIn('"$LABWIRED_JTAG_SERIAL"', source)
+
+
+class PioIdentityDeviceTests(unittest.TestCase):
+    script = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "identify_pio_device.py"
+
+    def _fake_pio(self, directory, body):
+        path = Path(directory) / "pio"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def _run_cli(self, pio, *extra):
+        environment = os.environ.copy()
+        environment["PATH"] = str(pio.parent) + os.pathsep + environment["PATH"]
+        return subprocess.run(
+            [
+                sys.executable, str(self.script), "--uart-device", "/dev/fake-uart",
+                "--jtag-serial", "JTAG-1", *extra,
+            ],
+            cwd=REPOSITORY_ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+
+    def test_exact_port_and_serial_match_prints_only_the_requested_serial(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pio = self._fake_pio(Path(directory), textwrap.dedent("""
+                import json, sys
+                assert sys.argv[1:] == ["device", "list", "--json-output"]
+                print(json.dumps([
+                    {"port": "/dev/other", "hwid": "SER=JTAG-1"},
+                    {"port": "/dev/fake-uart", "hwid": "USB VID:PID=10C4:EA60 SER=JTAG-1 LOCATION=1-1"},
+                ]))
+            """))
+
+            completed = self._run_cli(pio)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.stdout, "JTAG-1\n")
+
+    def test_wrong_mapping_and_malformed_output_fail_without_stdout(self):
+        cases = {
+            "wrong": "import json; print(json.dumps([{\"port\": \"/dev/fake-uart\", \"hwid\": \"SER=OTHER\"}]))\n",
+            "malformed": "print('not json')\n",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                completed = self._run_cli(self._fake_pio(Path(directory), body))
+
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertEqual(completed.stdout, "")
+
+    def test_timeout_fails_without_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pio = self._fake_pio(Path(directory), "import time; time.sleep(30)\n")
+
+            completed = self._run_cli(pio, "--timeout-seconds", "0.05")
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertEqual(completed.stdout, "")
 
 
 class FixtureContractTests(unittest.TestCase):
@@ -1538,6 +1658,7 @@ class RunAgentTests(unittest.TestCase):
                 raise SystemExit(0)
             assert '--model' not in args
             assert Path(os.environ['EXPECTED_INSTRUCTIONS']).read_text(encoding='utf-8') in args[-1]
+            assert 'This trial is noninteractive.' in args[-1]
             assert 'GPIO 2 is driven high' in args[-1]
             assert 'Maximum repair attempts: {repair_iterations}' in args[-1]
             assert 'hil-oracle.json' not in args[-1]
@@ -1549,6 +1670,7 @@ class RunAgentTests(unittest.TestCase):
             assert not (workspace / 'hidden').exists()
             instruction = workspace / {'CLAUDE.md' if runtime == 'claude' else 'AGENTS.md'!r}
             assert instruction.read_text(encoding='utf-8') == Path(os.environ['EXPECTED_INSTRUCTIONS']).read_text(encoding='utf-8')
+            assert 'This trial is noninteractive.' in instruction.read_text(encoding='utf-8')
             if {mode!r} == 'timeout':
                 time.sleep(30)
             source.write_text(contents.replace('GPIO_MODE_INPUT', 'GPIO_MODE_OUTPUT'), encoding='utf-8')

@@ -39,6 +39,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--jtag-serial", required=True)
     parser.add_argument("--uart-device", required=True)
     parser.add_argument("--openocd", required=True)
+    parser.add_argument("--identity-command-json")
     parser.add_argument("--runtime", choices=RUNTIMES, action="append")
     parser.add_argument("--agent-only", action="store_true")
     # Test-only seams. They are deliberately omitted from operator help.
@@ -201,6 +202,7 @@ def _run_hil(row: dict[str, object], task_root: Path, trial: Path, args: argpars
         sys.executable, str(args.hil_script), str(task_root), "--run-dir", str(run_dir),
         "--candidate", str(candidate), "--jtag-serial", args.jtag_serial,
         "--uart-device", args.uart_device, "--openocd", args.openocd,
+        "--identity-command-json", args.identity_command_json,
     ]
     usage_path = trial / "usage.json"
     if _has_hil_usage_schema(usage_path):
@@ -231,6 +233,8 @@ def _print_summary(rows: list[dict[str, object]]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
+    if not args.agent_only and not args.identity_command_json:
+        parser.error("--identity-command-json is required unless --agent-only")
     output = args.output.resolve()
     if os.path.lexists(output):
         print("output path already exists", file=sys.stderr)
