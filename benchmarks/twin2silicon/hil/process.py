@@ -86,7 +86,9 @@ def run_command(
                     process.wait(timeout=0.5)
                 except subprocess.TimeoutExpired:
                     cleanup_error = "process_group_did_not_exit"
-            _wait_for_process_group_exit(process.pid, 0.5)
+            group_exited = _wait_for_process_group_exit(process.pid, 0.5)
+            if not group_exited and cleanup_error is None:
+                cleanup_error = "process_group_did_not_exit"
 
     ended_at = _utc_now()
     return CommandResult(

@@ -238,6 +238,34 @@ class ProcessContractTests(unittest.TestCase):
             self.assertTrue(fake_process.wait_timeouts)
             self.assertNotIn(None, fake_process.wait_timeouts)
 
+    def test_run_command_reports_cleanup_error_when_descendant_remains_after_reap(self):
+        class ReapedLeader:
+            pid = 424243
+            returncode = -signal.SIGTERM
+
+            def communicate(self, timeout):
+                raise subprocess.TimeoutExpired(("stuck-descendant",), timeout)
+
+            def wait(self, timeout):
+                return self.returncode
+
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            started = time.monotonic()
+            with mock.patch.object(process_module.subprocess, "Popen", return_value=ReapedLeader()), mock.patch.object(
+                process_module.os, "killpg"
+            ), mock.patch.object(process_module, "_process_group_exists", return_value=True):
+                result = run_command(
+                    ["stuck-descendant"],
+                    cwd=evidence,
+                    stdout_path=evidence / "descendant.stdout.log",
+                    stderr_path=evidence / "descendant.stderr.log",
+                    timeout_seconds=0.01,
+                )
+
+            self.assertLess(time.monotonic() - started, 2)
+            self.assertEqual(result.cleanup_error, "process_group_did_not_exit")
+
 
 if __name__ == "__main__":
     if "-k" in sys.argv:
