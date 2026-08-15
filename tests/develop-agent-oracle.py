@@ -240,7 +240,9 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
             clauses = result.get("oracle_results")
             if (
                 result.get("proven") is True
-                and result.get("stop_reason") == "assertions_passed"
+                and result.get("gaps") == []
+                and result.get("run_status") in (None, "pass")
+                and result.get("stop_reason") in {"assertions_passed", "max_steps"}
                 and isinstance(clauses, list)
                 and clauses
                 and all(isinstance(clause, dict) and clause.get("passed") is True for clause in clauses)
