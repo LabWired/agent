@@ -8,8 +8,6 @@ SUITE_TMP="$(mktemp -d "$ROOT/.labwired-suite.XXXXXX")"
 trap 'rm -rf "$SUITE_TMP"' EXIT INT TERM HUP
 mkdir -p "$SUITE_TMP/tmp"
 export TMPDIR="$SUITE_TMP/tmp"
-export TMP="$SUITE_TMP/tmp"
-export TEMP="$SUITE_TMP/tmp"
 
 export LABWIRED_FAST="${LABWIRED_FAST:-1}"
 export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
@@ -50,8 +48,9 @@ run_hermetic() {
   mkdir -p "$lane_root/home" "$lane_root/tmp" "$lane_root/runtime"
   echo ""
   echo "======== $name ========"
-  if env HOME="$lane_root/home" TMPDIR="$lane_root/tmp" TMP="$lane_root/tmp" \
-      TEMP="$lane_root/tmp" XDG_RUNTIME_DIR="$lane_root/runtime" \
+  if env -u TMP -u TEMP HOME="$lane_root/home" TMPDIR="$lane_root/tmp" \
+      PATH="$ROOT/tests/helpers:$PATH" \
+      XDG_RUNTIME_DIR="$lane_root/runtime" \
       PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$HOST_HOME/.platformio}" "$@"; then
     echo "PASS $name"
   else

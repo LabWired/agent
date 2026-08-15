@@ -11,7 +11,8 @@ run_lane() {
   local lane="$MATRIX_TMP/$iteration-$name"
   mkdir -p "$lane/home" "$lane/tmp" "$lane/runtime"
   echo "matrix iteration=$iteration lane=$name"
-  env HOME="$lane/home" TMPDIR="$lane/tmp" TMP="$lane/tmp" TEMP="$lane/tmp" \
+  env -u TMP -u TEMP HOME="$lane/home" TMPDIR="$lane/tmp" \
+    PATH="$ROOT/tests/helpers:$PATH" \
     XDG_RUNTIME_DIR="$lane/runtime" PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$HOST_HOME/.platformio}" "$@"
 }
 

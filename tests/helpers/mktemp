@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# BSD mktemp ignores TMPDIR for the common no-template form. Hermetic test
+# lanes put this wrapper first on PATH so their temporary data stays on the
+# explicitly selected workspace volume on macOS and Linux alike.
+if [[ $# -eq 1 && "$1" == "-d" ]]; then
+  exec /usr/bin/mktemp -d "${TMPDIR:?TMPDIR is required}/tmp.XXXXXXXXXX"
+fi
+if [[ $# -eq 0 ]]; then
+  exec /usr/bin/mktemp "${TMPDIR:?TMPDIR is required}/tmp.XXXXXXXXXX"
+fi
+exec /usr/bin/mktemp "$@"
