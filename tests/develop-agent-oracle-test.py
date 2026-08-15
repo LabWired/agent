@@ -38,6 +38,11 @@ scenario_ok = subprocess.run(
     text=True, capture_output=True,
 )
 assert scenario_ok.returncode == 0, scenario_ok.stderr
+static_gpio = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "static-gpio-is-not-blink.jsonl"), "greenfield-esp32c3"],
+    text=True, capture_output=True,
+)
+assert static_gpio.returncode != 0 and "temporal gpio" in static_gpio.stderr.lower(), static_gpio.stderr
 for fixture in ("scenario-missing-manifest.jsonl", "scenario-empty-manifest.jsonl", "scenario-malformed-manifest.jsonl"):
     missing_manifest = subprocess.run(
         [sys.executable, str(ORACLE), "validate", str(FIX / fixture), "greenfield-esp32c3"],

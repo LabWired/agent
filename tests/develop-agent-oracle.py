@@ -361,6 +361,21 @@ def report_payload(report: dict) -> dict:
     return report
 
 
+def passed_oracle_clause(event: dict, kinds: set[str], detail_pattern: str | None = None) -> bool:
+    for result in structured_results(event):
+        clauses = result.get("oracle_results")
+        if not isinstance(clauses, list):
+            continue
+        for clause in clauses:
+            if not isinstance(clause, dict) or clause.get("passed") is not True:
+                continue
+            if str(clause.get("kind", "")).lower() not in kinds:
+                continue
+            if detail_pattern is None or re.search(detail_pattern, str(clause.get("detail", "")), re.I):
+                return True
+    return False
+
+
 def validate(events: list[dict], scenario: str | None = None) -> dict:
     tools = [(i, e, tool_name(e)) for i, e in enumerate(events) if is_tool_event(e)]
     if not tools:
@@ -388,7 +403,6 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     unsupported_ceiling = scenario == "unsupported-custom-board" and any(phase_outcome(e, "verify") is False for _, e, _ in verifies)
     if not successful_verify and not (successful_run and successful_inspect) and not unsupported_ceiling:
         raise Rejected("missing successful verify event or ordered run+inspect evidence")
-
     compile_index = next(i for i, e, _ in compiles if phase_outcome(e, "compile") is True)
     if not any(i < compile_index for i, _, _ in context):
         raise Rejected("successful refreshed context must precede compile")
@@ -448,6 +462,17 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
             passed = [item for item in compiles if phase_outcome(item[1], "compile") is True]
             if not failed or not passed or failed[0][0] >= passed[-1][0] or not any(failed[0][0] < i < passed[-1][0] for i, _, _ in edits):
                 raise Rejected("compile recovery requires explicit failed compile -> focused successful edit -> explicit successful compile")
+        if scenario in {"greenfield-esp32c3", "compile-recovery-esp32c3"}:
+            if not any(passed_oracle_clause(e, {"serial"}) for _, e, _ in successful_verify):
+                raise Rejected("scenario requires passing serial oracle evidence")
+        if scenario in {"greenfield-esp32c3", "existing-stm32f103", "compile-recovery-esp32c3", "partial-led-wifi"}:
+            temporal = any(
+                passed_oracle_clause(e, {"gpio_edges", "gpio_period", "gpio_duty"})
+                or passed_oracle_clause(e, {"gpio"}, r"\btoggl(?:e|ed)\b")
+                for _, e, _ in successful_verify
+            )
+            if not temporal:
+                raise Rejected("scenario requires passing temporal GPIO evidence; a static high/low level is not a blink")
 
     used = [(i, e, n) for i, e, n in tools if i in set(indices[:-1])]
     return {
