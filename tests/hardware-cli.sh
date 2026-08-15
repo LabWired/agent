@@ -11,6 +11,7 @@ cat >"$TMP/bin/pio" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then echo 'PlatformIO Core 6.1.0'; exit 0; fi
 if [[ "${1:-} ${2:-} ${3:-}" == 'device list --json-output' ]]; then
+  if [[ -f "$PWD/delay-enum" ]]; then sleep "$(cat "$PWD/delay-enum")"; fi
   if [[ -f "$PWD/hang-enum" ]]; then sleep 30 & echo $! >"$PWD/hang.pid"; wait; fi
   if [[ -n "${LABWIRED_TEST_DEVICE_JSON:-}" ]]; then printf '%s\n' "$LABWIRED_TEST_DEVICE_JSON"
   elif [[ -f "$PWD/device.json" ]]; then cat "$PWD/device.json"
@@ -193,9 +194,15 @@ PY
 # SIGTERM reaches bounded provider enumeration and kills its process tree.
 printf '%s\n' "$one" >"$TMP/project/device.json"
 touch "$TMP/project/hang-enum"
+if [[ -n "${LABWIRED_TEST_FIXTURE_DELAY:-}" ]]; then
+  printf '%s' "$LABWIRED_TEST_FIXTURE_DELAY" >"$TMP/project/delay-enum"
+fi
 "${CLI[@]}" plan --profile "$TMP/project/physical.json" --out "$TMP/cancelled-evidence" >"$TMP/cancelled.json" & cli_pid=$!
-for _ in {1..100}; do [[ -s "$TMP/project/hang.pid" ]] && break; sleep 0.02; done
-[[ -s "$TMP/project/hang.pid" ]]
+for _ in {1..500}; do [[ -s "$TMP/project/hang.pid" ]] && break; sleep 0.02; done
+if [[ ! -s "$TMP/project/hang.pid" ]]; then
+  echo 'BLOCKED hardware-cli: cancellation fixture did not become ready within 10 seconds' >&2
+  exit 1
+fi
 child_pid="$(cat "$TMP/project/hang.pid")"
 kill -TERM "$cli_pid"
 set +e; wait "$cli_pid"; cancelled_code=$?; set -e

@@ -126,7 +126,9 @@ chmod +x "$WORK/bin/pio" "$WORK/bin/labwired-sim" "$WORK/bin/python3"
 
 cat >"$WORK/server.py" <<'PY'
 import http.server, os, pathlib, socketserver
+import time
 root = pathlib.Path(os.environ['TMP'])
+time.sleep(float(os.environ.get('LABWIRED_TEST_FIXTURE_DELAY', '0')))
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         nonce = (root / 'labwired-acceptance-nonce').read_text() if (root / 'labwired-acceptance-nonce').exists() else 'missing'
@@ -139,8 +141,11 @@ with socketserver.TCPServer(('127.0.0.1', 0), Handler) as server:
     server.serve_forever()
 PY
 TMP="$WORK" "$REAL_PYTHON" "$WORK/server.py" & SERVER_PID=$!
-for _ in {1..50}; do [[ -s "$WORK/labwired-acceptance-port" ]] && break; sleep 0.02; done
-[[ -s "$WORK/labwired-acceptance-port" ]]
+for _ in {1..500}; do [[ -s "$WORK/labwired-acceptance-port" ]] && break; sleep 0.02; done
+if [[ ! -s "$WORK/labwired-acceptance-port" ]]; then
+  echo 'BLOCKED hardware-release: local evidence fixture did not become ready within 10 seconds' >&2
+  exit 1
+fi
 
 instantiate() {
   local logic="$1"
