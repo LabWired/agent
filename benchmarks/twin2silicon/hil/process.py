@@ -56,7 +56,7 @@ def run_command(
     return CommandResult(
         command=normalized_command,
         cwd=normalized_cwd,
-        return_code=process.returncode,
+        returncode=process.returncode,
         timed_out=timed_out,
         started_at_utc=started_at,
         ended_at_utc=ended_at,

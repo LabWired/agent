@@ -6,6 +6,7 @@ import sys
 import tempfile
 import textwrap
 import time
+from typing import get_args, get_origin, get_type_hints, Literal
 import unittest
 
 
@@ -31,7 +32,22 @@ class ResultContractTests(unittest.TestCase):
         self.assertEqual(result.hardware_status, "not_run")
         self.assertEqual(result.infrastructure_status, "error")
         self.assertEqual(result.failure_category, "board_identity")
-        self.assertEqual(result.failure_detail, "wrong adapter")
+        self.assertEqual(result.detail, "wrong adapter")
+
+    def test_run_result_status_fields_use_explicit_literal_contracts(self):
+        hints = get_type_hints(RunResult)
+        expected_choices = {
+            "model_status": ("pass", "fail", "not_run"),
+            "compile_status": ("pass", "fail", "not_run"),
+            "simulator_status": ("pass", "fail", "not_run", "not_supported"),
+            "hardware_status": ("pass", "fail", "not_run"),
+            "infrastructure_status": ("ok", "error"),
+        }
+
+        for field, choices in expected_choices.items():
+            with self.subTest(field=field):
+                self.assertIs(get_origin(hints[field]), Literal)
+                self.assertEqual(get_args(hints[field]), choices)
 
     def test_sha256_file_streams_file_contents(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -76,7 +92,7 @@ class ProcessContractTests(unittest.TestCase):
 
             self.assertIsInstance(result, CommandResult)
             self.assertTrue(result.timed_out)
-            self.assertNotEqual(result.return_code, 0)
+            self.assertNotEqual(result.returncode, 0)
             self.assertGreater(result.duration_seconds, 0)
             self.assertLess(elapsed, 2)
             self.assertEqual((evidence / "stdout.log").read_text(), "stdout evidence\n")

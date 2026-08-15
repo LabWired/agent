@@ -6,17 +6,22 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 
 PathLike = Union[str, os.PathLike[str]]
+ModelStatus = Literal["pass", "fail", "not_run"]
+CompileStatus = Literal["pass", "fail", "not_run"]
+SimulatorStatus = Literal["pass", "fail", "not_run", "not_supported"]
+HardwareStatus = Literal["pass", "fail", "not_run"]
+InfrastructureStatus = Literal["ok", "error"]
 
 
 @dataclass(frozen=True)
 class CommandResult:
     command: tuple[str, ...]
     cwd: str
-    return_code: int
+    returncode: int
     timed_out: bool
     started_at_utc: str
     ended_at_utc: str
@@ -27,13 +32,13 @@ class CommandResult:
 
 @dataclass(frozen=True)
 class RunResult:
-    model_status: str
-    compile_status: str
-    simulator_status: str
-    hardware_status: str
-    infrastructure_status: str
+    model_status: ModelStatus
+    compile_status: CompileStatus
+    simulator_status: SimulatorStatus
+    hardware_status: HardwareStatus
+    infrastructure_status: InfrastructureStatus
     failure_category: Optional[str] = None
-    failure_detail: Optional[str] = None
+    detail: Optional[str] = None
 
     @classmethod
     def infrastructure_error(cls, category: str, detail: str) -> "RunResult":
@@ -44,7 +49,7 @@ class RunResult:
             hardware_status="not_run",
             infrastructure_status="error",
             failure_category=category,
-            failure_detail=detail,
+            detail=detail,
         )
 
 
