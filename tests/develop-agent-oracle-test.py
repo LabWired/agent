@@ -45,6 +45,12 @@ unsupported = subprocess.run(
 assert unsupported.returncode == 0, unsupported.stderr
 assert json.loads(unsupported.stdout)["verify_outcomes"] == ["failed"]
 
+manifest = run("valid-hardware-manifest.jsonl")
+assert manifest.returncode == 0, manifest.stderr
+run_inspect = run("valid-run-inspect.jsonl")
+assert run_inspect.returncode == 0, run_inspect.stderr
+assert json.loads(run_inspect.stdout)["order"] == ["context", "grounding", "compile", "run", "inspect", "report"]
+
 for fixture, reason in {
     "missing-order.jsonl": "ordered evidence",
     "missing-source.jsonl": "source citation",
@@ -53,6 +59,15 @@ for fixture, reason in {
     "claim-inflation.jsonl": "verify event",
     "hardware-inflation.jsonl": "desk-hardware",
     "compile-is-not-run.jsonl": "verify event",
+    "nested-state-compile-failed.jsonl": "compile",
+    "nested-state-verify-error.jsonl": "verify event",
+    "nested-state-nonzero.jsonl": "compile",
+    "unknown-outcome.jsonl": "compile",
+    "input-only-source.jsonl": "source citation",
+    "run-before-compile.jsonl": "ordered run+inspect",
+    "run-before-context.jsonl": "ordered run+inspect",
+    "invented-hardware-prose.jsonl": "hardware-sensitive",
+    "empty-hardware-manifest.jsonl": "hardware-sensitive",
 }.items():
     proc = run(fixture)
     assert proc.returncode != 0, fixture

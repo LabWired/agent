@@ -16,4 +16,7 @@ assert "grounded hosted-agent certification NOT RUN" in ship
 mechanics = (root / "tests" / "develop-acceptance-smoke.sh").read_text()
 assert "agent_invoked=false" in mechanics
 assert "mechanics-only" in mechanics
+prompts = json.loads((root / "tests" / "fixtures" / "develop-agent" / "prompts.json").read_text())
+assert len(prompts) == 5
+assert all("hardware_sensitive_facts" in prompt and "returned citation" in prompt for prompt in prompts.values())
 print("ok   develop-agent wiring")
