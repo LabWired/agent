@@ -34,6 +34,13 @@ assert "no external LED part" in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["greenfield-esp32c3"]
 assert 'source must be exactly catalog:board:stm32f103-blinky' in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["compile-recovery-esp32c3"]
+stm32_prompt = prompts["existing-stm32f103"]
+for required in (
+    "edit only the existing src/main.cpp in place",
+    "do not add, remove, or rename files",
+    "leave platformio.ini byte-identical",
+):
+    assert required in stm32_prompt
 recovery_prompt = prompts["compile-recovery-esp32c3"]
 for required in (
     "The project already contains the deliberate error in src/main.cpp; do not overwrite or replace it before the first compile.",
