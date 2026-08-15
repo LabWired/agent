@@ -53,6 +53,7 @@ def run_command(
     started_at = _utc_now()
     started_monotonic = time.monotonic()
     timed_out = False
+    cleanup_error = None
     with open(normalized_stdout, "wb") as stdout, open(normalized_stderr, "wb") as stderr:
         process = subprocess.Popen(
             normalized_command,
@@ -81,18 +82,22 @@ def run_command(
                     os.killpg(process.pid, signal.SIGKILL)
                 except (PermissionError, ProcessLookupError):
                     pass
-                process.wait()
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    cleanup_error = "process_group_did_not_exit"
             _wait_for_process_group_exit(process.pid, 0.5)
 
     ended_at = _utc_now()
     return CommandResult(
         command=normalized_command,
         cwd=normalized_cwd,
-        returncode=process.returncode,
+        returncode=process.returncode if process.returncode is not None else -signal.SIGKILL,
         timed_out=timed_out,
         started_at_utc=started_at,
         ended_at_utc=ended_at,
         duration_seconds=time.monotonic() - started_monotonic,
         stdout_path=normalized_stdout,
         stderr_path=normalized_stderr,
+        cleanup_error=cleanup_error,
     )

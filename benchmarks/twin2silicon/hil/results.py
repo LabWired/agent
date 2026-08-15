@@ -28,6 +28,7 @@ class CommandResult:
     duration_seconds: float
     stdout_path: str
     stderr_path: str
+    cleanup_error: Optional[str] = None
 
 
 @dataclass(frozen=True)

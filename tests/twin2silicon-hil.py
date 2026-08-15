@@ -4,18 +4,21 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import tempfile
 import textwrap
 import time
 from typing import get_args, get_origin, get_type_hints, Literal
 import unittest
+from unittest import mock
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from benchmarks.twin2silicon.hil.process import run_command
+from benchmarks.twin2silicon.hil import process as process_module
 from benchmarks.twin2silicon.hil.results import (
     CommandResult,
     RunResult,
@@ -102,6 +105,7 @@ class ProcessContractTests(unittest.TestCase):
             self.assertEqual(result.cwd, str(evidence.resolve()))
             self.assertTrue(result.started_at_utc.endswith("Z"))
             self.assertTrue(result.ended_at_utc.endswith("Z"))
+            self.assertIsNone(result.cleanup_error)
 
     def test_run_command_timeout_terminates_process_group(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -192,6 +196,47 @@ class ProcessContractTests(unittest.TestCase):
                         os.killpg(int(leader_pid_path.read_text()), signal.SIGKILL)
                     except (PermissionError, ProcessLookupError):
                         pass
+
+    def test_run_command_reports_cleanup_error_when_leader_cannot_be_reaped(self):
+        class UnreapableProcess:
+            pid = 424242
+            returncode = None
+
+            def __init__(self):
+                self.wait_timeouts = []
+
+            def communicate(self, timeout):
+                raise subprocess.TimeoutExpired(("stuck-tool",), timeout)
+
+            def wait(self, timeout=None):
+                self.wait_timeouts.append(timeout)
+                if timeout is None:
+                    raise AssertionError("run_command used an unbounded wait")
+                raise subprocess.TimeoutExpired(("stuck-tool",), timeout)
+
+        def fake_killpg(process_group_id, signal_number):
+            if signal_number == 0:
+                raise ProcessLookupError
+
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            fake_process = UnreapableProcess()
+            started = time.monotonic()
+            with mock.patch.object(process_module.subprocess, "Popen", return_value=fake_process), mock.patch.object(
+                process_module.os, "killpg", side_effect=fake_killpg
+            ):
+                result = run_command(
+                    ["stuck-tool"],
+                    cwd=evidence,
+                    stdout_path=evidence / "stuck.stdout.log",
+                    stderr_path=evidence / "stuck.stderr.log",
+                    timeout_seconds=0.01,
+                )
+
+            self.assertLess(time.monotonic() - started, 1)
+            self.assertEqual(result.cleanup_error, "process_group_did_not_exit")
+            self.assertTrue(fake_process.wait_timeouts)
+            self.assertNotIn(None, fake_process.wait_timeouts)
 
 
 if __name__ == "__main__":
