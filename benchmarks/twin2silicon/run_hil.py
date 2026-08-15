@@ -19,6 +19,7 @@ import secrets
 import shutil
 import sys
 import threading
+import time
 from typing import Any, Mapping
 
 if __package__ in (None, ""):
@@ -116,13 +117,18 @@ def _copy_public(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=False)
 
 
-def _command_record(result: Any, run_dir: Path) -> dict[str, Any]:
+def _command_record(result: Any, run_dir: Path, redactions: tuple[str, ...] = ()) -> dict[str, Any]:
+    def sanitize(value: str) -> str:
+        for secret in redactions:
+            if secret:
+                value = value.replace(secret, "<redacted>")
+        return value
     def relative(value: str) -> str:
         try:
             return Path(value).resolve().relative_to(run_dir).as_posix()
         except ValueError:
             return "workspace" if Path(value).name == "workspace" else Path(value).name
-    return {"argv": [Path(item).name if Path(item).is_absolute() else item for item in result.command],
+    return {"argv": [sanitize(Path(item).name if Path(item).is_absolute() else item) for item in result.command],
             "cwd": relative(result.cwd), "stdout": relative(result.stdout_path),
             "stderr": relative(result.stderr_path), "started_at_utc": result.started_at_utc,
             "ended_at_utc": result.ended_at_utc, "returncode": result.returncode,
@@ -174,6 +180,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    run_started_monotonic = time.monotonic()
     args = parser().parse_args(argv)
     if args.evaluate_only != bool(args.candidate) or (args.agent_bin and not args.model):
         parser().error("evaluate-only requires --candidate; agent mode requires --model")
@@ -196,10 +203,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     def persist() -> None:
         write_json_atomic(run_dir / "run.json", manifest)
+    redactions = tuple(filter(None, (args.jtag_serial, args.uart_device,
+                        *(os.environ.get(name, "") for name in ("LABWIRED_ACCESS_TOKEN", "LABWIRED_MODEL_KEY")))))
     def record_phase(name: str, result: Any = None, **details: Any) -> None:
         phase = {"name": name, **details}
         if result is not None:
-            phase["command"] = _command_record(result, run_dir)
+            phase["command"] = _command_record(result, run_dir, redactions)
         manifest["phases"].append(phase)
         persist()
     persist()
@@ -233,9 +242,13 @@ def main(argv: list[str] | None = None) -> int:
         manifest["task"] = {"id": task["id"], "schema_version": task["schema_version"]}
         manifest["configured_budgets"] = task.get("budgets", {})
         manifest["budget_validity"] = {
-            name: {"configured": task.get("budgets", {}).get(name), "observed": None, "within_budget": None}
-            for name in ("wall_time_seconds", "model_tokens", "repair_iterations")
+            name: {"configured": configured, "observed": None, "within_budget": None}
+            for name, configured in task.get("budgets", {}).items()
         }
+        for name in ("simulator_runs", "diagnostic_hil_runs"):
+            if name in manifest["budget_validity"]:
+                configured = manifest["budget_validity"][name]["configured"]
+                manifest["budget_validity"][name].update(observed=0, within_budget=0 <= configured)
         manifest["environment"] = {"jtag_serial_sha256": hashlib.sha256(args.jtag_serial.encode()).hexdigest(),
                                    "uart_device": Path(args.uart_device).name}
         manifest["hashes"]["oracle_descriptor"] = sha256_file(oracle_path)
@@ -255,13 +268,10 @@ def main(argv: list[str] | None = None) -> int:
             write_json_atomic(run_dir / "cost.json", usage)
             for name in ("requests", "tokens", "final_context_tokens", "latency_seconds", "provider", "model", "cost_usd"):
                 manifest[name] = usage[name]
-            observed_tokens = usage["tokens"]["fresh_input"] + usage["tokens"]["cached_input"] + usage["tokens"]["output"]
+            observed_tokens = usage["final_context_tokens"]
             manifest["budget_validity"]["model_tokens"].update(
                 observed=observed_tokens,
                 within_budget=observed_tokens <= task.get("budgets", {}).get("model_tokens", math.inf))
-            manifest["budget_validity"]["wall_time_seconds"].update(
-                observed=usage["latency_seconds"],
-                within_budget=usage["latency_seconds"] <= task.get("budgets", {}).get("wall_time_seconds", math.inf))
         elif args.agent_bin:
             manifest["model"] = args.model
 
@@ -271,14 +281,17 @@ def main(argv: list[str] | None = None) -> int:
             agent = run_command([args.agent_bin, "agent", "run", "--model", args.model, prompt], cwd=workspace,
                                 stdout_path=run_dir / "agent.stdout.log", stderr_path=run_dir / "agent.stderr.log",
                                 timeout_seconds=float(task["budgets"]["wall_time_seconds"]), env=clean_env)
-            record_phase("agent", agent)
             if agent.timed_out or agent.cleanup_error:
+                manifest["infrastructure_status"] = "error"
+                record_phase("agent", agent)
                 raise RuntimeError("agent process did not terminate cleanly")
             manifest["model_status"] = "pass" if agent.returncode == 0 else "fail"
             if agent.returncode != 0:
                 manifest["termination"], manifest["failure_category"] = "completed", "model"
+                record_phase("agent", agent)
                 manifest["hashes"]["source_final"] = _tree_hash(workspace)
-                return _finalize(run_dir, manifest)
+                return _finalize(run_dir, manifest, run_started_monotonic)
+            record_phase("agent", agent)
         else:
             manifest["model_status"] = "not_run"
         manifest["hashes"]["source_final"] = _tree_hash(workspace)
@@ -289,22 +302,29 @@ def main(argv: list[str] | None = None) -> int:
         clean = run_command(build_command + ["--target", "clean"], cwd=workspace,
                             stdout_path=run_dir / "clean.stdout.log", stderr_path=run_dir / "clean.stderr.log",
                             timeout_seconds=float(task["budgets"]["wall_time_seconds"]))
-        record_phase("clean", clean)
         if clean.timed_out or clean.cleanup_error:
+            manifest["infrastructure_status"] = "error"
+            record_phase("clean", clean)
             raise RuntimeError("clean process did not terminate cleanly")
         if clean.returncode:
+            manifest["infrastructure_status"] = "error"
+            record_phase("clean", clean)
             raise RuntimeError("clean command failed")
+        record_phase("clean", clean)
         build = run_command(build_command, cwd=workspace, stdout_path=run_dir / "build.stdout.log",
                             stderr_path=run_dir / "build.stderr.log", timeout_seconds=float(task["budgets"]["wall_time_seconds"]))
-        record_phase("build", build)
         if build.timed_out or build.cleanup_error:
+            manifest["infrastructure_status"] = "error"
+            record_phase("build", build)
             raise RuntimeError("build process did not terminate cleanly")
         if build.returncode:
             manifest["compile_status"] = "fail"
             manifest["hardware_status"] = "not_run"
             manifest["termination"], manifest["failure_category"] = "completed", "compile"
-            return _finalize(run_dir, manifest)
+            record_phase("build", build)
+            return _finalize(run_dir, manifest, run_started_monotonic)
         manifest["compile_status"] = "pass"
+        record_phase("build", build)
         artifact = firmware / config.flash_artifact
         if not artifact.is_file():
             raise RuntimeError("successful build produced no firmware artifact")
@@ -322,9 +342,11 @@ def main(argv: list[str] | None = None) -> int:
         with BoardLock(run_dir.parent / ".board-locks", args.jtag_serial, timeout_seconds=config.identity_timeout_seconds):
             identity = validate_identity(identity_command, args.jtag_serial, cwd=workspace, evidence_dir=run_dir,
                                          timeout_seconds=config.identity_timeout_seconds)
-            record_phase("identity", identity.command_result, status=identity.status)
             if identity.status != "pass":
+                manifest["infrastructure_status"] = "error"
+                record_phase("identity", identity.command_result, status=identity.status)
                 raise RuntimeError(identity.detail or "board identity failed")
+            record_phase("identity", identity.command_result, status=identity.status)
             persist()
             cancel_uart = threading.Event()
             started_uart = threading.Event()
@@ -336,27 +358,34 @@ def main(argv: list[str] | None = None) -> int:
                 except BaseException as error:
                     uart_error.append(error)
             uart_thread = threading.Thread(target=capture_cancellable, name="hil-uart", daemon=False)
-            uart_thread.start()
-            if not started_uart.wait(1):
-                cancel_uart.set()
-                uart_thread.join(1)
-                raise RuntimeError(f"UART capture failed to start: {uart_error[0] if uart_error else 'startup timeout'}")
+            uart_thread_started = False
             try:
+                uart_thread.start()
+                uart_thread_started = True
+                if not started_uart.wait(1):
+                    raise RuntimeError(f"UART capture failed to start: {uart_error[0] if uart_error else 'startup timeout'}")
                 flash_command = [args.platformio, "run", "--project-dir", str(firmware), "--environment",
                                  config.platformio_environment or "esp32s3", "--target", config.flash_target]
                 flashed = flash_firmware(flash_command, cwd=workspace, evidence_dir=run_dir,
                                          timeout_seconds=config.flash_timeout_seconds, identity_validated=True)
+                if flashed.status == "infrastructure_error":
+                    manifest["infrastructure_status"] = "error"
+                elif flashed.status == "hardware_fail":
+                    manifest["hardware_status"] = "fail"
                 record_phase("flash", flashed.command_result, status=flashed.status, category=flashed.category)
                 if flashed.status == "pass":
                     uart_thread.join(config.uart_timeout_seconds + 0.5)
             finally:
                 cancel_uart.set()
-                uart_thread.join(1)
+                if uart_thread_started:
+                    uart_thread.join(1)
             if uart_thread.is_alive() or uart_error:
                 raise RuntimeError(f"UART capture failed: {uart_error[0] if uart_error else 'cleanup timeout'}")
             uart = uart_result["value"]
             manifest["uart"] = {"matched": uart.matched, "termination": uart.termination_reason,
                                 "bytes_captured": uart.bytes_captured}
+            if not uart.matched and flashed.status != "infrastructure_error":
+                manifest["hardware_status"] = "fail"
             record_phase("uart", matched=uart.matched, termination=uart.termination_reason,
                          bytes_captured=uart.bytes_captured)
             if flashed.status == "infrastructure_error":
@@ -364,11 +393,12 @@ def main(argv: list[str] | None = None) -> int:
             if flashed.status == "hardware_fail" or not uart.matched:
                 manifest["hardware_status"] = "fail"
                 manifest["termination"], manifest["failure_category"] = "completed", flashed.category or "uart_nonce"
-                return _finalize(run_dir, manifest)
+                return _finalize(run_dir, manifest, run_started_monotonic)
             registers = read_registers(args.openocd, config.openocd_board_config, args.jtag_serial,
                                        config.assertions, cwd=workspace, evidence_dir=run_dir,
                                        timeout_seconds=config.openocd_command_timeout_seconds)
             if registers.status == "infrastructure_error":
+                manifest["infrastructure_status"] = "error"
                 record_phase("register", registers.command_result, status=registers.status)
                 raise RuntimeError(registers.detail or "OpenOCD infrastructure failure")
             manifest["register_assertions"] = [
@@ -376,29 +406,33 @@ def main(argv: list[str] | None = None) -> int:
                 for item in registers.evaluation.observations
             ]
             manifest["hardware_status"] = "pass" if registers.status == "pass" else "fail"
-            record_phase("register", registers.command_result, status=registers.status,
-                         assertions=manifest["register_assertions"])
             manifest["termination"] = "completed"
             manifest["failure_category"] = None if registers.status == "pass" else "register_mismatch"
-        return _finalize(run_dir, manifest)
+            record_phase("register", registers.command_result, status=registers.status,
+                         assertions=manifest["register_assertions"])
+        return _finalize(run_dir, manifest, run_started_monotonic)
     except (KeyboardInterrupt, SystemExit) as error:
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "interrupted"
         manifest["failure_category"] = "interrupt"
         manifest["detail"] = type(error).__name__
-        _finalize(run_dir, manifest)
+        _finalize(run_dir, manifest, run_started_monotonic)
         return 2
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError, RuntimeError, BoardLockTimeout) as error:
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "invalid"
         manifest["failure_category"] = "infrastructure"
         manifest["detail"] = str(error)
-        _finalize(run_dir, manifest)
+        _finalize(run_dir, manifest, run_started_monotonic)
         print(str(error), file=sys.stderr)
         return 2
 
 
-def _finalize(run_dir: Path, manifest: dict[str, Any]) -> int:
+def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float) -> int:
+    elapsed = time.monotonic() - started_monotonic
+    wall = manifest.get("budget_validity", {}).get("wall_time_seconds")
+    if wall is not None:
+        wall.update(observed=elapsed, within_budget=elapsed <= wall["configured"])
     result = {name: manifest.get(name) for name in (
         "model_status", "compile_status", "simulator_status", "hardware_status",
         "infrastructure_status", "termination", "failure_category", "uart", "register_assertions")}

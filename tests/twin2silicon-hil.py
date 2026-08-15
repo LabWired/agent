@@ -198,6 +198,35 @@ class ProcessContractTests(unittest.TestCase):
                     try: os.kill(int(pid_path.read_text()), signal.SIGKILL)
                     except ProcessLookupError: pass
 
+    def test_run_command_interrupt_kills_sigterm_ignoring_descendant_after_leader_exits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); child_path = evidence / "child"
+            script = textwrap.dedent(f"""
+                import pathlib, signal, subprocess, sys, time
+                child = '''
+                import os, pathlib, signal, time
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                pathlib.Path({str(child_path)!r}).write_text(str(os.getpid()))
+                while True: time.sleep(1)
+                '''
+                subprocess.Popen([sys.executable, '-c', child])
+                while not pathlib.Path({str(child_path)!r}).exists(): pass
+                signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
+                while True: time.sleep(1)
+            """)
+            timer = threading.Timer(.15, lambda: os.kill(os.getpid(), signal.SIGINT)); timer.start()
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    run_command([sys.executable, "-c", script], cwd=evidence,
+                                stdout_path=evidence / "o", stderr_path=evidence / "e", timeout_seconds=30)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(int(child_path.read_text()), 0)
+            finally:
+                timer.cancel()
+                if child_path.exists():
+                    try: os.kill(int(child_path.read_text()), signal.SIGKILL)
+                    except ProcessLookupError: pass
+
     def test_run_command_timeout_captures_evidence_and_is_bounded(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
@@ -907,6 +936,20 @@ class HilOrchestrationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     run_hil.parse_usage(path)
 
+    def test_finalizer_uses_total_monotonic_wall_time_not_provider_latency(self):
+        sys.path.insert(0, str(REPOSITORY_ROOT / "benchmarks/twin2silicon"))
+        import run_hil
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = {"model_status": "not_run", "compile_status": "not_run",
+                        "simulator_status": "not_supported", "hardware_status": "not_run",
+                        "infrastructure_status": "ok", "termination": "completed", "failure_category": None,
+                        "uart": None, "register_assertions": [], "hashes": {}, "run": {}, "latency_seconds": .001,
+                        "budget_validity": {"wall_time_seconds": {"configured": .01, "observed": None, "within_budget": None}}}
+            run_hil._finalize(Path(directory), manifest, time.monotonic() - .05)
+            wall = manifest["budget_validity"]["wall_time_seconds"]
+            self.assertGreaterEqual(wall["observed"], .05)
+            self.assertFalse(wall["within_budget"])
+
     def test_candidate_symlink_escape_is_rejected_before_commands(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
         with tempfile.TemporaryDirectory() as directory:
@@ -946,10 +989,16 @@ class HilOrchestrationTests(unittest.TestCase):
             pio = executable_fixture(pio_dir, "import sys\nif '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
             env = {**os.environ, "HOME": "HOME_SENTINEL", "LABWIRED_HOME": "LABWIRED_HOME_SENTINEL",
                    "LABWIRED_ACCESS_TOKEN": "SECRET_TOKEN_SENTINEL"}
+            usage = root / "usage.json"
+            usage.write_text(json.dumps({"schema_version": "1.0", "requests": 1,
+                "tokens": {"fresh_input": 1000, "cached_input": 2000, "output": 3000, "reasoning": 4},
+                "final_context_tokens": 55, "latency_seconds": .01, "provider": "fixture", "model": "fixture/model",
+                "rates_usd_per_million": {"fresh_input": 1, "cached_input": 1, "output": 1},
+                "price_source": "fixture", "price_effective_date": "2026-01-01"}))
             run_dir = root / "run"
             result = self._run_cli(task, "--run-dir", run_dir, "--agent-bin", agent, "--model", "fixture/model",
                                    "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", pio,
-                                   "--platformio", pio, env=env)
+                                   "--platformio", pio, "--usage-json", usage, env=env)
             self.assertEqual(result.returncode, 0, result.stderr)
             call = json.loads(invocation.read_text())
             self.assertEqual(call["argv"][:4], ["agent", "run", "--model", "fixture/model"])
@@ -958,6 +1007,7 @@ class HilOrchestrationTests(unittest.TestCase):
             self.assertNotIn("SECRET_TOKEN_SENTINEL", manifest_text)
             manifest = json.loads(manifest_text)
             self.assertEqual(manifest["model_status"], "pass")
+            self.assertEqual(manifest["budget_validity"]["model_tokens"]["observed"], 55)
             self.assertNotEqual(manifest["hashes"]["source_initial"], manifest["hashes"]["source_final"])
 
     def test_cli_physical_pass_uses_pty_and_records_ordered_evidence(self):
@@ -1009,6 +1059,11 @@ class HilOrchestrationTests(unittest.TestCase):
             manifest = json.loads((run_dir / "run.json").read_text())
             self.assertEqual(manifest["hardware_status"], "pass")
             self.assertEqual(order.read_text().splitlines(), ["clean", "build", "identity", "upload", "openocd"])
+            self.assertNotIn("JTAG-1", json.dumps(manifest))
+            self.assertEqual(set(manifest["budget_validity"]),
+                             {"wall_time_seconds", "model_tokens", "repair_iterations", "simulator_runs", "diagnostic_hil_runs"})
+            self.assertEqual(manifest["budget_validity"]["simulator_runs"]["observed"], 0)
+            self.assertEqual(manifest["budget_validity"]["diagnostic_hil_runs"]["observed"], 0)
             self.assertEqual([phase["name"] for phase in manifest["phases"]],
                              ["prepared", "clean", "build", "identity", "flash", "uart", "register"])
             self.assertEqual(set(manifest["tool_versions"]), {"platformio", "openocd"})

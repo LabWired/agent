@@ -74,14 +74,17 @@ def run_command(
             try:
                 process.wait(timeout=0.5)
             except subprocess.TimeoutExpired:
+                pass
+            if _process_group_exists(process.pid):
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except (PermissionError, ProcessLookupError):
                     pass
-                try:
-                    process.wait(timeout=0.5)
-                except subprocess.TimeoutExpired:
-                    pass
+            try:
+                process.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                pass
+            _wait_for_process_group_exit(process.pid, 1.0)
             raise interruption
         except subprocess.TimeoutExpired:
             timed_out = True
