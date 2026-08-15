@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
 import sys
 import tempfile
 import textwrap
@@ -144,6 +146,52 @@ class ProcessContractTests(unittest.TestCase):
             self.assertTrue(result.timed_out)
             self.assertEqual((evidence / "group.stdout.log").read_text(), "child synchronized\n")
             self.assertEqual(child_terminated.read_text(), "terminated")
+
+    def test_run_command_timeout_kills_descendant_that_ignores_sigterm(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            leader_pid_path = evidence / "leader-pid"
+            child_pid_path = evidence / "ignoring-child-pid"
+            script = textwrap.dedent(
+                f"""
+                import os, pathlib, signal, subprocess, sys, time
+                pathlib.Path({str(leader_pid_path)!r}).write_text(str(os.getpid()))
+                child = '''
+                import os, pathlib, signal, time
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                pathlib.Path({str(child_pid_path)!r}).write_text(str(os.getpid()))
+                while True: time.sleep(1)
+                '''
+                subprocess.Popen([sys.executable, "-c", child])
+                while not pathlib.Path({str(child_pid_path)!r}).exists():
+                    pass
+                print("ignoring child synchronized", flush=True)
+                while True: time.sleep(1)
+                """
+            )
+
+            try:
+                result = run_command(
+                    [sys.executable, "-c", script],
+                    cwd=evidence,
+                    stdout_path=evidence / "ignoring.stdout.log",
+                    stderr_path=evidence / "ignoring.stderr.log",
+                    timeout_seconds=0.2,
+                )
+                leader_pid = int(leader_pid_path.read_text())
+                child_pid = int(child_pid_path.read_text())
+
+                self.assertTrue(result.timed_out)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(leader_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+            finally:
+                if leader_pid_path.exists():
+                    try:
+                        os.killpg(int(leader_pid_path.read_text()), signal.SIGKILL)
+                    except (PermissionError, ProcessLookupError):
+                        pass
 
 
 if __name__ == "__main__":
