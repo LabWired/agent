@@ -1,0 +1,5 @@
+{"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true,"project":"fixture"}}
+{"type":"tool","id":"e2","tool":"labwired_describe","result":{"ok":true,"board":"esp32-c3-supermini"}}
+{"type":"tool","id":"e3","tool":"labwired_compile","result":{"ok":true,"artifact":{"type":"firmware","path":"firmware.elf"}}}
+{"type":"tool","id":"e4","tool":"labwired_verify","result":{"ok":true,"status":"model_verified","evidence":{"type":"verify","id":"verify-fixture"},"oracle_results":[{"kind":"serial","passed":true,"detail":"serial contains alive"},{"kind":"gpio","passed":true,"detail":"GPIO8 is low (gpio evidence)"}]}}
+{"type":"final","id":"e5","result":{"claim":"model_verified","hardware_sensitive_facts":[{"fact":"GPIO8 drives the LED peripheral","source":"catalog:board:esp32-c3-supermini"}]}}
