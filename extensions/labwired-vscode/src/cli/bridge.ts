@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { cloudSessionEnv, loadCloudSession } from "./cloudSession";
+import { pinHostedModelEnv } from "./hostedModel";
 import { resolveLabwiredCli, type ResolvedCli } from "./resolver";
 import type { AgentMode } from "../services/sessionState";
 
@@ -301,7 +302,7 @@ export class LabWiredBridge {
       const kitBin = path.dirname(this.resolved.path);
       env.PATH = `${kitBin}${path.delimiter}${env.PATH || process.env.PATH || ""}`;
     }
-    return env;
+    return pinHostedModelEnv(env);
   }
 
   /** Same start-here as CLI: login → doctor → labwired (golden-path + MCP). */

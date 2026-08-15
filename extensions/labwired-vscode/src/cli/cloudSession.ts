@@ -6,24 +6,42 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { isTrustedHostedModelUrl } from "./hostedModel";
 
 export const HOSTED_DISCLOSURE =
   "Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.";
 export const HOSTED_DISCLOSURE_VERSION = "1";
 
 export function isHostedLabWiredEnv(env: NodeJS.ProcessEnv): boolean {
-  return (
-    (env.LABWIRED_MODEL_URL || "").includes("api.labwired.com") ||
-    /^(lwd_|lwk_)/.test(env.LABWIRED_ACCESS_TOKEN || env.LABWIRED_MODEL_KEY || "")
-  );
+  return isTrustedHostedModelUrl(env.LABWIRED_MODEL_URL);
+}
+
+function disclosureVersion(env: NodeJS.ProcessEnv, requested?: string): string {
+  const value = requested || env.LABWIRED_HOSTED_DISCLOSURE_VERSION || HOSTED_DISCLOSURE_VERSION;
+  return /^[A-Za-z0-9._-]+$/.test(value) ? value : HOSTED_DISCLOSURE_VERSION;
+}
+
+function markerPayload(version: string): string {
+  return `labwired-hosted-disclosure:${version}\n`;
+}
+
+function trustedMarker(marker: string, version: string): boolean {
+  try {
+    const stat = fs.lstatSync(marker);
+    if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) return false;
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return false;
+    return fs.readFileSync(marker, "utf8") === markerPayload(version);
+  } catch {
+    return false;
+  }
 }
 
 /** Return the notice only when this disclosure version has not been acknowledged. */
 export function hostedDisclosureMessage(
   env: NodeJS.ProcessEnv = process.env,
-  version = HOSTED_DISCLOSURE_VERSION
+  version?: string
 ): string | undefined {
-  const safeVersion = /^[A-Za-z0-9._-]+$/.test(version) ? version : HOSTED_DISCLOSURE_VERSION;
+  const safeVersion = disclosureVersion(env, version);
   const configHome = env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), ".config");
   const configDir =
     env.OPENCODE_CONFIG_DIR ||
@@ -31,17 +49,34 @@ export function hostedDisclosureMessage(
     path.join(configHome, "labwired-agent");
   const dir = path.join(configDir, "state");
   const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
+  if (trustedMarker(ack, safeVersion)) return undefined;
+  let temp: string | undefined;
   try {
-    if (fs.statSync(ack).isDirectory()) return undefined;
-  } catch {
-    /* first display or unavailable state */
-  }
-  try {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(ack, { mode: 0o700 });
+    if (fs.existsSync(configDir)) {
+      const configStat = fs.lstatSync(configDir);
+      if (!configStat.isDirectory() || configStat.isSymbolicLink()) return HOSTED_DISCLOSURE;
+    } else {
+      fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    }
+    if (fs.existsSync(dir)) {
+      const dirStat = fs.lstatSync(dir);
+      if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) return HOSTED_DISCLOSURE;
+      if (typeof process.getuid === "function" && dirStat.uid !== process.getuid()) return HOSTED_DISCLOSURE;
+      fs.chmodSync(dir, 0o700);
+    } else {
+      fs.mkdirSync(dir, { mode: 0o700 });
+    }
+    temp = path.join(dir, `.hosted-disclosure-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    fs.writeFileSync(temp, markerPayload(safeVersion), { flag: "wx", mode: 0o600 });
+    fs.linkSync(temp, ack);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") return undefined;
-    // Honest fallback: display again when local acknowledgement cannot persist.
+    if ((err as NodeJS.ErrnoException).code === "EEXIST" && trustedMarker(ack, safeVersion)) {
+      return undefined;
+    }
+  } finally {
+    if (temp) {
+      try { fs.unlinkSync(temp); } catch { /* best effort */ }
+    }
   }
   return HOSTED_DISCLOSURE;
 }
@@ -167,6 +202,8 @@ export function cloudSessionEnv(
   set("LABWIRED_API_URL", s.apiBase);
   set("LABWIRED_MODEL_URL", s.modelUrl);
   set("LABWIRED_MODEL_KEY", s.accessToken);
-  env.LABWIRED_MODEL = "labwired-default";
+  if (isTrustedHostedModelUrl(base.LABWIRED_MODEL_URL || env.LABWIRED_MODEL_URL)) {
+    env.LABWIRED_MODEL = "labwired-default";
+  }
   return env;
 }

@@ -40,8 +40,8 @@ labwired_cloud_disclosure_ack_dir() {
 }
 
 # Print the hosted conversation disclosure once per local disclosure version.
-# The acknowledgement directory is created atomically so concurrent launches do
-# not repeat it. If user state is unavailable, show the notice and keep starting.
+# A private, content-validated marker is linked atomically so concurrent starts
+# show once. Unsafe/unavailable state fails open: show and keep starting.
 labwired_cloud_hosted_disclosure() {
   local version="${LABWIRED_HOSTED_DISCLOSURE_VERSION:-1}" dir ack
   case "$version" in
@@ -49,13 +49,81 @@ labwired_cloud_hosted_disclosure() {
   esac
   dir="$(labwired_cloud_disclosure_ack_dir)"
   ack="$dir/hosted-disclosure-v$version"
-  if [[ -d "$ack" ]]; then
-    return 0
-  fi
-  if mkdir -p "$dir" 2>/dev/null && mkdir "$ack" 2>/dev/null; then
-    :
-  elif [[ -d "$ack" ]]; then
-    return 0
+  if command -v python3 >/dev/null 2>&1; then
+    local result
+    result="$(
+      LABWIRED_DISCLOSURE_DIR="$dir" LABWIRED_DISCLOSURE_ACK="$ack" \
+      LABWIRED_DISCLOSURE_VERSION="$version" python3 - <<'PY' 2>/dev/null
+import os, stat, tempfile
+
+directory = os.environ["LABWIRED_DISCLOSURE_DIR"]
+marker = os.environ["LABWIRED_DISCLOSURE_ACK"]
+version = os.environ["LABWIRED_DISCLOSURE_VERSION"]
+payload = f"labwired-hosted-disclosure:{version}\n".encode()
+uid = os.getuid() if hasattr(os, "getuid") else None
+
+def trusted(path):
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+            return False
+        if st.st_mode & 0o077:
+            return False
+        if uid is not None and st.st_uid != uid:
+            return False
+        with open(path, "rb") as f:
+            return f.read() == payload
+    except OSError:
+        return False
+
+if trusted(marker):
+    print("suppress")
+    raise SystemExit
+
+config = os.path.dirname(directory)
+try:
+    if os.path.lexists(config):
+        st = os.lstat(config)
+        if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
+            raise OSError("unsafe config directory")
+    else:
+        os.makedirs(config, mode=0o700)
+    if os.path.lexists(directory):
+        st = os.lstat(directory)
+        if not stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode):
+            raise OSError("unsafe state directory")
+        if uid is not None and st.st_uid != uid:
+            raise OSError("unowned state directory")
+        os.chmod(directory, 0o700)
+    else:
+        os.mkdir(directory, 0o700)
+
+    fd, temporary = tempfile.mkstemp(prefix=".hosted-disclosure-", dir=directory)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, payload)
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
+        try:
+            os.link(temporary, marker, follow_symlinks=False)
+            print("show")
+        except FileExistsError:
+            print("suppress" if trusted(marker) else "show")
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+except OSError:
+    print("show")
+PY
+    )" || result=show
+    if [[ "$result" == "suppress" ]]; then
+      return 0
+    fi
   fi
   printf '%s\n' 'Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.'
 }

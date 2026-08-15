@@ -7,6 +7,7 @@ import {
   hostedDisclosureMessage,
   isHostedLabWiredEnv,
 } from "../cli/cloudSession";
+import { buildChatCompletionBody } from "../cli/hostedModel";
 
 export type AgentStreamEvent =
   | { type: "text"; text: string }
@@ -260,7 +261,7 @@ export class AgentSession {
       process.env.LABWIRED_MODEL_KEY ||
       vscode.workspace.getConfiguration("labwired").get<string>("modelKey") ||
       "local";
-    const model =
+    const configuredModel =
       vscode.workspace.getConfiguration("labwired").get<string>("model") ||
       "qwen2.5-coder";
 
@@ -272,18 +273,14 @@ export class AgentSession {
           "Content-Type": "application/json",
           Authorization: `Bearer ${key}`,
         },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are LabWired firmware agent. Use catalog context. Suggest slash tools when hardware checks are needed. Never claim model_verified without verify evidence.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
+        body: JSON.stringify(
+          buildChatCompletionBody(
+            base,
+            configuredModel,
+            "You are LabWired firmware agent. Use catalog context. Suggest slash tools when hardware checks are needed. Never claim model_verified without verify evidence.",
+            prompt
+          )
+        ),
       });
       if (!res.ok || !res.body) {
         // non-stream fallback

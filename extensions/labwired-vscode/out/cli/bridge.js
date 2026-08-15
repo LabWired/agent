@@ -40,6 +40,7 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const cloudSession_1 = require("./cloudSession");
+const hostedModel_1 = require("./hostedModel");
 const resolver_1 = require("./resolver");
 /**
  * Thin bridge — Embedder CliManager equivalent.
@@ -288,7 +289,7 @@ class LabWiredBridge {
             const kitBin = path.dirname(this.resolved.path);
             env.PATH = `${kitBin}${path.delimiter}${env.PATH || process.env.PATH || ""}`;
         }
-        return env;
+        return (0, hostedModel_1.pinHostedModelEnv)(env);
     }
     /** Same start-here as CLI: login → doctor → labwired (golden-path + MCP). */
     async startAgentTerminal(mode) {

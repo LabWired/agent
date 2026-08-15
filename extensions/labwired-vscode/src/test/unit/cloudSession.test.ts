@@ -2,6 +2,8 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import {
   HOSTED_DISCLOSURE,
   hostedDisclosureMessage,
@@ -51,8 +53,75 @@ suite("hosted conversation disclosure", () => {
 
   test("recognizes hosted environment without classifying local BYOK", () => {
     assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "https://api.labwired.com/v1" }), true);
-    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_ACCESS_TOKEN: "lwd_test" }), true);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "https://api.labwired.com/v1/" }), true);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "https://api.labwired.com.evil.test/v1" }), false);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "https://evil.test/v1?next=https://api.labwired.com/v1" }), false);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "http://api.labwired.com/v1" }), false);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "https://api.labwired.com.evil.test/v1", LABWIRED_ACCESS_TOKEN: "lwd_test" }), false);
+    assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "http://127.0.0.1:11434/v1", LABWIRED_MODEL_KEY: "lwd_local" }), false);
     assert.strictEqual(isHostedLabWiredEnv({ LABWIRED_MODEL_URL: "http://127.0.0.1:11434/v1", LABWIRED_MODEL_KEY: "local" }), false);
+  });
+
+  test("uses the environment disclosure version when no explicit version is passed", () => {
+    const config = path.join(root, "version-config");
+    const env = {
+      LABWIRED_AGENT_CONFIG_DIR: config,
+      LABWIRED_HOSTED_DISCLOSURE_VERSION: "42",
+    } as NodeJS.ProcessEnv;
+    assert.strictEqual(hostedDisclosureMessage(env), HOSTED_DISCLOSURE);
+    assert.strictEqual(hostedDisclosureMessage(env), undefined);
+    assert.ok(fs.existsSync(path.join(config, "state", "hosted-disclosure-v42")));
+
+    const unsafeConfig = path.join(root, "unsafe-version-config");
+    const unsafeEnv = {
+      LABWIRED_AGENT_CONFIG_DIR: unsafeConfig,
+      LABWIRED_HOSTED_DISCLOSURE_VERSION: "../../escape",
+    } as NodeJS.ProcessEnv;
+    assert.strictEqual(hostedDisclosureMessage(unsafeEnv), HOSTED_DISCLOSURE);
+    assert.ok(fs.existsSync(path.join(unsafeConfig, "state", "hosted-disclosure-v1")));
+  });
+
+  test("does not trust regular-file, symlink, or symlink-state markers", () => {
+    const config = path.join(root, "hostile-config");
+    const state = path.join(config, "state");
+    fs.mkdirSync(state, { recursive: true });
+    fs.writeFileSync(path.join(state, "hosted-disclosure-vfile"), "bogus\n");
+    assert.strictEqual(
+      hostedDisclosureMessage({ LABWIRED_AGENT_CONFIG_DIR: config }, "file"),
+      HOSTED_DISCLOSURE
+    );
+    fs.symlinkSync(path.join(state, "hosted-disclosure-vfile"), path.join(state, "hosted-disclosure-vlink"));
+    assert.strictEqual(
+      hostedDisclosureMessage({ LABWIRED_AGENT_CONFIG_DIR: config }, "link"),
+      HOSTED_DISCLOSURE
+    );
+
+    const linkedConfig = path.join(root, "linked-config");
+    fs.mkdirSync(linkedConfig);
+    fs.symlinkSync(state, path.join(linkedConfig, "state"));
+    assert.strictEqual(
+      hostedDisclosureMessage({ LABWIRED_AGENT_CONFIG_DIR: linkedConfig }, "state-link"),
+      HOSTED_DISCLOSURE
+    );
+  });
+
+  test("concurrent extension launches disclose exactly once", async () => {
+    const config = path.join(root, "concurrent-config");
+    const modulePath = path.resolve(__dirname, "../../cli/cloudSession");
+    const script = `const m=require(${JSON.stringify(modulePath)}); const v=m.hostedDisclosureMessage(process.env); if(v) process.stdout.write(v);`;
+    const run = promisify(execFile);
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        run(process.execPath, ["-e", script], {
+          env: {
+            ...process.env,
+            LABWIRED_AGENT_CONFIG_DIR: config,
+            LABWIRED_HOSTED_DISCLOSURE_VERSION: "concurrent",
+          },
+        })
+      )
+    );
+    assert.strictEqual(results.filter(({ stdout }) => stdout === HOSTED_DISCLOSURE).length, 1);
   });
 
   test("shows honestly when acknowledgement cannot be persisted", () => {

@@ -94,6 +94,10 @@ second="$(labwired_cloud_hosted_disclosure)"
 [[ "$first" == *"Hosted conversations are stored by LabWired under the Privacy Policy."* \
   && "$first" == *"Customer content is not used for training by default."* ]] \
   && ok "first hosted disclosure" || bad "first hosted disclosure: $first"
+marker_v1="$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-v1"
+[[ -f "$marker_v1" && ! -L "$marker_v1" ]] \
+  && ok "trusted acknowledgement is a regular file" \
+  || bad "acknowledgement is not a trusted regular file"
 [[ -z "$second" ]] && ok "same disclosure version suppressed" || bad "same disclosure repeated: $second"
 export LABWIRED_HOSTED_DISCLOSURE_VERSION=2
 third="$(labwired_cloud_hosted_disclosure)"
@@ -105,6 +109,25 @@ done
 wait
 shown="$(cat "$TMP"/disclosure-* | grep -c '^Hosted conversations' || true)"
 [[ "$shown" -eq 1 ]] && ok "concurrent launches disclose once" || bad "concurrent launches disclosed $shown times"
+mkdir -p "$LABWIRED_AGENT_CONFIG_DIR/state"
+printf 'corrupt\n' >"$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vregular"
+regular="$(LABWIRED_HOSTED_DISCLOSURE_VERSION=regular labwired_cloud_hosted_disclosure)"
+[[ -n "$regular" ]] && ok "regular untrusted marker fails open" || bad "regular untrusted marker suppressed disclosure"
+ln -s "hosted-disclosure-vregular" "$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vsymlink"
+linked="$(LABWIRED_HOSTED_DISCLOSURE_VERSION=symlink labwired_cloud_hosted_disclosure)"
+[[ -n "$linked" ]] && ok "symlink marker fails open" || bad "symlink marker suppressed disclosure"
+symlink_config="$TMP/symlink-config"
+mkdir -p "$symlink_config"
+ln -s "$LABWIRED_AGENT_CONFIG_DIR/state" "$symlink_config/state"
+linked_state="$(
+  LABWIRED_AGENT_CONFIG_DIR="$symlink_config" \
+  LABWIRED_HOSTED_DISCLOSURE_VERSION=state-link \
+  labwired_cloud_hosted_disclosure
+)"
+[[ -n "$linked_state" ]] && ok "symlink state directory fails open" || bad "symlink state directory suppressed disclosure"
+[[ ! -e "$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vstate-link" ]] \
+  && ok "symlink state directory not followed" \
+  || bad "symlink state directory was followed"
 ack="$(labwired_cloud_disclosure_ack_dir)"
 [[ "$ack" == "$LABWIRED_AGENT_CONFIG_DIR/state" ]] \
   && ok "disclosure acknowledgement uses agent config" \
