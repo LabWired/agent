@@ -1,6 +1,6 @@
 {"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true,"project":"fixture"}}
 {"type":"tool","id":"e2","tool":"labwired_part","result":{"ok":true,"citation":"https://docs.example.invalid/esp32c3#gpio8"}}
 {"type":"tool","id":"e3","tool":"write","result":{"path":"src/main.cpp"}}
-{"type":"tool","id":"e4","tool":"labwired_compile","result":{"ok":true,"artifact":"firmware.elf"}}
-{"type":"tool","id":"e5","tool":"labwired_verify","result":{"ok":true,"status":"model_verified"}}
+{"type":"tool","id":"e4","tool":"labwired_compile","result":{"ok":true,"artifact":{"type":"firmware","path":"firmware.elf"}}}
+{"type":"tool","id":"e5","tool":"labwired_verify","result":{"ok":true,"status":"model_verified","evidence":{"type":"verify","id":"verify-fixture"}}}
 {"type":"final","id":"e6","result":{"claim":"model_verified","hardware_sensitive_facts":[{"fact":"The selected LED signal uses the grounded GPIO assignment","source":"https://docs.example.invalid/esp32c3#gpio8"}]}}

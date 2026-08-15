@@ -81,6 +81,8 @@ for fixture, reason in {
     "invented-hardware-prose.jsonl": "hardware-sensitive",
     "empty-hardware-manifest.jsonl": "hardware-sensitive",
     "fake-echo-opencode.jsonl": "context",
+    "compile-error-prose.jsonl": "compile",
+    "verify-failed-prose.jsonl": "verify event",
 }.items():
     proc = run(fixture)
     assert proc.returncode != 0, fixture

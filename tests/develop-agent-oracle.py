@@ -133,25 +133,90 @@ def authoritative_event(event: dict) -> bool:
     return outcome(event) is not None and any(payload not in (None, "", {}, []) for payload in returned_payloads(event))
 
 
-def authoritative_phase(event: dict, phase: str) -> bool:
-    if not authoritative_event(event):
+def structured_results(event: dict) -> list[dict]:
+    results = []
+    for payload in returned_payloads(event):
+        if isinstance(payload, dict):
+            results.append(payload)
+        elif isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                results.append(parsed)
+    return results
+
+
+def domain_outcome(event: dict) -> bool | None:
+    wrapper = outcome(event)
+    if wrapper is False:
         return False
-    result = outcome(event)
-    # Explicit failures are authoritative evidence for recovery/unsupported
-    # ceilings even though they do not carry a success artifact.
-    if result is False:
-        return True
-    returned = json.dumps(returned_payloads(event), ensure_ascii=False).lower()
-    schemas = {
-        "context": r"\b(?:project|workspace|context)\b",
-        "compile": r"[a-z0-9_./-]+\.(?:elf|bin|hex|uf2)\b",
-        "verify": r"\bmodel_verified\b|[a-z0-9_./-]+\.verify\.json\b",
-        "run": r"\b(?:run_id|run-id|evidence_id)\b|[a-z0-9_./-]+\.run\.json\b",
-        "inspect": r"\b(?:marker|trace|uart|gpio|evidence_id)\b|[a-z0-9_./-]+\.inspect\.json\b",
-        "edit": r"\b(?:path|file|patch|edited|written)\b",
-        "flash": r"\b(?:flash_id|probe_id|firmware_ref|artifact)\b|[a-z0-9_./-]+\.(?:elf|bin|hex|uf2)\b",
-    }
-    return re.search(schemas[phase], returned) is not None
+    affirmative = False
+    failure_text = False
+    for result in structured_results(event):
+        if result.get("ok") is False or result.get("success") is False:
+            return False
+        status = str(result.get("status", "")).lower()
+        if status in {"error", "failed", "failure", "rejected", "timeout", "unsupported_target"}:
+            return False
+        if any(result.get(key) not in (None, "", False, [], {}) for key in ("error", "errors", "failure", "failures")):
+            return False
+        if re.search(r"(?i)\b(?:error|failed|failure)\b", json.dumps(result, ensure_ascii=False)):
+            failure_text = True
+        if result.get("ok") is True or result.get("success") is True or status in {"ok", "success", "succeeded", "passed", "model_verified"}:
+            affirmative = True
+    if affirmative and failure_text:
+        return False
+    return True if wrapper is True and affirmative else None
+
+
+def typed_record(result: dict, key: str, expected_type: str) -> dict | None:
+    record = result.get(key)
+    if not isinstance(record, dict) or record.get("type") != expected_type:
+        return None
+    if not any(isinstance(record.get(field), str) and record[field].strip() for field in ("id", "path", "ref")):
+        return None
+    return record
+
+
+def phase_outcome(event: dict, phase: str) -> bool | None:
+    domain = domain_outcome(event)
+    if domain is False:
+        return False
+    if domain is not True:
+        return None
+    for result in structured_results(event):
+        if phase == "context" and any(isinstance(result.get(key), str) and result[key].strip() for key in ("project", "workspace", "context")):
+            return True
+        if phase == "compile":
+            artifact = typed_record(result, "artifact", "firmware")
+            firmware_ref = result.get("firmware_ref")
+            if isinstance(firmware_ref, str) and firmware_ref.strip():
+                return True
+            if artifact and str(artifact.get("path", artifact.get("ref", ""))).lower().endswith((".elf", ".bin", ".hex", ".uf2")):
+                return True
+        if phase == "verify" and result.get("status") == "model_verified":
+            if isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip():
+                return True
+            if typed_record(result, "evidence", "verify"):
+                return True
+        if phase == "run":
+            if isinstance(result.get("run_id"), str) and result["run_id"].strip() and isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip():
+                return True
+            if typed_record(result, "evidence", "run"):
+                return True
+        if phase == "inspect":
+            if isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip() and any(result.get(key) not in (None, "", [], {}) for key in ("marker", "trace", "uart", "gpio")):
+                return True
+            evidence = typed_record(result, "evidence", "inspect")
+            if evidence and any(evidence.get(key) not in (None, "", [], {}) for key in ("marker", "trace", "uart", "gpio", "path", "id", "ref")):
+                return True
+        if phase == "edit" and typed_record(result, "artifact", "source_edit"):
+            return True
+        if phase == "flash" and typed_record(result, "artifact", "flash"):
+            return True
+    return None
 
 
 def citations(event: dict) -> list[str]:
@@ -236,31 +301,31 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if not tools:
         raise Rejected("structured tool events required; prose/self-report is not evidence")
 
-    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and authoritative_phase(e, "context") and succeeded(e)]
-    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and authoritative_event(e) and succeeded(e) and citations(e)]
-    compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and authoritative_phase(e, "compile")]
-    verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and authoritative_phase(e, "verify")]
-    runs = [(i, e, n) for i, e, n in tools if n.lower() in RUN_TOOLS and authoritative_phase(e, "run")]
-    inspects = [(i, e, n) for i, e, n in tools if n.lower() in INSPECT_TOOLS and authoritative_phase(e, "inspect")]
-    edits = [(i, e, n) for i, e, n in tools if n.lower() in EDIT_TOOLS and authoritative_phase(e, "edit") and succeeded(e)]
+    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and phase_outcome(e, "context") is True]
+    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and domain_outcome(e) is True and citations(e)]
+    compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and phase_outcome(e, "compile") is not None]
+    verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and phase_outcome(e, "verify") is not None]
+    runs = [(i, e, n) for i, e, n in tools if n.lower() in RUN_TOOLS and phase_outcome(e, "run") is not None]
+    inspects = [(i, e, n) for i, e, n in tools if n.lower() in INSPECT_TOOLS and phase_outcome(e, "inspect") is not None]
+    edits = [(i, e, n) for i, e, n in tools if n.lower() in EDIT_TOOLS and phase_outcome(e, "edit") is True]
     report = final_event(events)
 
     if not context:
         raise Rejected("missing context tool event")
     if not grounding:
         raise Rejected("missing grounding source citation from part/datasheet/search or project/SDK/SVD/schematic/netlist")
-    if not compiles or not any(succeeded(e) for _, e, _ in compiles):
+    if not compiles or not any(phase_outcome(e, "compile") is True for _, e, _ in compiles):
         raise Rejected("missing successful compile tool event")
-    successful_verify = [(i, e, n) for i, e, n in verifies if succeeded(e)]
-    successful_run = [(i, e, n) for i, e, n in runs if succeeded(e)]
-    successful_inspect = [(i, e, n) for i, e, n in inspects if succeeded(e)]
-    unsupported_ceiling = scenario == "unsupported-custom-board" and any(outcome(e) is False for _, e, _ in verifies)
+    successful_verify = [(i, e, n) for i, e, n in verifies if phase_outcome(e, "verify") is True]
+    successful_run = [(i, e, n) for i, e, n in runs if phase_outcome(e, "run") is True]
+    successful_inspect = [(i, e, n) for i, e, n in inspects if phase_outcome(e, "inspect") is True]
+    unsupported_ceiling = scenario == "unsupported-custom-board" and any(phase_outcome(e, "verify") is False for _, e, _ in verifies)
     if not successful_verify and not (successful_run and successful_inspect) and not unsupported_ceiling:
         raise Rejected("missing successful verify event or ordered run+inspect evidence")
 
-    compile_index = next(i for i, e, _ in compiles if succeeded(e))
+    compile_index = next(i for i, e, _ in compiles if phase_outcome(e, "compile") is True)
     if successful_verify or unsupported_ceiling:
-        verify_index = successful_verify[0][0] if successful_verify else next(i for i, e, _ in verifies if outcome(e) is False)
+        verify_index = successful_verify[0][0] if successful_verify else next(i for i, e, _ in verifies if phase_outcome(e, "verify") is False)
         indices = [context[0][0], grounding[0][0], compile_index, verify_index, events.index(report)]
         if indices != sorted(indices) or len(set(indices)) != len(indices):
             raise Rejected("ordered evidence must be context -> grounding -> compile -> verify -> report")
@@ -281,7 +346,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if claim == "model_verified" and not successful_verify:
         raise Rejected("model_verified claim requires a successful verify event")
     if claim == "hardware_observed":
-        flashes = [(i, e, n) for i, e, n in tools if n.lower() in FLASH_TOOLS and authoritative_phase(e, "flash") and succeeded(e)]
+        flashes = [(i, e, n) for i, e, n in tools if n.lower() in FLASH_TOOLS and phase_outcome(e, "flash") is True]
         markers = [(i, e, n) for i, e, n in successful_inspect if any(k in json.dumps(e).lower() for k in ("marker", "uart", "gpio", "trace"))]
         if not flashes or not markers or flashes[0][0] >= markers[0][0]:
             raise Rejected("hardware_observed requires desk-hardware flash plus marker evidence")
@@ -310,8 +375,8 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         if claim not in policy["allowed_claims"]:
             raise Rejected(f"scenario {scenario} rejects final claim {claim}")
         if policy.get("requires_compile_recovery"):
-            failed = [item for item in compiles if outcome(item[1]) is False]
-            passed = [item for item in compiles if succeeded(item[1])]
+            failed = [item for item in compiles if phase_outcome(item[1], "compile") is False]
+            passed = [item for item in compiles if phase_outcome(item[1], "compile") is True]
             if not failed or not passed or failed[0][0] >= passed[-1][0] or not any(failed[0][0] < i < passed[-1][0] for i, _, _ in edits):
                 raise Rejected("compile recovery requires explicit failed compile -> focused successful edit -> explicit successful compile")
 
@@ -321,7 +386,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         "tool_names": [n for _, _, n in used],
         "order": order,
         "source_citations": sorted(cited),
-        "verify_outcomes": ["passed" if outcome(e) is True else "failed" if outcome(e) is False else "unknown" for _, e, _ in verifies + runs + inspects],
+        "verify_outcomes": ["passed" if phase_outcome(e, "verify" if n.lower() in VERIFY_TOOLS else "run" if n.lower() in RUN_TOOLS else "inspect") is True else "failed" for _, e, n in verifies + runs + inspects],
         "attempt_count": attempt_count,
         "final_claim": claim,
     }

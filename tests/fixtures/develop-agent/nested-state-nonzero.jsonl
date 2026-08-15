@@ -1,5 +1,5 @@
-{"type":"tool_use","part":{"id":"e1","tool":"labwired_context","state":{"status":"completed","output":"project:fixture"}}}
-{"type":"tool_use","part":{"id":"e2","tool":"labwired_datasheet","state":{"status":"completed","output":"source: doc:part"}}}
+{"type":"tool_use","part":{"id":"e1","tool":"labwired_context","state":{"status":"completed","output":"{\"ok\":true,\"project\":\"fixture\"}"}}}
+{"type":"tool_use","part":{"id":"e2","tool":"labwired_datasheet","state":{"status":"completed","output":"{\"ok\":true,\"citation\":\"doc:part\"}"}}}
 {"type":"tool_use","part":{"id":"e3","tool":"bash","state":{"status":"completed","input":{"command":"pio run"},"output":"failed","metadata":{"exit_code":2}}}}
 {"type":"tool_use","part":{"id":"e4","tool":"labwired_verify","state":{"status":"completed","output":"model_verified"}}}
 {"type":"text","part":{"id":"e5","text":"model_verified"}}

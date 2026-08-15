@@ -7,6 +7,6 @@
 {"type":"tool","id":"e7","tool":"write","result":{}}
 {"type":"tool","id":"e8","tool":"labwired_compile","result":{"ok":false}}
 {"type":"tool","id":"e9","tool":"write","result":{}}
-{"type":"tool","id":"e10","tool":"labwired_compile","result":{"ok":true,"artifact":"firmware.elf"}}
-{"type":"tool","id":"e11","tool":"labwired_verify","result":{"ok":true,"status":"model_verified"}}
+{"type":"tool","id":"e10","tool":"labwired_compile","result":{"ok":true,"artifact":{"type":"firmware","path":"firmware.elf"}}}
+{"type":"tool","id":"e11","tool":"labwired_verify","result":{"ok":true,"status":"model_verified","evidence":{"type":"verify","id":"verify-fixture"}}}
 {"type":"final","id":"e12","claim":"model_verified"}

@@ -19,10 +19,18 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "unexpected non-json stdout" in bad.stderr.lower()
 
     stderr = Path(tmp) / "stderr.txt"
-    stderr.write_text("Bearer provider-secret user@example.com https://user:pw@host/path?jwt=secret\n")
+    stderr.write_text(
+        "Authorization: Basic auth-secret\nBearer provider-secret\napi_key=api-sentinel\nDEEPINFRA_API_KEY=deepinfra-sentinel\n"
+        "password: pass-sentinel token=token-sentinel secret=secret-sentinel\n"
+        "-----BEGIN PRIVATE KEY-----\nprivate-sentinel\n-----END PRIVATE KEY-----\n"
+        "user@example.com https://user:pw@host/path?jwt=signed-sentinel\n"
+    )
     sanitized = Path(tmp) / "stderr.sanitized"
     clean = subprocess.run([sys.executable, str(parser), "sanitize-stderr", str(stderr), str(sanitized)], text=True, capture_output=True)
     assert clean.returncode == 0, clean.stderr
-    assert sanitized.read_text() == "[redacted] [redacted-email] https://host/path\n"
+    cleaned = sanitized.read_text()
+    for sentinel in ("auth-secret", "provider-secret", "api-sentinel", "deepinfra-sentinel", "pass-sentinel", "token-sentinel", "secret-sentinel", "private-sentinel", "user@example.com", "signed-sentinel", "user:pw"):
+        assert sentinel not in cleaned, sentinel
+    assert "https://host/path" in cleaned
 
 print("ok   develop-agent strict JSONL")

@@ -1,6 +1,6 @@
 {"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true,"project":"fixture"}}
 {"type":"tool","id":"e2","tool":"labwired_datasheet","result":{"ok":true,"citation":"doc:part"}}
-{"type":"tool","id":"e3","tool":"labwired_run","result":{"ok":true,"run_id":"run-fixture"}}
-{"type":"tool","id":"e4","tool":"labwired_compile","result":{"ok":true,"artifact":"firmware.elf"}}
-{"type":"tool","id":"e5","tool":"labwired_inspect","result":{"ok":true,"marker":"alive"}}
+{"type":"tool","id":"e3","tool":"labwired_run","result":{"ok":true,"evidence":{"type":"run","id":"run-fixture"}}}
+{"type":"tool","id":"e4","tool":"labwired_compile","result":{"ok":true,"artifact":{"type":"firmware","path":"firmware.elf"}}}
+{"type":"tool","id":"e5","tool":"labwired_inspect","result":{"ok":true,"evidence":{"type":"inspect","id":"inspect-fixture","marker":"alive"}}}
 {"type":"final","id":"e6","claim":"compiled_only"}

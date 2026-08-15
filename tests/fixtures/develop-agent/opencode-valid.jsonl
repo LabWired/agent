@@ -1,5 +1,5 @@
-{"type":"tool_use","part":{"id":"oc1","tool":"labwired_context","state":{"status":"completed","input":{},"output":"project:fixture"}}}
-{"type":"tool_use","part":{"id":"oc2","tool":"labwired_datasheet","state":{"status":"completed","input":{"part":"ESP32-C3"},"output":"source: https://docs.example.invalid/esp32-c3"}}}
-{"type":"tool_use","part":{"id":"oc3","tool":"labwired_compile","state":{"status":"completed","input":{"project":"."},"output":"{\"artifact\":\"firmware.elf\"}"}}}
-{"type":"tool_use","part":{"id":"oc4","tool":"labwired_verify","state":{"status":"completed","input":{"firmware":".pio/firmware.elf"},"output":"model_verified"}}}
+{"type":"tool_use","part":{"id":"oc1","tool":"labwired_context","state":{"status":"completed","input":{},"output":"{\"ok\":true,\"project\":\"fixture\"}"}}}
+{"type":"tool_use","part":{"id":"oc2","tool":"labwired_datasheet","state":{"status":"completed","input":{"part":"ESP32-C3"},"output":"{\"ok\":true,\"citation\":\"https://docs.example.invalid/esp32-c3\"}"}}}
+{"type":"tool_use","part":{"id":"oc3","tool":"labwired_compile","state":{"status":"completed","input":{"project":"."},"output":"{\"ok\":true,\"firmware_ref\":\"sha256:firmware-fixture\"}"}}}
+{"type":"tool_use","part":{"id":"oc4","tool":"labwired_verify","state":{"status":"completed","input":{"firmware":"sha256:firmware-fixture"},"output":"{\"ok\":true,\"status\":\"model_verified\",\"evidence_ref\":\"sha256:verify-fixture\"}"}}}
 {"type":"text","part":{"id":"oc5","type":"text","text":"Final claim: model_verified"}}

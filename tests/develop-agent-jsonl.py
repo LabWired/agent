@@ -17,7 +17,25 @@ def reject(message: str) -> int:
 def sanitize_stderr(source: Path, target: Path) -> int:
     try:
         text = source.read_text(encoding="utf-8", errors="replace")
+        text = re.sub(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            "[redacted-private-key]",
+            text,
+            flags=re.I | re.S,
+        )
+        text = re.sub(r"(?im)^\s*authorization\s*:\s*.*$", "Authorization: [redacted]", text)
         text = re.sub(r"(?i)bearer\s+\S+", "[redacted]", text)
+        text = re.sub(
+            r"(?i)\b([a-z0-9_]*(?:api[_-]?key|provider[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret))"
+            r"\s*[:=]\s*(?:['\"]?)[^\s,'\";]+",
+            lambda match: f"{match.group(1)}=[redacted]",
+            text,
+        )
+        text = re.sub(
+            r"\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[A-Z0-9]{16}|(?:lwd|lwr|di)_[A-Za-z0-9_-]{8,})\b",
+            "[redacted-key]",
+            text,
+        )
         text = re.sub(r"(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", "[redacted-email]", text)
         def clean_url(match):
             try:
