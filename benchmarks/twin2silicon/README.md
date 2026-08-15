@@ -38,7 +38,8 @@ npm run test:runtime-smoke:hardware
 ```
 
 The entry point checks OpenCode, Codex CLI, Claude Code, PlatformIO, and
-OpenOCD and records their versions before running. Temporary data is placed on
+OpenOCD and prints their versions before running; operators may capture stdout
+with the smoke evidence. Temporary data is placed on
 `/Volumes/LabWired` when that volume is available. It does not configure
 runtime accounts; authenticate each native runtime before invoking it.
 

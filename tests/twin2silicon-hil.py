@@ -643,9 +643,11 @@ class RuntimePackagingTests(unittest.TestCase):
             "flash",
             "multiple tasks",
             "repeated fresh trials",
+            "prints their versions",
         ):
             with self.subTest(wording=wording):
                 self.assertIn(wording, readme)
+        self.assertNotIn("records their versions", readme)
 
 
 class FixtureContractTests(unittest.TestCase):
