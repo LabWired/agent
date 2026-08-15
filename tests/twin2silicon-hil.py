@@ -940,12 +940,18 @@ class HilOrchestrationTests(unittest.TestCase):
         sys.path.insert(0, str(REPOSITORY_ROOT / "benchmarks/twin2silicon"))
         import run_hil
         with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "slow.log"; artifact.write_text("evidence")
             manifest = {"model_status": "not_run", "compile_status": "not_run",
                         "simulator_status": "not_supported", "hardware_status": "not_run",
                         "infrastructure_status": "ok", "termination": "completed", "failure_category": None,
                         "uart": None, "register_assertions": [], "hashes": {}, "run": {}, "latency_seconds": .001,
                         "budget_validity": {"wall_time_seconds": {"configured": .01, "observed": None, "within_budget": None}}}
-            run_hil._finalize(Path(directory), manifest, time.monotonic() - .05)
+            real_hash = run_hil.sha256_file
+            def slow_hash(path):
+                time.sleep(.05)
+                return real_hash(path)
+            with mock.patch.object(run_hil, "sha256_file", side_effect=slow_hash):
+                run_hil._finalize(Path(directory), manifest, time.monotonic())
             wall = manifest["budget_validity"]["wall_time_seconds"]
             self.assertGreaterEqual(wall["observed"], .05)
             self.assertFalse(wall["within_budget"])
@@ -1093,6 +1099,74 @@ class HilOrchestrationTests(unittest.TestCase):
             manifest = json.loads((run_dir / "run.json").read_text())
             self.assertEqual((manifest["compile_status"], manifest["infrastructure_status"]), ("not_run", "error"))
             self.assertEqual([phase["name"] for phase in manifest["phases"]], ["prepared", "clean"])
+
+    def test_uart_startup_hang_is_killed_before_bounded_finalization(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); pio_dir = root / "pio"; pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, """import pathlib,sys
+if '--version' in sys.argv: print('v'); raise SystemExit(0)
+if '--target' not in sys.argv:
+ p=pathlib.Path(sys.argv[sys.argv.index('--project-dir')+1])/'.pio/build/esp32s3/firmware.bin'; p.parent.mkdir(parents=True); p.write_bytes(b'fw')
+""")
+            identity_dir = root / "id"; identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, "print('JTAG-HANG')\n")
+            run_dir = root / "run"; started = time.monotonic()
+            result = self._run_cli(task, "--run-dir", run_dir, "--evaluate-only", "--candidate", task / "public",
+                "--jtag-serial", "JTAG-HANG", "--uart-device", "/dev/null", "--openocd", pio,
+                "--platformio", pio, "--identity-command-json", json.dumps([str(identity)]),
+                "--fixture-uart-worker-mode", "startup-hang", "--fixture-identity-timeout-seconds", ".3")
+            self.assertEqual(result.returncode, 2)
+            self.assertLess(time.monotonic() - started, 4)
+            manifest_path = run_dir / "run.json"; manifest = json.loads(manifest_path.read_text())
+            self.assertEqual(manifest["infrastructure_status"], "error")
+            before = {path: path.stat().st_mtime_ns for path in run_dir.rglob("*") if path.is_file()}
+            time.sleep(.2)
+            self.assertEqual(before, {path: path.stat().st_mtime_ns for path in run_dir.rglob("*") if path.is_file()})
+            with BoardLock(run_dir.parent / ".board-locks", "JTAG-HANG", timeout_seconds=.1): pass
+
+    def test_cli_sigint_cleans_uart_flash_descendants_and_finalizes_stable_evidence(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); marker = root / "flash-pids.json"
+            pio_dir = root / "pio"; pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, textwrap.dedent(f"""
+                import json, os, pathlib, signal, subprocess, sys, time
+                if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                project = pathlib.Path(sys.argv[sys.argv.index('--project-dir') + 1])
+                target = sys.argv[sys.argv.index('--target') + 1] if '--target' in sys.argv else 'build'
+                if target == 'build':
+                    p=project/'.pio/build/esp32s3/firmware.bin'; p.parent.mkdir(parents=True); p.write_bytes(b'fw')
+                if target == 'upload':
+                    child=subprocess.Popen([sys.executable, '-c', 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)'])
+                    pathlib.Path({str(marker)!r}).write_text(json.dumps({{'leader': os.getpid(), 'child': child.pid}}))
+                    time.sleep(30)
+            """))
+            identity_dir = root / "id"; identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, "print('JTAG-INT')\n")
+            master, slave = pty.openpty(); tty.setraw(slave); run_dir = root / "run"
+            command = [sys.executable, str(REPOSITORY_ROOT / "benchmarks/twin2silicon/run_hil.py"), str(task),
+                "--run-dir", str(run_dir), "--evaluate-only", "--candidate", str(task / "public"),
+                "--jtag-serial", "JTAG-INT", "--uart-device", os.ttyname(slave), "--openocd", str(pio),
+                "--platformio", str(pio), "--identity-command-json", json.dumps([str(identity)])]
+            process = subprocess.Popen(command, cwd=REPOSITORY_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            deadline = time.monotonic() + 8
+            while not marker.exists() and time.monotonic() < deadline: time.sleep(.01)
+            self.assertTrue(marker.exists(), "flash did not become active")
+            process.send_signal(signal.SIGINT)
+            stdout, stderr = process.communicate(timeout=6)
+            os.close(master); os.close(slave)
+            self.assertEqual(process.returncode, 2, stderr.decode())
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertEqual(manifest["termination"], "interrupted")
+            for pid in json.loads(marker.read_text()).values():
+                with self.assertRaises(ProcessLookupError): os.kill(pid, 0)
+            with BoardLock(run_dir.parent / ".board-locks", "JTAG-INT", timeout_seconds=.1): pass
+            before = {p: (p.stat().st_mtime_ns, sha256_file(p)) for p in run_dir.rglob('*') if p.is_file()}
+            time.sleep(.2)
+            self.assertEqual(before, {p: (p.stat().st_mtime_ns, sha256_file(p)) for p in run_dir.rglob('*') if p.is_file()})
+            for artifact in manifest["artifacts"]:
+                self.assertEqual(manifest["hashes"][f"artifact:{artifact}"], sha256_file(run_dir / artifact))
 
     def test_cli_classifies_candidate_and_infrastructure_physical_failures(self):
         task = self._short_task()

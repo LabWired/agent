@@ -13,13 +13,14 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import multiprocessing
 import os
 from pathlib import Path
 import secrets
 import shutil
 import sys
-import threading
 import time
+import queue
 from typing import Any, Mapping
 
 if __package__ in (None, ""):
@@ -36,6 +37,38 @@ from benchmarks.twin2silicon.hil.results import sha256_file, write_json_atomic
 ROOT = Path(__file__).resolve().parent
 TASKS = ROOT / "tasks"
 HARNESS_REVISION = "twin2silicon-hil-1"
+
+
+class UartWorkerFatal(BaseException):
+    pass
+
+
+def _uart_process_worker(result_queue: Any, ready_event: Any, cancel_event: Any,
+                         device: str, baud: int, nonce: str, timeout_seconds: float,
+                         log_path: str, mode: str) -> None:
+    if mode == "startup-hang":
+        while True:
+            time.sleep(1)
+    try:
+        result = capture_uart_nonce(device, baud, nonce, timeout_seconds, log_path,
+                                    cancel_event=cancel_event, started_event=ready_event)
+        result_queue.put(("result", {"matched": result.matched, "bytes_captured": result.bytes_captured,
+                                     "timed_out": result.timed_out, "termination_reason": result.termination_reason}))
+    except BaseException as error:
+        result_queue.put(("error", f"{type(error).__name__}: {error}"))
+        ready_event.set()
+
+
+def _stop_uart_process(process: Any, cancel_event: Any) -> bool:
+    cancel_event.set()
+    process.join(.25)
+    if process.is_alive():
+        process.terminate()
+        process.join(.5)
+    if process.is_alive():
+        process.kill()
+        process.join(.5)
+    return not process.is_alive()
 
 
 def _number(value: object, field: str, *, integer: bool = False) -> int | float:
@@ -176,6 +209,8 @@ def parser() -> argparse.ArgumentParser:
                        help="offline fixture only: shorten (never extend) the oracle UART timeout")
     value.add_argument("--fixture-identity-timeout-seconds", type=float,
                        help="offline fixture only: shorten (never extend) identity/lock timeout")
+    value.add_argument("--fixture-uart-worker-mode", choices=("normal", "startup-hang"), default="normal",
+                       help="offline fixture only: exercise UART worker startup cleanup")
     return value
 
 
@@ -337,8 +372,6 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("identity command JSON must be a nonempty string array")
         else:
             identity_command = list(config.identity_command)
-        uart_result: dict[str, Any] = {}
-        uart_error: list[BaseException] = []
         with BoardLock(run_dir.parent / ".board-locks", args.jtag_serial, timeout_seconds=config.identity_timeout_seconds):
             identity = validate_identity(identity_command, args.jtag_serial, cwd=workspace, evidence_dir=run_dir,
                                          timeout_seconds=config.identity_timeout_seconds)
@@ -348,22 +381,19 @@ def main(argv: list[str] | None = None) -> int:
                 raise RuntimeError(identity.detail or "board identity failed")
             record_phase("identity", identity.command_result, status=identity.status)
             persist()
-            cancel_uart = threading.Event()
-            started_uart = threading.Event()
-            def capture_cancellable() -> None:
-                try:
-                    uart_result["value"] = capture_uart_nonce(args.uart_device, config.uart_baud, nonce,
-                                                              config.uart_timeout_seconds, run_dir / "uart.raw.log",
-                                                              cancel_event=cancel_uart, started_event=started_uart)
-                except BaseException as error:
-                    uart_error.append(error)
-            uart_thread = threading.Thread(target=capture_cancellable, name="hil-uart", daemon=False)
-            uart_thread_started = False
+            context = multiprocessing.get_context("spawn")
+            cancel_uart = context.Event()
+            started_uart = context.Event()
+            uart_queue = context.Queue()
+            uart_process = context.Process(target=_uart_process_worker, name="hil-uart",
+                args=(uart_queue, started_uart, cancel_uart, args.uart_device, config.uart_baud, nonce,
+                      config.uart_timeout_seconds, str(run_dir / "uart.raw.log"), args.fixture_uart_worker_mode))
+            uart_process_started = False
             try:
-                uart_thread.start()
-                uart_thread_started = True
-                if not started_uart.wait(1):
-                    raise RuntimeError(f"UART capture failed to start: {uart_error[0] if uart_error else 'startup timeout'}")
+                uart_process.start()
+                uart_process_started = True
+                if not started_uart.wait(2):
+                    raise RuntimeError("UART capture failed to start: startup timeout")
                 flash_command = [args.platformio, "run", "--project-dir", str(firmware), "--environment",
                                  config.platformio_environment or "esp32s3", "--target", config.flash_target]
                 flashed = flash_firmware(flash_command, cwd=workspace, evidence_dir=run_dir,
@@ -374,23 +404,32 @@ def main(argv: list[str] | None = None) -> int:
                     manifest["hardware_status"] = "fail"
                 record_phase("flash", flashed.command_result, status=flashed.status, category=flashed.category)
                 if flashed.status == "pass":
-                    uart_thread.join(config.uart_timeout_seconds + 0.5)
+                    uart_process.join(config.uart_timeout_seconds + 0.5)
             finally:
-                cancel_uart.set()
-                if uart_thread_started:
-                    uart_thread.join(1)
-            if uart_thread.is_alive() or uart_error:
-                raise RuntimeError(f"UART capture failed: {uart_error[0] if uart_error else 'cleanup timeout'}")
-            uart = uart_result["value"]
-            manifest["uart"] = {"matched": uart.matched, "termination": uart.termination_reason,
-                                "bytes_captured": uart.bytes_captured}
-            if not uart.matched and flashed.status != "infrastructure_error":
+                uart_stopped = not uart_process_started or _stop_uart_process(uart_process, cancel_uart)
+                if sys.exc_info()[0] is not None:
+                    uart_queue.close()
+                    uart_queue.join_thread()
+            if not uart_stopped:
+                raise UartWorkerFatal("UART worker could not be stopped")
+            try:
+                uart_kind, uart_payload = uart_queue.get(timeout=.2)
+            except queue.Empty:
+                raise RuntimeError("UART capture produced no result")
+            finally:
+                uart_queue.close()
+                uart_queue.join_thread()
+            if uart_kind == "error":
+                raise RuntimeError(f"UART capture failed: {uart_payload}")
+            manifest["uart"] = {"matched": uart_payload["matched"], "termination": uart_payload["termination_reason"],
+                                "bytes_captured": uart_payload["bytes_captured"]}
+            if not uart_payload["matched"] and flashed.status != "infrastructure_error":
                 manifest["hardware_status"] = "fail"
-            record_phase("uart", matched=uart.matched, termination=uart.termination_reason,
-                         bytes_captured=uart.bytes_captured)
+            record_phase("uart", matched=uart_payload["matched"], termination=uart_payload["termination_reason"],
+                         bytes_captured=uart_payload["bytes_captured"])
             if flashed.status == "infrastructure_error":
                 raise RuntimeError(flashed.detail or "flash infrastructure failure")
-            if flashed.status == "hardware_fail" or not uart.matched:
+            if flashed.status == "hardware_fail" or not uart_payload["matched"]:
                 manifest["hardware_status"] = "fail"
                 manifest["termination"], manifest["failure_category"] = "completed", flashed.category or "uart_nonce"
                 return _finalize(run_dir, manifest, run_started_monotonic)
@@ -411,6 +450,13 @@ def main(argv: list[str] | None = None) -> int:
             record_phase("register", registers.command_result, status=registers.status,
                          assertions=manifest["register_assertions"])
         return _finalize(run_dir, manifest, run_started_monotonic)
+    except UartWorkerFatal as error:
+        manifest["infrastructure_status"] = "error"
+        manifest["termination"] = "invalid"
+        manifest["failure_category"] = "uart_cleanup"
+        manifest["detail"] = str(error)
+        persist()
+        return 2
     except (KeyboardInterrupt, SystemExit) as error:
         manifest["infrastructure_status"] = "error"
         manifest["termination"] = "interrupted"
@@ -429,10 +475,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float) -> int:
-    elapsed = time.monotonic() - started_monotonic
-    wall = manifest.get("budget_validity", {}).get("wall_time_seconds")
-    if wall is not None:
-        wall.update(observed=elapsed, within_budget=elapsed <= wall["configured"])
     result = {name: manifest.get(name) for name in (
         "model_status", "compile_status", "simulator_status", "hardware_status",
         "infrastructure_status", "termination", "failure_category", "uart", "register_assertions")}
@@ -445,6 +487,10 @@ def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float)
         hashes[f"artifact:{relative}"] = sha256_file(path)
     manifest["artifacts"] = artifacts
     manifest["run"]["ended_at_utc"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    elapsed = time.monotonic() - started_monotonic
+    wall = manifest.get("budget_validity", {}).get("wall_time_seconds")
+    if wall is not None:
+        wall.update(observed=elapsed, within_budget=elapsed <= wall["configured"])
     write_json_atomic(run_dir / "run.json", manifest)
     return 2 if manifest["infrastructure_status"] == "error" else 0
 
