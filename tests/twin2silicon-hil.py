@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -178,6 +179,25 @@ class ResultContractTests(unittest.TestCase):
 
 
 class ProcessContractTests(unittest.TestCase):
+    def test_run_command_interrupt_terminates_process_group_before_reraising(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            pid_path = evidence / "pid"
+            timer = threading.Timer(.15, lambda: os.kill(os.getpid(), signal.SIGINT))
+            timer.start()
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    run_command([sys.executable, "-c", f"import os,pathlib,time; pathlib.Path({str(pid_path)!r}).write_text(str(os.getpid())); time.sleep(30)"],
+                                cwd=evidence, stdout_path=evidence / "o", stderr_path=evidence / "e", timeout_seconds=30)
+                child = int(pid_path.read_text())
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child, 0)
+            finally:
+                timer.cancel()
+                if pid_path.exists():
+                    try: os.kill(int(pid_path.read_text()), signal.SIGKILL)
+                    except ProcessLookupError: pass
+
     def test_run_command_timeout_captures_evidence_and_is_bounded(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
@@ -615,6 +635,28 @@ class UartNonceTests(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, .5)
                 self.assertLessEqual(len(raw), 64)
 
+    def test_cancellation_stops_capture_and_closes_stable_log(self):
+        master, slave = pty.openpty()
+        device = os.ttyname(slave)
+        tty.setraw(slave)
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "uart.log"
+            cancel = threading.Event()
+            result = []
+            thread = threading.Thread(target=lambda: result.append(
+                capture_uart_nonce(device, 115200, "nonce", 30, log, cancel_event=cancel)))
+            thread.start()
+            time.sleep(.05)
+            cancel.set()
+            thread.join(.5)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result[0].termination_reason, "cancelled")
+            before = log.read_bytes()
+            time.sleep(.05)
+            self.assertEqual(log.read_bytes(), before)
+        os.close(master)
+        os.close(slave)
+
     def test_rejects_unsupported_baud_and_closes_opened_fd(self):
         master, slave = pty.openpty()
         device = os.ttyname(slave)
@@ -781,6 +823,10 @@ class HilOrchestrationTests(unittest.TestCase):
             cwd=REPOSITORY_ROOT, text=True, capture_output=True, env=env,
         )
 
+    def _short_task(self):
+        source = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        return source
+
     def test_evaluate_only_prepares_isolated_workspace_and_records_compile_failure(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
         with tempfile.TemporaryDirectory() as directory:
@@ -793,6 +839,7 @@ class HilOrchestrationTests(unittest.TestCase):
             platformio = executable_fixture(tool_dir, textwrap.dedent(f"""
                 import sys
                 from pathlib import Path
+                if '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)
                 with Path({str(invocations)!r}).open('a') as output:
                     output.write(json.dumps(sys.argv[1:]) + '\\n')
                 raise SystemExit(0 if 'clean' in sys.argv else 1)
@@ -832,7 +879,7 @@ class HilOrchestrationTests(unittest.TestCase):
                 "output": 300, "reasoning": 40}, "final_context_tokens": 55,
                 "latency_seconds": 1.25, "provider": "fixture", "model": "m",
                 "rates_usd_per_million": {"fresh_input": 10, "cached_input": 1, "output": 20},
-                "price_source": "fixture", "price_date": "2026-01-01"
+                "schema_version": "1.0", "price_source": "fixture", "price_effective_date": "2026-01-01"
             }))
             sys.path.insert(0, str(REPOSITORY_ROOT / "benchmarks/twin2silicon"))
             import run_hil
@@ -841,6 +888,22 @@ class HilOrchestrationTests(unittest.TestCase):
             usage.write_text(usage.read_text().replace('"requests": 2', '"requests": true'))
             with self.assertRaises(ValueError):
                 run_hil.parse_usage(usage)
+
+    def test_usage_schema_rejects_missing_extra_and_legacy_price_date(self):
+        sys.path.insert(0, str(REPOSITORY_ROOT / "benchmarks/twin2silicon"))
+        import run_hil
+        base = {"schema_version": "1.0", "requests": 1,
+                "tokens": {"fresh_input": 1, "cached_input": 2, "output": 3, "reasoning": 4},
+                "final_context_tokens": 1, "latency_seconds": 1, "provider": "p", "model": "m",
+                "rates_usd_per_million": {"fresh_input": 1, "cached_input": 1, "output": 1},
+                "price_source": "s", "price_effective_date": "2026-01-01"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "usage.json"
+            for invalid in ({**base, "extra": 1}, {key: value for key, value in base.items() if key != "requests"},
+                            {**base, "price_date": "legacy"}):
+                path.write_text(json.dumps(invalid))
+                with self.assertRaises(ValueError):
+                    run_hil.parse_usage(path)
 
     def test_candidate_symlink_escape_is_rejected_before_commands(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
@@ -858,6 +921,183 @@ class HilOrchestrationTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertFalse(marker.exists())
+
+    def test_agent_mode_repairs_workspace_with_allowlisted_home_and_no_secret_evidence(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invocation = root / "agent-invocation.json"
+            agent_dir = root / "agent"
+            agent_dir.mkdir()
+            agent = executable_fixture(agent_dir, textwrap.dedent(f"""
+                import json, os, pathlib, sys
+                if '--version' in sys.argv: print('agent fixture 1'); raise SystemExit(0)
+                assert os.environ['HOME'] == 'HOME_SENTINEL'
+                assert os.environ['LABWIRED_HOME'] == 'LABWIRED_HOME_SENTINEL'
+                assert 'hidden' not in ' '.join(sys.argv).lower()
+                source = pathlib.Path('firmware/src/main.c')
+                source.write_text(source.read_text().replace('GPIO_MODE_INPUT', 'GPIO_MODE_OUTPUT'))
+                pathlib.Path({str(invocation)!r}).write_text(json.dumps({{'argv': sys.argv[1:], 'cwd': pathlib.Path.cwd().name}}))
+            """))
+            pio_dir = root / "pio"
+            pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, "import sys\nif '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
+            env = {**os.environ, "HOME": "HOME_SENTINEL", "LABWIRED_HOME": "LABWIRED_HOME_SENTINEL",
+                   "LABWIRED_ACCESS_TOKEN": "SECRET_TOKEN_SENTINEL"}
+            run_dir = root / "run"
+            result = self._run_cli(task, "--run-dir", run_dir, "--agent-bin", agent, "--model", "fixture/model",
+                                   "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", pio,
+                                   "--platformio", pio, env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            call = json.loads(invocation.read_text())
+            self.assertEqual(call["argv"][:4], ["agent", "run", "--model", "fixture/model"])
+            self.assertEqual(call["cwd"], "workspace")
+            manifest_text = (run_dir / "run.json").read_text()
+            self.assertNotIn("SECRET_TOKEN_SENTINEL", manifest_text)
+            manifest = json.loads(manifest_text)
+            self.assertEqual(manifest["model_status"], "pass")
+            self.assertNotEqual(manifest["hashes"]["source_initial"], manifest["hashes"]["source_final"])
+
+    def test_cli_physical_pass_uses_pty_and_records_ordered_evidence(self):
+        task = self._short_task()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            order = root / "order.log"
+            marker = root / "flash"
+            pio_dir = root / "pio"; pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, textwrap.dedent(f"""
+                import pathlib, sys, time
+                if '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)
+                order = pathlib.Path({str(order)!r})
+                target = sys.argv[sys.argv.index('--target') + 1] if '--target' in sys.argv else 'build'
+                with order.open('a') as out: out.write(target + '\\n')
+                project = pathlib.Path(sys.argv[sys.argv.index('--project-dir') + 1])
+                if target == 'build':
+                    artifact = project / '.pio/build/esp32s3/firmware.bin'; artifact.parent.mkdir(parents=True); artifact.write_bytes(b'fw')
+                if target == 'upload': pathlib.Path({str(marker)!r}).write_text('flash'); time.sleep(.1)
+            """))
+            identity_dir = root / "identity"; identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, f"from pathlib import Path\nwith Path({str(order)!r}).open('a') as out: out.write('identity\\n')\nprint('JTAG-1')\n")
+            openocd_dir = root / "openocd"; openocd_dir.mkdir()
+            openocd = executable_fixture(openocd_dir, textwrap.dedent(f"""
+                import pathlib, sys
+                if '--version' in sys.argv: print('openocd fixture 1'); raise SystemExit(0)
+                with pathlib.Path({str(order)!r}).open('a') as out: out.write('openocd\\n')
+                print('@@REG gpio2_output_enabled 0x60004020', file=sys.stderr)
+                print('0x60004020: 00000004', file=sys.stderr)
+                print('@@REG gpio2_output_high 0x60004004', file=sys.stderr)
+                print('0x60004004: 00000004', file=sys.stderr)
+            """))
+            master, slave = pty.openpty(); tty.setraw(slave)
+            run_dir = root / "run"
+            def writer():
+                deadline = time.monotonic() + 2
+                while not marker.exists() and time.monotonic() < deadline: time.sleep(.005)
+                nonce = (run_dir / "workspace/firmware/include/run_nonce.h").read_text().split('"')[1]
+                os.write(master, f"LABWIRED_READY:{nonce}\n".encode())
+            thread = threading.Thread(target=writer); thread.start()
+            try:
+                result = self._run_cli(task, "--run-dir", run_dir, "--evaluate-only", "--candidate", task / "public",
+                                       "--jtag-serial", "JTAG-1", "--uart-device", os.ttyname(slave),
+                                       "--openocd", openocd, "--platformio", pio,
+                                       "--identity-command-json", json.dumps([str(identity)]))
+            finally:
+                thread.join(2); os.close(master); os.close(slave)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertEqual(manifest["hardware_status"], "pass")
+            self.assertEqual(order.read_text().splitlines(), ["clean", "build", "identity", "upload", "openocd"])
+            self.assertEqual([phase["name"] for phase in manifest["phases"]],
+                             ["prepared", "clean", "build", "identity", "flash", "uart", "register"])
+            self.assertEqual(set(manifest["tool_versions"]), {"platformio", "openocd"})
+            self.assertTrue(all("executable" in item and "version" in item
+                                for item in manifest["tool_versions"].values()))
+            for artifact in manifest["artifacts"]:
+                path = run_dir / artifact
+                self.assertTrue(path.is_file())
+                self.assertEqual(manifest["hashes"][f"artifact:{artifact}"], sha256_file(path))
+
+    def test_clean_nonzero_is_infrastructure_and_never_touches_identity(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); marker = root / "identity-ran"
+            pio_dir = root / "pio"; pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, "import sys\nif '--version' in sys.argv: print('v'); raise SystemExit(0)\nraise SystemExit(7)\n")
+            identity_dir = root / "identity"; identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')\n")
+            openocd_dir = root / "openocd"; openocd_dir.mkdir()
+            openocd = executable_fixture(openocd_dir, "print('v')\n")
+            run_dir = root / "run"
+            result = self._run_cli(task, "--run-dir", run_dir, "--evaluate-only", "--candidate", task / "public",
+                                   "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", openocd,
+                                   "--platformio", pio, "--identity-command-json", json.dumps([str(identity)]))
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(marker.exists())
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertEqual((manifest["compile_status"], manifest["infrastructure_status"]), ("not_run", "error"))
+            self.assertEqual([phase["name"] for phase in manifest["phases"]], ["prepared", "clean"])
+
+    def test_cli_classifies_candidate_and_infrastructure_physical_failures(self):
+        task = self._short_task()
+        cases = (
+            ("flash", 9, True, 4, 0, "fail", "ok"),
+            ("nonce", 0, False, 4, 0, "fail", "ok"),
+            ("register", 0, True, 0, 0, "fail", "ok"),
+            ("identity", 0, True, 4, 0, "not_run", "error"),
+            ("lock", 0, True, 4, 0, "not_run", "error"),
+            ("openocd", 0, True, 4, 7, "not_run", "error"),
+        )
+        for name, flash_code, send_nonce, register_value, openocd_code, hardware, infrastructure in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); marker = root / "flash"
+                pio_dir = root / "pio"; pio_dir.mkdir()
+                pio = executable_fixture(pio_dir, textwrap.dedent(f"""
+                    import pathlib, sys, time
+                    if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                    target = sys.argv[sys.argv.index('--target') + 1] if '--target' in sys.argv else 'build'
+                    project = pathlib.Path(sys.argv[sys.argv.index('--project-dir') + 1])
+                    if target == 'build':
+                        artifact = project / '.pio/build/esp32s3/firmware.bin'; artifact.parent.mkdir(parents=True); artifact.write_bytes(b'fw')
+                    if target == 'upload': pathlib.Path({str(marker)!r}).write_text('x'); time.sleep(.05); raise SystemExit({flash_code})
+                """))
+                identity_dir = root / "identity"; identity_dir.mkdir()
+                identity = executable_fixture(identity_dir, f"print({('OTHER' if name == 'identity' else 'JTAG-1')!r})\n")
+                openocd_dir = root / "openocd"; openocd_dir.mkdir()
+                openocd = executable_fixture(openocd_dir, textwrap.dedent(f"""
+                    import sys
+                    if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                    if {openocd_code}: raise SystemExit({openocd_code})
+                    print('@@REG gpio2_output_enabled 0x60004020', file=sys.stderr); print('0x60004020: {register_value:08x}', file=sys.stderr)
+                    print('@@REG gpio2_output_high 0x60004004', file=sys.stderr); print('0x60004004: {register_value:08x}', file=sys.stderr)
+                """))
+                master, slave = pty.openpty(); tty.setraw(slave); run_dir = root / "run"
+                def writer():
+                    deadline = time.monotonic() + 2
+                    while not marker.exists() and time.monotonic() < deadline: time.sleep(.005)
+                    if send_nonce and marker.exists():
+                        nonce = (run_dir / "workspace/firmware/include/run_nonce.h").read_text().split('"')[1]
+                        os.write(master, f"LABWIRED_READY:{nonce}\n".encode())
+                thread = threading.Thread(target=writer); thread.start()
+                try:
+                    lock = (BoardLock(run_dir.parent / ".board-locks", "JTAG-1", timeout_seconds=.1)
+                            if name == "lock" else contextlib.nullcontext())
+                    with lock:
+                        cli = [task, "--run-dir", run_dir, "--evaluate-only", "--candidate", task / "public",
+                               "--jtag-serial", "JTAG-1", "--uart-device", os.ttyname(slave),
+                               "--openocd", openocd, "--platformio", pio,
+                               "--fixture-uart-timeout-seconds", ".3",
+                               "--identity-command-json", json.dumps([str(identity)])]
+                        if name == "lock":
+                            cli += ["--fixture-identity-timeout-seconds", ".3"]
+                        result = self._run_cli(*cli)
+                finally:
+                    thread.join(2); os.close(master); os.close(slave)
+                manifest = json.loads((run_dir / "run.json").read_text())
+                self.assertEqual(result.returncode, 2 if infrastructure == "error" else 0, result.stderr)
+                self.assertEqual((manifest["hardware_status"], manifest["infrastructure_status"]),
+                                 (hardware, infrastructure))
+                with BoardLock(run_dir.parent / ".board-locks", "JTAG-1", timeout_seconds=.1):
+                    pass
 
 
 if __name__ == "__main__":

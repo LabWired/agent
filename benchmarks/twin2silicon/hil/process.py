@@ -66,6 +66,23 @@ def run_command(
         )
         try:
             process.communicate(timeout=timeout_seconds)
+        except (KeyboardInterrupt, SystemExit) as interruption:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (PermissionError, ProcessLookupError):
+                pass
+            try:
+                process.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except (PermissionError, ProcessLookupError):
+                    pass
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+            raise interruption
         except subprocess.TimeoutExpired:
             timed_out = True
             try:
