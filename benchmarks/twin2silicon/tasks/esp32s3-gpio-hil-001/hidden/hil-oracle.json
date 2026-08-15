@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "platformio": {
+    "project_dir": "public/firmware",
+    "environment": "esp32s3"
+  },
+  "flash": {
+    "target": "upload",
+    "artifact": ".pio/build/esp32s3/firmware.bin",
+    "timeout_seconds": 120
+  },
+  "identity": {
+    "command": ["__LABWIRED_IDENTITY_RUNNER__"],
+    "expected_board": "esp32-s3-devkitc-1",
+    "timeout_seconds": 10
+  },
+  "uart": {
+    "ready_prefix": "LABWIRED_READY:",
+    "baud": 115200,
+    "timeout_seconds": 30
+  },
+  "openocd": {
+    "board_config": "esp32s3-builtin.cfg",
+    "startup_timeout_seconds": 20,
+    "command_timeout_seconds": 10
+  },
+  "register_assertions": [
+    {
+      "name": "gpio2_output_enabled",
+      "address": "0x60004020",
+      "mask": "0x00000004",
+      "expected": "0x00000004"
+    },
+    {
+      "name": "gpio2_output_high",
+      "address": "0x60004004",
+      "mask": "0x00000004",
+      "expected": "0x00000004"
+    }
+  ]
+}

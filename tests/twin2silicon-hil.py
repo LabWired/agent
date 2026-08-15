@@ -27,6 +27,78 @@ from benchmarks.twin2silicon.hil.results import (
 )
 
 
+class FixtureContractTests(unittest.TestCase):
+    def test_esp32s3_gpio_hil_fixture_contract(self):
+        task_root = (
+            REPOSITORY_ROOT
+            / "benchmarks"
+            / "twin2silicon"
+            / "tasks"
+            / "esp32s3-gpio-hil-001"
+        )
+        self.assertTrue(task_root.is_dir(), f"missing fixture: {task_root}")
+        task = json.loads((task_root / "task.json").read_text(encoding="utf-8"))
+        oracle = json.loads(
+            (task_root / task["hidden_oracle"]).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(task["schema_version"], "1.0")
+        self.assertEqual(task["id"], "esp32s3-gpio-hil-001")
+        self.assertEqual(task["board"], "esp32-s3-devkitc-1")
+        self.assertEqual(task["framework"], "espidf")
+        self.assertEqual(task["budgets"]["model_tokens"], 50000)
+        self.assertEqual(task["budgets"]["diagnostic_hil_runs"], 0)
+        self.assertEqual(oracle["schema_version"], "1.0")
+        self.assertEqual(oracle["uart"]["ready_prefix"], "LABWIRED_READY:")
+        self.assertEqual(
+            oracle["register_assertions"],
+            [
+                {
+                    "name": "gpio2_output_enabled",
+                    "address": "0x60004020",
+                    "mask": "0x00000004",
+                    "expected": "0x00000004",
+                },
+                {
+                    "name": "gpio2_output_high",
+                    "address": "0x60004004",
+                    "mask": "0x00000004",
+                    "expected": "0x00000004",
+                },
+            ],
+        )
+
+        public_files = sorted(
+            path for path in (task_root / task["public_dir"]).rglob("*") if path.is_file()
+        )
+        expected_public_files = {
+            "README.md",
+            "firmware/include/run_nonce.h",
+            "firmware/platformio.ini",
+            "firmware/sdkconfig.defaults",
+            "firmware/src/main.c",
+        }
+        self.assertEqual(
+            {str(path.relative_to(task_root / task["public_dir"])) for path in public_files},
+            expected_public_files,
+        )
+        public_text = "\n".join(path.read_text(encoding="utf-8") for path in public_files)
+        for hidden_detail in (
+            "0x60004020",
+            "0x60004004",
+            "0x00000004",
+            "esp32s3-builtin.cfg",
+            "openocd",
+            "mdw",
+        ):
+            with self.subTest(hidden_detail=hidden_detail):
+                self.assertNotIn(hidden_detail, public_text.lower())
+        main_source = (task_root / "public" / "firmware" / "src" / "main.c").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("gpio_set_direction(TEST_GPIO, GPIO_MODE_INPUT)", main_source)
+
+
 class ResultContractTests(unittest.TestCase):
     def test_run_result_infrastructure_error_marks_execution_not_run(self):
         result = RunResult.infrastructure_error("board_identity", "wrong adapter")

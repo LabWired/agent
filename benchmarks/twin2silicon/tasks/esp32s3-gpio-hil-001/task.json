@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "id": "esp32s3-gpio-hil-001",
+  "board": "esp32-s3-devkitc-1",
+  "framework": "espidf",
+  "model": "labwired/labwired-fast",
+  "budgets": {
+    "wall_time_seconds": 1200,
+    "model_tokens": 50000,
+    "repair_iterations": 6,
+    "simulator_runs": 0,
+    "diagnostic_hil_runs": 0
+  },
+  "public_dir": "public",
+  "hidden_oracle": "hidden/hil-oracle.json",
+  "firmware_elf": "firmware/.pio/build/esp32s3/firmware.elf"
+}
