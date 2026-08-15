@@ -1,0 +1,7 @@
+{
+  "greenfield-esp32c3": "Create PlatformIO Arduino firmware for ESP32-C3 DevKitM-1 that blinks the configured LED once per second and prints `alive` over serial. Ground every hardware-sensitive fact in returned project, part, datasheet, SDK, SVD, schematic, or netlist evidence. Compile, verify in the provisioned twin, and report only observed evidence.",
+  "existing-stm32f103": "Add a one-second heartbeat without restructuring this STM32F103 project. Ground pin and register choices in returned project, part, datasheet, SDK, SVD, schematic, or netlist evidence. Preserve layout, compile, verify in the provisioned twin, and report only observed evidence.",
+  "compile-recovery-esp32c3": "Create PlatformIO Arduino firmware for ESP32-C3 DevKitM-1 that blinks the configured LED once per second and prints `alive` over serial. Keep the deliberate compiler error initially, use its diagnostic for one focused repair, then compile, verify in the provisioned twin, and report only observed evidence.",
+  "partial-led-wifi": "Create ESP32-C3 firmware that blinks the LED once per second and associates with Wi-Fi. Ground hardware facts, compile, verify what the provisioned twin can observe, and report LED and Wi-Fi coverage separately without inflating missing coverage.",
+  "unsupported-custom-board": "Build this unsupported custom-board firmware. Ground available hardware facts, compile, attempt the available verification path, and state the physical-confirmation ceiling exactly; never claim model or hardware verification without oracle evidence."
+}

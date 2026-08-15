@@ -51,7 +51,8 @@ expected_stages="$(printf '%s\n' \
   hosted-auth-probe doctor whoami assert-fixed assert-broken live-gate1 \
   compose-uart compose-job compose-job-validate knowledge-top-parts \
   knowledge-top-parts-local golden-path-entry golden-path-default \
-  skills-verify-all import-diagram import-multi desk-hw knowledge-mcp | sort)"
+  skills-verify-all import-diagram import-multi desk-hw knowledge-mcp \
+  develop-agent | sort)"
 actual_stages="$(sed -E -n \
   's/^[[:space:]]*(if |&& )?run_stage "([a-z][a-z0-9-]*)".*/\2/p' \
   "$SHIP_GATE" | sort)"

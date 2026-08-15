@@ -1,0 +1,6 @@
+{"type":"tool","id":"e1","tool":"labwired_context","result":{"project":"fixture"}}
+{"type":"tool","id":"e2","tool":"labwired_part","result":{"citation":"https://docs.example.invalid/esp32c3#gpio8"}}
+{"type":"tool","id":"e3","tool":"write","result":{"path":"src/main.cpp"}}
+{"type":"tool","id":"e4","tool":"labwired_compile","result":{"ok":true}}
+{"type":"tool","id":"e5","tool":"labwired_verify","result":{"ok":true,"status":"model_verified"}}
+{"type":"final","id":"e6","claim":"model_verified","text":"Model verification passed."}
