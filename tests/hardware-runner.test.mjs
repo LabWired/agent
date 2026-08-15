@@ -36,7 +36,7 @@ async function fixture(overrides = {}) {
     flash: { provider: 'platformio' },
     observations: [
       { id: 'heartbeat', provider: 'serial', contains: 'alive', requiredLevel: 'hardware_observed' },
-      { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 1, requiredLevel: 'hardware_observed' },
+      { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'saleae-logic16', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 1, requiredLevel: 'hardware_observed' },
     ],
     ...overrides,
   };

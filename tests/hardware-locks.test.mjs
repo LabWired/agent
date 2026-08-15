@@ -46,9 +46,17 @@ test('same-process competing handle refuses an already held identity', async (t)
 
 test('logic analyzer identities use the same exclusive provider lock', async (t) => {
   const root = await temporaryRoot(t);
-  const first = await acquireHardwareLocks({ 'instrument-led': 'sigrok:usb:analyzer-1' }, { root });
+  const first = await acquireHardwareLocks({ 'instrument-led': 'sigrok:usb:analyzer-1', 'instrument-clock': 'sigrok:usb:analyzer-1' }, { root });
   t.after(() => first.release());
+  assert.equal(first.records.length, 1);
   await assert.rejects(acquireHardwareLocks({ 'instrument-other': 'sigrok:usb:analyzer-1' }, { root }), /live hardware lock/i);
+});
+
+test('different analyzer identities acquire separate deterministic locks', async (t) => {
+  const root = await temporaryRoot(t);
+  const handle = await acquireHardwareLocks({ 'instrument-led': 'sigrok:usb:analyzer-1', 'instrument-clock': 'sigrok:usb:analyzer-2' }, { root });
+  t.after(() => handle.release());
+  assert.equal(handle.records.length, 2);
 });
 
 test('child-process live lock is not stolen', async (t) => {

@@ -39,7 +39,7 @@
       "valueColumn": "gpio8",
       "captureProvider": "sigrok-cli",
       "instrumentId": "${LOGIC_INSTRUMENT_ID}",
-      "driver": "demo",
+      "driver": "${LOGIC_DRIVER}",
       "sourceChannel": "D0",
       "sampleRateHz": 1000,
       "durationSeconds": 3,

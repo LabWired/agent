@@ -45,7 +45,7 @@ function minimal(overrides = {}) {
 
 function trustedLogic(overrides = {}) {
   return { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 1,
-    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
+    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'saleae-logic16', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
     requiredLevel: 'hardware_observed', ...overrides };
 }
 
@@ -172,6 +172,13 @@ test('normalizes and freezes optional positive logic frequency bounds', async ()
       assert.throws(() => validateHardwareProfile(value, profilePath), /frequency/);
     }
   });
+});
+
+test('hardware logic rejects synthetic and replay drivers case-insensitively', async () => {
+  for (const driver of ['demo', 'DEMO', 'csv', 'input', 'Replay', 'VIRTUAL', 'null']) {
+    const value = minimal({ target: { id: 'desk', chip: 'esp32c3', probeSerial: 'probe', serialPort: '/dev/tty0' }, observations: [trustedLogic({ driver })] });
+    await withProfile(value, async ({ profilePath }) => assert.throws(() => validateHardwareProfile(value, profilePath), /physical logic analyzer driver/));
+  }
 });
 
 test('rejects traversal and symlink escapes from the workspace', async () => {

@@ -100,10 +100,10 @@ test('logic analyzer enumeration requires one exact provider-owned instrument id
   const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-instrument-')); activeRoots.push(root);
   await writeFile(path.join(root, 'pio'), '#!/usr/bin/env bash\nprintf \'[{"port":"/dev/tty0","serialNumber":"probe"}]\\n\'\n', { mode: 0o755 });
   const sigrok = path.join(root, 'sigrok-cli');
-  const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio', workspace: root }, flash: { provider: 'platformio' }, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'hardware_observed', driver: 'demo', instrumentId: 'analyzer-1' }] };
-  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'demo - analyzer-1\\n\'\n', { mode: 0o755 });
+  const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio', workspace: root }, flash: { provider: 'platformio' }, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'hardware_observed', driver: 'saleae-logic16', instrumentId: 'analyzer-1' }] };
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16 - analyzer-1\\n\'\n', { mode: 0o755 });
   const exact = await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } });
   assert.equal(exact.length, 1); assert.equal(exact[0].instruments['instrument-led'], 'analyzer-1');
-  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'demo - analyzer-1\\ndemo - analyzer-1\\n\'\n', { mode: 0o755 });
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16 - analyzer-1\\nsaleae-logic16 - analyzer-1\\n\'\n', { mode: 0o755 });
   assert.deepEqual(await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } }), []);
 });

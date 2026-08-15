@@ -17,6 +17,7 @@ const fs = require('node:fs');
 try {
   const p = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
   const ambiguous = new Set(['auto', 'first', 'any', 'default']);
+  const physicalLogicDrivers = new Set(['saleae-logic16','fx2lafw','dreamsourcelab-dslogic','kingst-la2016']);
   const explicit = v => typeof v === 'string' && v.trim() && !ambiguous.has(v.trim().toLowerCase());
   if (!explicit(p?.target?.id) || !explicit(p?.target?.probeSerial) || !explicit(p?.target?.serialPort)) throw 'explicit target, probeSerial, and serialPort are required';
   if (p?.build?.provider !== 'platformio' || !explicit(p?.build?.environment)) throw 'exact PlatformIO build is required';
@@ -31,6 +32,7 @@ try {
   if (led?.provider !== 'logic-csv' || led.requiredLevel !== 'hardware_observed'
       || !Number.isInteger(led.channel) || led.channel < 0 || !explicit(led.timeColumn) || !explicit(led.valueColumn)
       || led.captureProvider !== 'sigrok-cli' || !explicit(led.instrumentId) || !explicit(led.driver) || !explicit(led.sourceChannel)
+      || led.driver.includes('${') || !physicalLogicDrivers.has(led.driver.toLowerCase())
       || !Number.isInteger(led.sampleRateHz) || led.sampleRateHz < 1 || !Number.isFinite(led.durationSeconds) || led.durationSeconds <= 0
       || !Number.isInteger(led.edgeCountAtLeast) || led.edgeCountAtLeast < 1
       || !Number.isFinite(led.frequencyMinHz) || led.frequencyMinHz <= 0
@@ -110,8 +112,9 @@ cat >"$WORK/bin/sigrok-cli" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == '--version' ]]; then echo 'sigrok-cli acceptance-fake-1'; exit 0; fi
-if [[ "${1:-}" == '--scan' ]]; then printf 'demo - acceptance-logic\n'; exit 0; fi
+if [[ "${1:-}" == '--scan' ]]; then printf 'saleae-logic16 - acceptance-logic\n'; exit 0; fi
 out=''
+all=" $* "; [[ "$all" == *' --config samplerate=1000 '* && "$all" == *' --samples 3000 '* ]] || exit 65
 while [[ $# -gt 0 ]]; do [[ "$1" == '--output-file' ]] && { out="$2"; shift 2; continue; }; shift; done
 [[ -n "$out" && ! -e "$out" ]]
 case "$(cat "${TMP}/labwired-logic-mode")" in
@@ -168,7 +171,7 @@ instantiate() {
   case "$logic" in flat) printf flat >"$WORK/labwired-logic-mode" ;; malformed) printf malformed >"$WORK/labwired-logic-mode" ;; pass) printf pass >"$WORK/labwired-logic-mode" ;; *) return 64 ;; esac
   rm -f "$WORK/project/logic.csv"
   cp "$TEMPLATE" "$WORK/project/hardware.json"
-  sed -i.bak -e 's/${TARGET_ID}/acceptance-c3/g' -e 's/${PROBE_SERIAL}/acceptance-probe/g' -e 's/${SERIAL_PORT}/acceptance-port/g' -e 's/${LOGIC_INSTRUMENT_ID}/acceptance-logic/g' "$WORK/project/hardware.json"
+  sed -i.bak -e 's/${TARGET_ID}/acceptance-c3/g' -e 's/${PROBE_SERIAL}/acceptance-probe/g' -e 's/${SERIAL_PORT}/acceptance-port/g' -e 's/${LOGIC_INSTRUMENT_ID}/acceptance-logic/g' -e 's/${LOGIC_DRIVER}/saleae-logic16/g' "$WORK/project/hardware.json"
   rm -f "$WORK/project/hardware.json.bak"
   printf '[env:esp32-c3-devkitm-1]\nplatform = espressif32\nboard = esp32-c3-devkitm-1\nframework = arduino\n' >"$WORK/project/platformio.ini"
   printf 'board: esp32c3\n' >"$WORK/project/system.yaml"
@@ -194,6 +197,7 @@ strict_semantic_block weak-heartbeat 'p.observations.find(o=>o.id==="heartbeat")
 strict_semantic_block no-led 'p.observations=p.observations.filter(o=>o.id!=="led")' 'hardware LED logic behavior with frequency bounds is required'
 strict_semantic_block weak-led 'delete p.observations.find(o=>o.id==="led").frequencyMaxHz' 'hardware LED logic behavior with frequency bounds is required'
 strict_semantic_block replay-led 'const o=p.observations.find(o=>o.id==="led");delete o.captureProvider;delete o.instrumentId;delete o.driver;delete o.sourceChannel;delete o.sampleRateHz;delete o.durationSeconds;o.file="logic/led-pass.csv"' 'hardware LED logic behavior with frequency bounds is required'
+strict_semantic_block synthetic-led 'p.observations.find(o=>o.id==="led").driver="DEMO"' 'hardware LED logic behavior with frequency bounds is required'
 strict_semantic_block no-wifi 'p.observations=p.observations.filter(o=>o.id!=="wifi")' 'hardware Wi-Fi challenge behavior is required'
 strict_semantic_block substituted-wifi 'p.observations.find(o=>o.id==="wifi").id="network-ok"' 'hardware Wi-Fi challenge behavior is required'
 

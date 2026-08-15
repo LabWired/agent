@@ -97,6 +97,9 @@ absolute paths, `..`, symlink escapes, unknown keys/providers, inline secrets,
 and credentials embedded in URLs or authorization strings are rejected. Put
 credentials in the provider's native secret store or process environment, not
 in the profile. Do not commit a machine-filled physical profile.
+Synthetic/replay drivers (`demo`, CSV/input, virtual, replay, or null) are
+rejected for hardware claims; the acceptance template's `${LOGIC_DRIVER}` must
+be replaced with a supported physical analyzer driver.
 
 Planning is read-only. It resolves provider versions and exact device
 identities and prints a SHA-256 digest:

@@ -58,7 +58,7 @@ function harness(onRun, overrides = {}) {
 
 function trustedLogic(overrides = {}) {
   return { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 'time', valueColumn: 'CH0', edgeCountAtLeast: 3,
-    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
+    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'saleae-logic16', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
     timeoutSeconds: 5, requiredLevel: 'hardware_observed', ...overrides };
 }
 
@@ -205,7 +205,9 @@ test('logic CSV proves real transitions and frequency independently of serial te
   assert.equal(result.level, 'hardware_observed');
   assert.equal(result.transitions, 3);
   assert.equal(result.frequencyHz, 1);
-  assert.deepEqual(calls[0].descriptor.args.slice(0, 8), ['--driver', 'demo:conn=analyzer-1', '--channels', 'D0', '--samples', '2000', '--output-format', 'csv']);
+  assert.deepEqual(calls[0].descriptor.args.slice(0, 10), ['--driver', 'saleae-logic16:conn=analyzer-1', '--channels', 'D0', '--config', 'samplerate=1000', '--samples', '2000', '--output-format', 'csv']);
+  assert.equal(calls[0].descriptor.env.API_TOKEN, undefined); assert.equal(calls[0].descriptor.env.NODE_OPTIONS, undefined);
+  assert.equal(calls[0].descriptor.env.PATH, '/trusted');
   assert.deepEqual(result.rawEvidenceRefs, ['observations/led.csv', 'observations/led.json']);
   const rawLogic = await readFile(path.join(bundle, result.rawEvidenceRefs[0]), 'utf8');
   assert.match(rawLogic, /0\.5,1/);
