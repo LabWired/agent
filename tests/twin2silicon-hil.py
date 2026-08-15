@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import pty
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -771,6 +772,92 @@ class OpenOcdExecutionTests(unittest.TestCase):
             result = self._run(directory, body, timeout=.5)
             self.assertEqual(result.status, "infrastructure_error")
             self.assertEqual(terminated.read_text(), "terminated")
+
+
+class HilOrchestrationTests(unittest.TestCase):
+    def _run_cli(self, *arguments, env=None):
+        return subprocess.run(
+            [sys.executable, str(REPOSITORY_ROOT / "benchmarks/twin2silicon/run_hil.py"), *map(str, arguments)],
+            cwd=REPOSITORY_ROOT, text=True, capture_output=True, env=env,
+        )
+
+    def test_evaluate_only_prepares_isolated_workspace_and_records_compile_failure(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            shutil.copytree(task / "public", candidate)
+            invocations = root / "pio-invocations"
+            tool_dir = root / "pio"
+            tool_dir.mkdir()
+            platformio = executable_fixture(tool_dir, textwrap.dedent(f"""
+                import sys
+                from pathlib import Path
+                with Path({str(invocations)!r}).open('a') as output:
+                    output.write(json.dumps(sys.argv[1:]) + '\\n')
+                raise SystemExit(0 if 'clean' in sys.argv else 1)
+            """).replace("import sys\n", "import json, sys\n"))
+            identity = executable_fixture(root, "raise AssertionError('identity must not run')\n")
+            run_dir = root / "run"
+            result = self._run_cli(
+                task, "--run-dir", run_dir, "--evaluate-only", "--candidate", candidate,
+                "--jtag-serial", "JTAG-1", "--uart-device", "/dev/null",
+                "--openocd", identity, "--platformio", platformio,
+                "--identity-command-json", json.dumps([str(identity)]),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertEqual((manifest["compile_status"], manifest["hardware_status"]), ("fail", "not_run"))
+            pio_commands = [json.loads(line) for line in invocations.read_text().splitlines()]
+            self.assertEqual(len(pio_commands), 2)
+            self.assertEqual(pio_commands[0][-2:], ["--target", "clean"])
+            nonce_header = (run_dir / "workspace/firmware/include/run_nonce.h").read_text()
+            nonce = nonce_header.split('"')[1]
+            self.assertRegex(nonce, r"^[0-9a-f]{32}$")
+            self.assertNotIn("hidden", {path.name for path in (run_dir / "workspace").rglob("*")})
+            self.assertNotEqual(manifest["hashes"]["source_initial"], "")
+            self.assertEqual(manifest["hashes"]["source_initial"], manifest["hashes"]["source_final"])
+            self.assertTrue(all(not Path(path).is_absolute() for path in manifest["artifacts"]))
+            self.assertEqual(self._run_cli(
+                task, "--run-dir", run_dir, "--evaluate-only", "--candidate", candidate,
+                "--jtag-serial", "JTAG-1", "--uart-device", "/dev/null", "--openocd", identity,
+            ).returncode, 2)
+
+    def test_usage_cost_is_exact_and_rejects_boolean_numbers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            usage = root / "usage.json"
+            usage.write_text(json.dumps({
+                "requests": 2, "tokens": {"fresh_input": 100, "cached_input": 200,
+                "output": 300, "reasoning": 40}, "final_context_tokens": 55,
+                "latency_seconds": 1.25, "provider": "fixture", "model": "m",
+                "rates_usd_per_million": {"fresh_input": 10, "cached_input": 1, "output": 20},
+                "price_source": "fixture", "price_date": "2026-01-01"
+            }))
+            sys.path.insert(0, str(REPOSITORY_ROOT / "benchmarks/twin2silicon"))
+            import run_hil
+            cost = run_hil.parse_usage(usage)
+            self.assertEqual(cost["cost_usd"], 0.0072)
+            usage.write_text(usage.read_text().replace('"requests": 2', '"requests": true'))
+            with self.assertRaises(ValueError):
+                run_hil.parse_usage(usage)
+
+    def test_candidate_symlink_escape_is_rejected_before_commands(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            candidate.mkdir()
+            (candidate / "escape").symlink_to(task / "hidden")
+            marker = root / "ran"
+            tool = executable_fixture(root, f"Path({str(marker)!r}).write_text('ran')\n")
+            result = self._run_cli(
+                task, "--run-dir", root / "run", "--evaluate-only", "--candidate", candidate,
+                "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", tool,
+                "--platformio", tool,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

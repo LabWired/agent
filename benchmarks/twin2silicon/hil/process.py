@@ -6,7 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import time
-from typing import Sequence, Union
+from typing import Mapping, Optional, Sequence, Union
 
 from .results import CommandResult, PathLike
 
@@ -42,6 +42,7 @@ def run_command(
     stdout_path: PathLike,
     stderr_path: PathLike,
     timeout_seconds: float,
+    env: Optional[Mapping[str, str]] = None,
 ) -> CommandResult:
     normalized_command = tuple(os.fspath(part) for part in command)
     normalized_cwd = str(Path(cwd).resolve())
@@ -61,6 +62,7 @@ def run_command(
             stdout=stdout,
             stderr=stderr,
             start_new_session=True,
+            env=env,
         )
         try:
             process.communicate(timeout=timeout_seconds)
