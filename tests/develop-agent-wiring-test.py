@@ -22,4 +22,6 @@ assert all("hardware_sensitive_facts" in prompt and "citation token returned" in
 assert all("Do not delegate" in prompt and "this session" in prompt for prompt in prompts.values())
 assert "call labwired_verify directly" in prompts["greenfield-esp32c3"]
 assert "do not start with labwired_run" in prompts["greenfield-esp32c3"]
+assert "output summary" in prompts["greenfield-esp32c3"]
+assert "never request full" in prompts["greenfield-esp32c3"]
 print("ok   develop-agent wiring")
