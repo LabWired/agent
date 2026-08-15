@@ -642,11 +642,13 @@ class UartNonceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "uart.log"
             cancel = threading.Event()
+            started = threading.Event()
             result = []
             thread = threading.Thread(target=lambda: result.append(
-                capture_uart_nonce(device, 115200, "nonce", 30, log, cancel_event=cancel)))
+                capture_uart_nonce(device, 115200, "nonce", 30, log, cancel_event=cancel,
+                                   started_event=started)))
             thread.start()
-            time.sleep(.05)
+            self.assertTrue(started.wait(.5))
             cancel.set()
             thread.join(.5)
             self.assertFalse(thread.is_alive())

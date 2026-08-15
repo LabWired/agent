@@ -278,7 +278,8 @@ class UartResult:
 
 def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds: float,
                        log: PathLike, *, max_bytes: int = 65536,
-                       cancel_event: Optional[threading.Event] = None) -> UartResult:
+                       cancel_event: Optional[threading.Event] = None,
+                       started_event: Optional[threading.Event] = None) -> UartResult:
     fd = os.open(device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     try:
         speeds = {9600: termios.B9600, 115200: termios.B115200}
@@ -292,6 +293,8 @@ def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds:
         attrs[4] = attrs[5] = speeds[baud]
         attrs[2] = (attrs[2] & ~(termios.CSIZE | termios.PARENB | termios.CSTOPB)) | termios.CS8 | termios.CLOCAL | termios.CREAD
         termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        if started_event is not None:
+            started_event.set()
         deadline = time.monotonic() + timeout_seconds
         captured = bytearray()
         pending = bytearray()

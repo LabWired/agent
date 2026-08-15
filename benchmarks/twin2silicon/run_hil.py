@@ -327,15 +327,20 @@ def main(argv: list[str] | None = None) -> int:
                 raise RuntimeError(identity.detail or "board identity failed")
             persist()
             cancel_uart = threading.Event()
+            started_uart = threading.Event()
             def capture_cancellable() -> None:
                 try:
                     uart_result["value"] = capture_uart_nonce(args.uart_device, config.uart_baud, nonce,
                                                               config.uart_timeout_seconds, run_dir / "uart.raw.log",
-                                                              cancel_event=cancel_uart)
+                                                              cancel_event=cancel_uart, started_event=started_uart)
                 except BaseException as error:
                     uart_error.append(error)
             uart_thread = threading.Thread(target=capture_cancellable, name="hil-uart", daemon=False)
             uart_thread.start()
+            if not started_uart.wait(1):
+                cancel_uart.set()
+                uart_thread.join(1)
+                raise RuntimeError(f"UART capture failed to start: {uart_error[0] if uart_error else 'startup timeout'}")
             try:
                 flash_command = [args.platformio, "run", "--project-dir", str(firmware), "--environment",
                                  config.platformio_environment or "esp32s3", "--target", config.flash_target]
