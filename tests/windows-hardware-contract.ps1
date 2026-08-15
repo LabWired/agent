@@ -81,3 +81,4 @@ public static class FakeNode {
  $env:LABWIRED_TEST_HW_FAIL='1';$r=Run @('serial-capture','COM7','115200','ready','1');if($r.Code -ne 9){throw 'native failure exit was not preserved'}
  Write-Host 'ok   windows-hardware-contract PASS'
 }finally{if($oldPath){$env:PATH=$oldPath};Remove-Item Env:LABWIRED_TEST_HW_FAIL,Env:LABWIRED_TEST_HW_LOG,Env:LABWIRED_PROBE_RS,Env:LABWIRED_TEST_DEVICE_FILE,Env:LABWIRED_TEST_UPLOAD_LOG,Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue;Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
+exit 0
