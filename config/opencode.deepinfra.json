@@ -48,7 +48,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "DeepInfra",
       "options": {
-        "baseURL": "https://api.deepinfra.com/v1/openai",
+        "baseURL": "https://api.deepinfra.com/v1",
         "apiKey": "{env:DEEPINFRA_API_KEY}"
       },
       "models": {

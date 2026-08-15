@@ -70,6 +70,10 @@ for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
   done
 done
 
+deepinfra_base="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["provider"]["deepinfra"]["options"]["baseURL"])' "$ROOT/config/opencode.deepinfra.json")"
+[[ "$deepinfra_base" == "https://api.deepinfra.com/v1" ]] \
+  && pass "DeepInfra OpenCode base URL" || bad "DeepInfra OpenCode base URL: $deepinfra_base"
+
 n=$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
 # 7 domain packs + customize-labwired-agent + 14 superpowers = 22
 if [[ "$n" -eq 22 ]]; then
