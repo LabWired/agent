@@ -7,10 +7,10 @@ $engine=(Get-Process -Id $PID).Path
 function Run-Real([string]$helper,[string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n")}}
 $workspace=Join-Path $temp 'real-work';New-Item -ItemType Directory -Path $workspace|Out-Null;Set-Content (Join-Path $workspace 'platformio.ini') '[env:release]' -Encoding ASCII
 $artifact=Join-Path $temp 'firmware.bin';[IO.File]::WriteAllBytes($artifact,[Text.Encoding]::ASCII.GetBytes('exact-bin'));$sha=(Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-$pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog
+$pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$deviceJson=Join-Path $temp 'devices.json';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog;$env:LABWIRED_TEST_DEVICE_FILE=$deviceJson
 Set-Content $pio @'
 @echo off
-if "%1 %2"=="device list" echo %LABWIRED_TEST_DEVICE_JSON%& exit /b 0
+if "%1 %2"=="device list" type "%LABWIRED_TEST_DEVICE_FILE%"& exit /b 0
 echo %*>>"%LABWIRED_TEST_UPLOAD_LOG%"
 exit /b 0
 '@ -Encoding ASCII
@@ -20,8 +20,8 @@ foreach($case in @(
   @{Probe='probe-1';Json='[{"port":"COM7","description":"adapter SERIAL=xprobe-1"}]'},
   @{Probe='probe.+[1]';Json='[{"port":"COM7","hwid":"USB SER=probeZZ1"}]'},
   @{Probe='probe-1';Json='[{"port":"COM7","serialNumber":"probe-1"},{"port":"COM7","serialNumber":"probe-1"}]'}
-)){$env:LABWIRED_TEST_DEVICE_JSON=$case.Json;$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe',$case.Probe));if($r.Code -eq 0){throw 'real flash helper accepted an inexact or duplicate identity'};if(Test-Path $uploadLog){throw 'real flash helper uploaded before exact identity validation'}}
-$env:LABWIRED_TEST_DEVICE_JSON='[{"port":"COM7","serialNumber":"probe-1"}]'
+)){Set-Content -LiteralPath $deviceJson -Value $case.Json -Encoding ASCII;$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe',$case.Probe));if($r.Code -eq 0){throw 'real flash helper accepted an inexact or duplicate identity'};if(Test-Path $uploadLog){throw 'real flash helper uploaded before exact identity validation'}}
+Set-Content -LiteralPath $deviceJson -Value '[{"port":"COM7","serialNumber":"probe-1"}]' -Encoding ASCII
 $stageDir=Join-Path $workspace '.pio\build\release';New-Item -ItemType Directory -Path $stageDir -Force|Out-Null;$stage=Join-Path $stageDir 'firmware.bin';$original=[byte[]](0,255,1,254,2,253);[IO.File]::WriteAllBytes($stage,$original)
 $r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe','probe-1'));if($r.Code -ne 0){throw ('real flash success failed: '+$r.Out)}
 if((Get-Content $uploadLog -Raw).Trim() -cne 'run -e release -t nobuild -t upload --upload-port COM7'){throw 'real flash used unexpected PlatformIO argv'}
@@ -78,4 +78,4 @@ public static class FakeNode {
  $env:PATH=$oldPath;Remove-Item Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue
  $env:LABWIRED_TEST_HW_FAIL='1';$r=Run @('serial-capture','COM7','115200','ready','1');if($r.Code -ne 9){throw 'native failure exit was not preserved'}
  Write-Host 'ok   windows-hardware-contract PASS'
-}finally{if($oldPath){$env:PATH=$oldPath};Remove-Item Env:LABWIRED_TEST_HW_FAIL,Env:LABWIRED_TEST_HW_LOG,Env:LABWIRED_PROBE_RS,Env:LABWIRED_TEST_DEVICE_JSON,Env:LABWIRED_TEST_UPLOAD_LOG,Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue;Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
+}finally{if($oldPath){$env:PATH=$oldPath};Remove-Item Env:LABWIRED_TEST_HW_FAIL,Env:LABWIRED_TEST_HW_LOG,Env:LABWIRED_PROBE_RS,Env:LABWIRED_TEST_DEVICE_FILE,Env:LABWIRED_TEST_UPLOAD_LOG,Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue;Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
