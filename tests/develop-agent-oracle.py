@@ -7,22 +7,17 @@ import hashlib
 import re
 import sys
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 
-CONTEXT = {"labwired_context", "context"}
-GROUNDING_WORDS = ("part", "datasheet", "search", "sdk", "svd", "schematic", "netlist", "project")
-COMPILE_WORDS = ("compile", "build", "pio run", "platformio", "make")
-VERIFY_WORDS = ("verify", "test")
-RUN_WORDS = ("labwired_run", "firmware run", "simulate", "twin run", "run firmware")
-INSPECT_WORDS = ("inspect", "observe", "trace", "uart", "marker")
-EDIT_WORDS = ("write", "edit", "patch", "apply_patch")
-FLASH_WORDS = ("flash", "probe", "desk_hw", "desk-hw")
+CONTEXT_TOOLS = {"labwired_context"}
+GROUNDING_TOOLS = {"labwired_part", "labwired_datasheet", "labwired_search", "labwired_sdk", "labwired_svd", "labwired_schematic", "labwired_netlist", "labwired_project"}
+COMPILE_TOOLS = {"labwired_compile", "labwired_build"}
+VERIFY_TOOLS = {"labwired_verify", "labwired_test"}
+RUN_TOOLS = {"labwired_run", "labwired_simulate", "labwired_twin_run"}
+INSPECT_TOOLS = {"labwired_inspect", "labwired_observe", "labwired_trace", "labwired_uart", "labwired_marker"}
+EDIT_TOOLS = {"labwired_edit", "labwired_write", "labwired_patch", "write", "edit", "apply_patch"}
+FLASH_TOOLS = {"labwired_flash", "labwired_probe", "labwired_desk_hw"}
 SOURCE_KEYS = {"citation", "citations", "source", "sources", "url", "document", "datasheet", "path", "reference", "references"}
-SECRET_QUERY = re.compile(
-    r"^(?:token|key|secret|signature|sig|credential|authorization|api[_-]?key|access[_-]?token|"
-    r"security[_-]?token|x-amz-(?:signature|credential|security-token)|x-goog-(?:signature|credential))$",
-    re.I,
-)
 SECRET_TEXT = re.compile(
     r"(?i)(?:bearer\s+[a-z0-9._~+/=-]+|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|"
     r"(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*[^\s,;]+|"
@@ -37,26 +32,6 @@ HARDWARE_FACT = re.compile(
 
 class Rejected(ValueError):
     pass
-
-
-def contains(name: str, words: tuple[str, ...]) -> bool:
-    lowered = name.lower().replace("-", "_")
-    return any(word.replace("-", "_") in lowered for word in words)
-
-
-def action_text(event: dict, name: str) -> str:
-    pieces = [name]
-    for key, value in walk(event):
-        if str(key).lower() in {"command", "cmd", "input", "args", "path", "file"}:
-            if isinstance(value, (str, int, float)):
-                pieces.append(str(value))
-            elif isinstance(value, dict):
-                pieces.append(json.dumps(value, sort_keys=True))
-    return " ".join(pieces)
-
-
-def action_contains(event: dict, name: str, words: tuple[str, ...]) -> bool:
-    return contains(action_text(event, name), words)
 
 
 def walk(value):
@@ -153,6 +128,32 @@ def returned_payloads(event: dict) -> list[object]:
     return payloads
 
 
+def authoritative_event(event: dict) -> bool:
+    """A canonical tool call must have explicit runtime outcome and output."""
+    return outcome(event) is not None and any(payload not in (None, "", {}, []) for payload in returned_payloads(event))
+
+
+def authoritative_phase(event: dict, phase: str) -> bool:
+    if not authoritative_event(event):
+        return False
+    result = outcome(event)
+    # Explicit failures are authoritative evidence for recovery/unsupported
+    # ceilings even though they do not carry a success artifact.
+    if result is False:
+        return True
+    returned = json.dumps(returned_payloads(event), ensure_ascii=False).lower()
+    schemas = {
+        "context": r"\b(?:project|workspace|context)\b",
+        "compile": r"[a-z0-9_./-]+\.(?:elf|bin|hex|uf2)\b",
+        "verify": r"\bmodel_verified\b|[a-z0-9_./-]+\.verify\.json\b",
+        "run": r"\b(?:run_id|run-id|evidence_id)\b|[a-z0-9_./-]+\.run\.json\b",
+        "inspect": r"\b(?:marker|trace|uart|gpio|evidence_id)\b|[a-z0-9_./-]+\.inspect\.json\b",
+        "edit": r"\b(?:path|file|patch|edited|written)\b",
+        "flash": r"\b(?:flash_id|probe_id|firmware_ref|artifact)\b|[a-z0-9_./-]+\.(?:elf|bin|hex|uf2)\b",
+    }
+    return re.search(schemas[phase], returned) is not None
+
+
 def citations(event: dict) -> list[str]:
     found: list[str] = []
     payloads = returned_payloads(event)
@@ -179,12 +180,15 @@ def citations(event: dict) -> list[str]:
 
 
 def sanitize_citation(text: str) -> str:
-    text = SECRET_TEXT.sub("[redacted]", text)
     if text.startswith(("http://", "https://")):
-        split = urlsplit(text)
-        query = urlencode([(k, "[redacted]" if SECRET_QUERY.match(k) else v) for k, v in parse_qsl(split.query, keep_blank_values=True)])
-        text = urlunsplit((split.scheme, split.netloc, split.path, query, ""))
-    return text
+        try:
+            split = urlsplit(text)
+            host = split.hostname or ""
+            port = f":{split.port}" if split.port else ""
+            return urlunsplit((split.scheme, host + port, split.path, "", ""))
+        except ValueError:
+            return "[redacted-invalid-url]"
+    return SECRET_TEXT.sub("[redacted]", text)
 
 
 def final_event(events: list[dict]) -> dict:
@@ -232,13 +236,13 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if not tools:
         raise Rejected("structured tool events required; prose/self-report is not evidence")
 
-    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT or contains(n, ("context",))]
-    grounding = [(i, e, n) for i, e, n in tools if action_contains(e, n, GROUNDING_WORDS) and citations(e)]
-    compiles = [(i, e, n) for i, e, n in tools if action_contains(e, n, COMPILE_WORDS)]
-    verifies = [(i, e, n) for i, e, n in tools if action_contains(e, n, VERIFY_WORDS)]
-    runs = [(i, e, n) for i, e, n in tools if action_contains(e, n, RUN_WORDS)]
-    inspects = [(i, e, n) for i, e, n in tools if action_contains(e, n, INSPECT_WORDS)]
-    edits = [(i, e, n) for i, e, n in tools if action_contains(e, n, EDIT_WORDS)]
+    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and authoritative_phase(e, "context") and succeeded(e)]
+    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and authoritative_event(e) and succeeded(e) and citations(e)]
+    compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and authoritative_phase(e, "compile")]
+    verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and authoritative_phase(e, "verify")]
+    runs = [(i, e, n) for i, e, n in tools if n.lower() in RUN_TOOLS and authoritative_phase(e, "run")]
+    inspects = [(i, e, n) for i, e, n in tools if n.lower() in INSPECT_TOOLS and authoritative_phase(e, "inspect")]
+    edits = [(i, e, n) for i, e, n in tools if n.lower() in EDIT_TOOLS and authoritative_phase(e, "edit") and succeeded(e)]
     report = final_event(events)
 
     if not context:
@@ -277,7 +281,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if claim == "model_verified" and not successful_verify:
         raise Rejected("model_verified claim requires a successful verify event")
     if claim == "hardware_observed":
-        flashes = [(i, e, n) for i, e, n in tools if action_contains(e, n, FLASH_WORDS) and succeeded(e)]
+        flashes = [(i, e, n) for i, e, n in tools if n.lower() in FLASH_TOOLS and authoritative_phase(e, "flash") and succeeded(e)]
         markers = [(i, e, n) for i, e, n in successful_inspect if any(k in json.dumps(e).lower() for k in ("marker", "uart", "gpio", "trace"))]
         if not flashes or not markers or flashes[0][0] >= markers[0][0]:
             raise Rejected("hardware_observed requires desk-hardware flash plus marker evidence")
@@ -306,10 +310,10 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         if claim not in policy["allowed_claims"]:
             raise Rejected(f"scenario {scenario} rejects final claim {claim}")
         if policy.get("requires_compile_recovery"):
-            failed = [item for item in compiles if not succeeded(item[1])]
+            failed = [item for item in compiles if outcome(item[1]) is False]
             passed = [item for item in compiles if succeeded(item[1])]
             if not failed or not passed or failed[0][0] >= passed[-1][0] or not any(failed[0][0] < i < passed[-1][0] for i, _, _ in edits):
-                raise Rejected("compile recovery requires red -> focused edit -> green structured events")
+                raise Rejected("compile recovery requires explicit failed compile -> focused successful edit -> explicit successful compile")
 
     used = [(i, e, n) for i, e, n in tools if i in set(indices[:-1])]
     return {

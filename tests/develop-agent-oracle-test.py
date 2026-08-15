@@ -58,6 +58,11 @@ run_inspect = run("valid-run-inspect.jsonl")
 assert run_inspect.returncode == 0, run_inspect.stderr
 assert json.loads(run_inspect.stdout)["order"] == ["context", "grounding", "compile", "run", "inspect", "report"]
 
+leaks = run("citation-secrets.jsonl")
+assert leaks.returncode == 0, leaks.stderr
+for forbidden in ("user", "password", "jwt", "ey.secret", "harmless=value", "#private", "?"):
+    assert forbidden not in leaks.stdout, forbidden
+
 for fixture, reason in {
     "missing-order.jsonl": "ordered evidence",
     "missing-source.jsonl": "source citation",
@@ -65,7 +70,7 @@ for fixture, reason in {
     "too-many-attempts.jsonl": "attempt",
     "claim-inflation.jsonl": "verify event",
     "hardware-inflation.jsonl": "desk-hardware",
-    "compile-is-not-run.jsonl": "verify event",
+    "compile-is-not-run.jsonl": "compile",
     "nested-state-compile-failed.jsonl": "compile",
     "nested-state-verify-error.jsonl": "verify event",
     "nested-state-nonzero.jsonl": "compile",
@@ -75,10 +80,18 @@ for fixture, reason in {
     "run-before-context.jsonl": "ordered run+inspect",
     "invented-hardware-prose.jsonl": "hardware-sensitive",
     "empty-hardware-manifest.jsonl": "hardware-sensitive",
+    "fake-echo-opencode.jsonl": "context",
 }.items():
     proc = run(fixture)
     assert proc.returncode != 0, fixture
     assert reason in proc.stderr.lower(), (fixture, proc.stderr)
+
+ambiguous = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "ambiguous-recovery.jsonl"), "compile-recovery-esp32c3"],
+    text=True, capture_output=True,
+)
+assert ambiguous.returncode != 0
+assert "explicit failed compile" in ambiguous.stderr.lower(), ambiguous.stderr
 
 secrets = run("secrets.jsonl")
 assert secrets.returncode == 0, secrets.stderr

@@ -1,5 +1,5 @@
-{"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true}}
+{"type":"tool","id":"e1","tool":"labwired_context","result":{"ok":true,"project":"fixture"}}
 {"type":"tool","id":"e2","tool":"labwired_datasheet","result":{"ok":true,"citation":"doc:part"}}
-{"type":"tool","id":"e3","tool":"labwired_compile","result":{"ok":true}}
-{"type":"tool","id":"e4","tool":"labwired_verify","result":{"ok":true}}
+{"type":"tool","id":"e3","tool":"labwired_compile","result":{"ok":true,"artifact":"firmware.elf"}}
+{"type":"tool","id":"e4","tool":"labwired_verify","result":{"ok":true,"status":"model_verified"}}
 {"type":"final","id":"e5","claim":"model_verified","text":"LED uses GPIO77.","hardware_sensitive_facts":[]}

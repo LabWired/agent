@@ -65,7 +65,13 @@ else
 fi
 
 # LabWired brand colors (cyan accent in terminal)
-say() { printf '\033[36m==>\033[0m %s\n' "$1"; }
+say() {
+  if [[ "${LABWIRED_CERTIFICATION_JSON_ONLY:-0}" == "1" ]]; then
+    printf '\033[36m==>\033[0m %s\n' "$1" >&2
+  else
+    printf '\033[36m==>\033[0m %s\n' "$1"
+  fi
+}
 brand() { printf '\033[34m%s\033[0m\n' "$1"; }
 fail() { printf 'labwired: %s\n' "$1" >&2; exit 1; }
 
@@ -802,7 +808,11 @@ labwired_prepare_agent_start() {
     # No engine auth.json seeding — LabWired account login is the product credential.
     say "mode: LabWired Agent (hosted · api.labwired.com)"
     say "model: ${LABWIRED_MODEL_URL:-}/  id=${LABWIRED_MODEL:-labwired-default}"
-    labwired_cloud_hosted_disclosure || true
+    if [[ "${LABWIRED_CERTIFICATION_JSON_ONLY:-0}" == "1" ]]; then
+      labwired_cloud_hosted_disclosure >&2 || true
+    else
+      labwired_cloud_hosted_disclosure || true
+    fi
   else
     labwired_export_sim || true
     # Local default config if none

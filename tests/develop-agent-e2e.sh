@@ -47,22 +47,7 @@ print_command() {
 }
 
 extract_events() {
-  python3 - "$1" "$2" <<'PY'
-import json, sys
-source, target = sys.argv[1:]
-count = 0
-with open(target, "w", encoding="utf-8") as out:
-    for line in open(source, encoding="utf-8", errors="replace"):
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            out.write(json.dumps(value, separators=(",", ":")) + "\n")
-            count += 1
-if count == 0:
-    raise SystemExit("agent emitted no structured JSON events")
-PY
+  python3 "$ROOT/tests/develop-agent-jsonl.py" "$1" "$2"
 }
 
 prepare_project() {
@@ -110,10 +95,15 @@ PY
     events="$work/$scenario.events.jsonl"
     echo "INFO real-agent scenario=$scenario model=$MODEL" >&2
     set +e
-    (cd "$project" && "$AGENT" agent run --model "$MODEL" --format json "$prompt") >"$raw" 2>"$stderr_file"
+    (cd "$project" && LABWIRED_CERTIFICATION_JSON_ONLY=1 "$AGENT" agent run --model "$MODEL" --format json "$prompt") >"$raw" 2>"$stderr_file"
     agent_status=$?
     set -e
-    [[ "$agent_status" -eq 0 ]] || { echo "certification failed: scenario $scenario agent exit $agent_status" >&2; exit 1; }
+    python3 "$ROOT/tests/develop-agent-jsonl.py" sanitize-stderr "$stderr_file" "$work/$scenario.stderr.sanitized"
+    if [[ "$agent_status" -ne 0 ]]; then
+      echo "certification failed: scenario $scenario agent exit $agent_status" >&2
+      tail -20 "$work/$scenario.stderr.sanitized" >&2 || true
+      exit 1
+    fi
     extract_events "$raw" "$events" || { echo "certification failed: scenario $scenario emitted no structured tool events" >&2; exit 1; }
     python3 "$ROOT/tests/develop-agent-oracle.py" validate "$events" "$scenario" >"$evidence/$scenario.json"
     chmod 600 "$evidence/$scenario.json"
