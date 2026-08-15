@@ -100,6 +100,25 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
 }
 
+function parseSigrokScanLine(line) {
+  const separator = line.indexOf(' - ');
+  if (separator < 1) return undefined;
+  const selector = line.slice(0, separator).trim();
+  const description = line.slice(separator + 3).trim();
+  const [driver, ...optionParts] = selector.split(':');
+  if (!driver || !description || optionParts.length === 0) return undefined;
+  const options = {};
+  for (const part of optionParts) {
+    const equals = part.indexOf('=');
+    if (equals < 1 || equals === part.length - 1) return undefined;
+    const key = part.slice(0, equals); const value = part.slice(equals + 1);
+    if (!/^[a-z][a-z0-9_-]*$/i.test(key) || options[key] !== undefined) return undefined;
+    options[key] = value;
+  }
+  if (typeof options.conn !== 'string') return undefined;
+  return { driver, conn: options.conn, selector, description };
+}
+
 async function platformIoDevices(options) {
   const executable = executableOnPath('pio', options.environment);
   if (!executable) throw new Error('BLOCKED: PlatformIO provider is unavailable for exact device enumeration');
@@ -175,11 +194,11 @@ export async function resolveHardwareIdentities(profile, options = {}) {
   const instruments = {}; const stableIds = {};
   for (const observation of logic) {
     const output = await runJson(executable, ['--scan', '--driver', observation.driver], { ...options, cwd: profile.build.workspace });
-    const matches = output.split(/\r?\n/).map((line) => line.match(/^([^\s]+)\s+-\s+(.+)$/)).filter((match) => match && match[1] === observation.driver && match[2] === observation.instrumentId);
+    const matches = output.split(/\r?\n/).map(parseSigrokScanLine).filter((record) => record?.driver === observation.driver && record.conn === observation.instrumentId);
     if (matches.length !== 1) return [];
     const key = `instrument-${observation.id}`;
     instruments[key] = observation.instrumentId;
-    stableIds[key] = `sigrok:${fingerprint({ driver: observation.driver, instrumentId: observation.instrumentId, record: matches[0][0] })}`;
+    stableIds[key] = `sigrok:${fingerprint({ driver: observation.driver, instrumentId: observation.instrumentId, selector: matches[0].selector, description: matches[0].description })}`;
   }
   return base.map((identity) => ({ ...identity, instruments: { ...instruments }, stableIds: { ...identity.stableIds, ...stableIds } }));
 }

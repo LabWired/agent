@@ -101,9 +101,18 @@ test('logic analyzer enumeration requires one exact provider-owned instrument id
   await writeFile(path.join(root, 'pio'), '#!/usr/bin/env bash\nprintf \'[{"port":"/dev/tty0","serialNumber":"probe"}]\\n\'\n', { mode: 0o755 });
   const sigrok = path.join(root, 'sigrok-cli');
   const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio', workspace: root }, flash: { provider: 'platformio' }, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'hardware_observed', driver: 'saleae-logic16', instrumentId: 'analyzer-1' }] };
-  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16 - analyzer-1\\n\'\n', { mode: 0o755 });
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16:conn=analyzer-1 - Saleae Logic 16\\n\'\n', { mode: 0o755 });
   const exact = await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } });
   assert.equal(exact.length, 1); assert.equal(exact[0].instruments['instrument-led'], 'analyzer-1');
-  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16 - analyzer-1\\nsaleae-logic16 - analyzer-1\\n\'\n', { mode: 0o755 });
-  assert.deepEqual(await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } }), []);
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'saleae-logic16:serial=abc:conn=analyzer-1 - Saleae Logic 16\\n\'\n', { mode: 0o755 });
+  assert.equal((await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } })).length, 1);
+  for (const scan of [
+    'saleae-logic16 - analyzer-1',
+    'saleae-logic16:conn=analyzer-10 - prefix collision',
+    'saleae-logic16:conn - malformed',
+    'saleae-logic16:conn=analyzer-1 - one\\nsaleae-logic16:conn=analyzer-1 - two',
+  ]) {
+    await writeFile(sigrok, `#!/usr/bin/env bash\nprintf '%b\\n' ${JSON.stringify(scan)}\n`, { mode: 0o755 });
+    assert.deepEqual(await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } }), []);
+  }
 });

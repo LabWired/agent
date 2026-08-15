@@ -112,7 +112,7 @@ cat >"$WORK/bin/sigrok-cli" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == '--version' ]]; then echo 'sigrok-cli acceptance-fake-1'; exit 0; fi
-if [[ "${1:-}" == '--scan' ]]; then printf 'saleae-logic16 - acceptance-logic\n'; exit 0; fi
+if [[ "${1:-}" == '--scan' ]]; then printf 'saleae-logic16:conn=acceptance-logic - Saleae Logic 16 acceptance double\n'; exit 0; fi
 out=''
 all=" $* "; [[ "$all" == *' --config samplerate=1000 '* && "$all" == *' --samples 3000 '* ]] || exit 65
 while [[ $# -gt 0 ]]; do [[ "$1" == '--output-file' ]] && { out="$2"; shift 2; continue; }; shift; done

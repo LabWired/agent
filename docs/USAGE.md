@@ -100,6 +100,9 @@ in the profile. Do not commit a machine-filled physical profile.
 Synthetic/replay drivers (`demo`, CSV/input, virtual, replay, or null) are
 rejected for hardware claims; the acceptance template's `${LOGIC_DRIVER}` must
 be replaced with a supported physical analyzer driver.
+Analyzer enumeration matches sigrok's selector on the left of each scan line,
+for example `fx2lafw:conn=3.26 - USB logic analyzer`; the description is never
+treated as identity. Capture then uses that exact `driver:conn=id` selector.
 
 Planning is read-only. It resolves provider versions and exact device
 identities and prints a SHA-256 digest:

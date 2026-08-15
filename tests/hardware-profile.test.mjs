@@ -181,6 +181,17 @@ test('hardware logic rejects synthetic and replay drivers case-insensitively', a
   }
 });
 
+test('sigrok connection identity permits USB punctuation but rejects selector injection', async () => {
+  for (const instrumentId of ['3.26', 'usb/1-2', 'SERIAL_123']) {
+    const value = minimal({ target: { id: 'desk', chip: 'esp32c3', probeSerial: 'probe', serialPort: '/dev/tty0' }, observations: [trustedLogic({ instrumentId })] });
+    await withProfile(value, async ({ profilePath }) => assert.doesNotThrow(() => validateHardwareProfile(value, profilePath)));
+  }
+  for (const instrumentId of ['3.26:serial=evil', 'conn=other', 'usb 1']) {
+    const value = minimal({ target: { id: 'desk', chip: 'esp32c3', probeSerial: 'probe', serialPort: '/dev/tty0' }, observations: [trustedLogic({ instrumentId })] });
+    await withProfile(value, async ({ profilePath }) => assert.throws(() => validateHardwareProfile(value, profilePath), /unsafe.*conn selector/));
+  }
+});
+
 test('rejects traversal and symlink escapes from the workspace', async () => {
   await withProfile(minimal({ build: { ...minimal().build, artifact: '../outside.elf' } }), async ({ profilePath }) => {
     await assert.rejects(loadHardwareProfile(profilePath, { realpath: true }), /escape|outside|contain/i);
