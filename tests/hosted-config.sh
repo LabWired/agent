@@ -118,6 +118,8 @@ linked="$(LABWIRED_HOSTED_DISCLOSURE_VERSION=symlink labwired_cloud_hosted_discl
 [[ -n "$linked" ]] && ok "symlink marker fails open" || bad "symlink marker suppressed disclosure"
 symlink_config="$TMP/symlink-config"
 mkdir -p "$symlink_config"
+printf 'labwired-hosted-disclosure:state-link\n' >"$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vstate-link"
+chmod 600 "$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vstate-link"
 ln -s "$LABWIRED_AGENT_CONFIG_DIR/state" "$symlink_config/state"
 linked_state="$(
   LABWIRED_AGENT_CONFIG_DIR="$symlink_config" \
@@ -125,9 +127,9 @@ linked_state="$(
   labwired_cloud_hosted_disclosure
 )"
 [[ -n "$linked_state" ]] && ok "symlink state directory fails open" || bad "symlink state directory suppressed disclosure"
-[[ ! -e "$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vstate-link" ]] \
-  && ok "symlink state directory not followed" \
-  || bad "symlink state directory was followed"
+[[ -f "$LABWIRED_AGENT_CONFIG_DIR/state/hosted-disclosure-vstate-link" ]] \
+  && ok "hostile valid marker left untouched" \
+  || bad "hostile valid marker was overwritten"
 ack="$(labwired_cloud_disclosure_ack_dir)"
 [[ "$ack" == "$LABWIRED_AGENT_CONFIG_DIR/state" ]] \
   && ok "disclosure acknowledgement uses agent config" \

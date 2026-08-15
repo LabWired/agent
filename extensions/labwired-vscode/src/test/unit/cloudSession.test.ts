@@ -98,6 +98,11 @@ suite("hosted conversation disclosure", () => {
 
     const linkedConfig = path.join(root, "linked-config");
     fs.mkdirSync(linkedConfig);
+    fs.writeFileSync(
+      path.join(state, "hosted-disclosure-vstate-link"),
+      "labwired-hosted-disclosure:state-link\n",
+      { mode: 0o600 }
+    );
     fs.symlinkSync(state, path.join(linkedConfig, "state"));
     assert.strictEqual(
       hostedDisclosureMessage({ LABWIRED_AGENT_CONFIG_DIR: linkedConfig }, "state-link"),

@@ -36,6 +36,23 @@ function trustedMarker(marker: string, version: string): boolean {
   }
 }
 
+function privateOwnedDirectory(directory: string): fs.Stats | undefined {
+  try {
+    const stat = fs.lstatSync(directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return undefined;
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return undefined;
+    fs.chmodSync(directory, 0o700);
+    return fs.lstatSync(directory);
+  } catch {
+    return undefined;
+  }
+}
+
+function sameDirectory(directory: string, expected: fs.Stats): boolean {
+  const current = privateOwnedDirectory(directory);
+  return !!current && current.dev === expected.dev && current.ino === expected.ino;
+}
+
 /** Return the notice only when this disclosure version has not been acknowledged. */
 export function hostedDisclosureMessage(
   env: NodeJS.ProcessEnv = process.env,
@@ -49,32 +66,39 @@ export function hostedDisclosureMessage(
     path.join(configHome, "labwired-agent");
   const dir = path.join(configDir, "state");
   const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
-  if (trustedMarker(ack, safeVersion)) return undefined;
   let temp: string | undefined;
+  let stateIdentity: fs.Stats | undefined;
   try {
     if (fs.existsSync(configDir)) {
-      const configStat = fs.lstatSync(configDir);
-      if (!configStat.isDirectory() || configStat.isSymbolicLink()) return HOSTED_DISCLOSURE;
+      if (!privateOwnedDirectory(configDir)) return HOSTED_DISCLOSURE;
     } else {
       fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+      if (!privateOwnedDirectory(configDir)) return HOSTED_DISCLOSURE;
     }
     if (fs.existsSync(dir)) {
-      const dirStat = fs.lstatSync(dir);
-      if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) return HOSTED_DISCLOSURE;
-      if (typeof process.getuid === "function" && dirStat.uid !== process.getuid()) return HOSTED_DISCLOSURE;
-      fs.chmodSync(dir, 0o700);
+      stateIdentity = privateOwnedDirectory(dir);
     } else {
       fs.mkdirSync(dir, { mode: 0o700 });
+      stateIdentity = privateOwnedDirectory(dir);
     }
+    if (!stateIdentity) return HOSTED_DISCLOSURE;
+    if (trustedMarker(ack, safeVersion)) return undefined;
     temp = path.join(dir, `.hosted-disclosure-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     fs.writeFileSync(temp, markerPayload(safeVersion), { flag: "wx", mode: 0o600 });
+    if (!sameDirectory(dir, stateIdentity)) return HOSTED_DISCLOSURE;
     fs.linkSync(temp, ack);
+    if (!sameDirectory(dir, stateIdentity)) return HOSTED_DISCLOSURE;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST" && trustedMarker(ack, safeVersion)) {
+    if (
+      (err as NodeJS.ErrnoException).code === "EEXIST" &&
+      stateIdentity &&
+      sameDirectory(dir, stateIdentity) &&
+      trustedMarker(ack, safeVersion)
+    ) {
       return undefined;
     }
   } finally {
-    if (temp) {
+    if (temp && stateIdentity && sameDirectory(dir, stateIdentity)) {
       try { fs.unlinkSync(temp); } catch { /* best effort */ }
     }
   }
