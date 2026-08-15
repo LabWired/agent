@@ -27,6 +27,7 @@ from benchmarks.twin2silicon.runtime_adapters import (
     AdapterContext,
     NormalizedUsage,
     build_runtime_command,
+    extract_native_model,
     normalize_usage,
     write_codex_mcp_config,
 )
@@ -208,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": "1.0",
         "runtime": args.runtime,
         "model_override": None,
+        "native_model": None,
         "status": "infrastructure_error",
         "returncode": None,
         "timed_out": False,
@@ -269,10 +271,11 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     result["status"] = "completed"
                 try:
-                    usage = normalize_usage(
-                        args.runtime,
-                        context.stdout_path.read_text(encoding="utf-8", errors="replace").splitlines(),
-                    )
+                    stdout_lines = context.stdout_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()
+                    usage = normalize_usage(args.runtime, stdout_lines)
+                    result["native_model"] = extract_native_model(args.runtime, stdout_lines)
                 except OSError:
                     usage = _unavailable_usage()
     except Exception as error:

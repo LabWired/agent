@@ -4,6 +4,12 @@ The caller runs each command with ``AdapterContext.workspace`` as its working
 directory. Claude does not expose a workspace command-line option, so its MCP
 configuration is deliberately placed beneath ``config_dir``; the command uses
 ``config_dir / 'claude-mcp.json'`` without creating that file.
+
+Codex reports ``output_tokens`` as its total output token count, so its
+``reasoning_output_tokens`` is retained as a subset rather than subtracted.
+Claude's ``output_tokens_details.thinking_tokens`` is also a subset of the
+reported output total; for a non-overlapping comparison output field we retain
+thinking as ``reasoning`` and subtract it from ``output``.
 """
 
 from __future__ import annotations
@@ -122,6 +128,36 @@ def normalize_usage(runtime: RuntimeName, lines: Iterable[str]) -> NormalizedUsa
     raise ValueError(f"unsupported runtime: {runtime}")
 
 
+def extract_native_model(runtime: RuntimeName, lines: Iterable[str]) -> str | None:
+    """Return a model only when a runtime's structured event explicitly names it.
+
+    Runtime versions and prompts are not model evidence.  The narrow event
+    locations below are deliberately conservative so an arbitrary JSON field
+    cannot be reported as a native model selection.
+    """
+
+    for record in _json_records(lines):
+        if runtime == "claude":
+            if record.get("type") == "system" and record.get("subtype") == "init":
+                model = _model_text(record.get("model"))
+                if model is not None:
+                    return model
+        elif runtime == "codex":
+            if record.get("type") == "turn.started":
+                model = _model_text(record.get("model"))
+                if model is not None:
+                    return model
+        elif runtime == "opencode":
+            if record.get("type") == "step_start":
+                part = _mapping(record.get("part"))
+                model = _model_text(part.get("model")) if part else None
+                if model is not None:
+                    return model
+        else:
+            raise ValueError(f"unsupported runtime: {runtime}")
+    return None
+
+
 def _json_records(lines: Iterable[str]) -> Iterator[dict[str, object]]:
     source = lines.splitlines() if isinstance(lines, str) else lines
     for line in source:
@@ -187,7 +223,7 @@ def _normalize_codex(records: Iterable[dict[str, object]]) -> NormalizedUsage:
         if record.get("type") != "turn.completed":
             continue
         usage = _mapping(record.get("usage"))
-        final_usage = _token_values(usage)
+        final_usage = _codex_token_values(usage)
 
     if final_usage is None or not any(
         value is not None for value in final_usage.values()
@@ -205,11 +241,23 @@ def _normalize_claude(records: Iterable[dict[str, object]]) -> NormalizedUsage:
         if record.get("type") != "result":
             continue
         usage = _mapping(record.get("usage"))
+        details = _mapping(usage.get("output_tokens_details")) if usage else None
+        total_output = _bounded_int(usage.get("output_tokens")) if usage else None
+        thinking = _bounded_int(details.get("thinking_tokens")) if details else None
+        if (
+            total_output is not None
+            and thinking is not None
+            and thinking > total_output
+        ):
+            thinking = None
+            output = None
+        else:
+            output = total_output - thinking if total_output is not None and thinking is not None else total_output
         values = {
             "fresh_input": _bounded_int(usage.get("input_tokens")) if usage else None,
             "cached_input": _bounded_int(usage.get("cache_read_input_tokens")) if usage else None,
-            "reasoning": _bounded_int(usage.get("reasoning_tokens")) if usage else None,
-            "output": _bounded_int(usage.get("output_tokens")) if usage else None,
+            "reasoning": thinking,
+            "output": output,
         }
         cost = _bounded_float(record.get("total_cost_usd"))
         final_usage = values
@@ -227,7 +275,7 @@ def _normalize_claude(records: Iterable[dict[str, object]]) -> NormalizedUsage:
     )
 
 
-def _token_values(usage: dict[str, object] | None) -> dict[str, int | None]:
+def _codex_token_values(usage: dict[str, object] | None) -> dict[str, int | None]:
     if usage is None:
         return {
             "fresh_input": None,
@@ -235,10 +283,20 @@ def _token_values(usage: dict[str, object] | None) -> dict[str, int | None]:
             "reasoning": None,
             "output": None,
         }
+    total_input = _bounded_int(usage.get("input_tokens"))
+    cached_input = _bounded_int(usage.get("cached_input_tokens"))
+    if total_input is not None and cached_input is None:
+        cached_input = 0
+    if total_input is None or cached_input is None or cached_input > total_input:
+        fresh_input = None
+        if total_input is not None and cached_input is not None and cached_input > total_input:
+            cached_input = None
+    else:
+        fresh_input = total_input - cached_input
     return {
-        "fresh_input": _bounded_int(usage.get("input_tokens")),
-        "cached_input": _bounded_int(usage.get("cached_input_tokens")),
-        "reasoning": _bounded_int(usage.get("reasoning_tokens")),
+        "fresh_input": fresh_input,
+        "cached_input": cached_input,
+        "reasoning": _bounded_int(usage.get("reasoning_output_tokens")),
         "output": _bounded_int(usage.get("output_tokens")),
     }
 
@@ -282,3 +340,10 @@ def _bounded_float(value: object) -> float | None:
     if not math.isfinite(number) or not 0 <= number <= _MAX_COST_USD:
         return None
     return number
+
+
+def _model_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text[:4096] if text else None

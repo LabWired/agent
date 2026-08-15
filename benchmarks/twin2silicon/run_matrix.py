@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from typing import Any
 
 if __package__ in (None, ""):
@@ -99,6 +100,22 @@ def _number(value: object) -> int | float | None:
     return value
 
 
+def _safe_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    return text[:4096] if text else None
+
+
+def _result_number(result: dict[str, Any] | None, name: str) -> int | float | None:
+    return _number(result.get(name)) if result else None
+
+
+def _result_bool(result: dict[str, Any] | None, name: str) -> bool | None:
+    value = result.get(name) if result else None
+    return value if isinstance(value, bool) else None
+
+
 def _normalized_usage(path: Path) -> dict[str, object]:
     source = _read_json(path) or {}
     normalized = {field: _number(source.get(field)) for field in USAGE_FIELDS}
@@ -168,17 +185,43 @@ def _agent_row(
     )
     result = _read_json(trial / "agent-result.json")
     agent_status = result.get("status") if result and isinstance(result.get("status"), str) else "infrastructure_error"
+    infrastructure_category: str | None = None
+    infrastructure_error: str | None = None
     if child_error is not None or returncode != 0:
         agent_status = "infrastructure_error"
+        infrastructure_category = "agent_runner"
+        infrastructure_error = _safe_text(
+            child_error if child_error is not None else f"agent runner exited with status {returncode}"
+        )
+    elif result is None:
+        infrastructure_category = "agent_runner"
+        infrastructure_error = "agent runner did not produce agent-result.json"
+    elif agent_status == "infrastructure_error":
+        infrastructure_category = "agent_runtime"
+        infrastructure_error = _safe_text(result.get("error")) or "agent runtime infrastructure error"
+    native_model = _safe_text(result.get("native_model")) if result else None
     row: dict[str, object] = {
         "runtime": runtime,
+        "native_model": native_model,
         "initial_public_sha256": initial_public_sha256,
         "agent_status": agent_status,
+        "agent_returncode": _result_number(result, "returncode"),
+        "agent_timed_out": _result_bool(result, "timed_out"),
+        "elapsed_agent_seconds": _result_number(result, "elapsed_seconds"),
         "agent_result": result,
         "agent_child_returncode": returncode,
         "usage": _normalized_usage(trial / "usage.json"),
+        "repair_count": None,
+        "tool_call_count": None,
+        "invalid_call_count": None,
+        "observability_reason": "runtime did not expose repair/tool-call counts",
+        "compile_status": "not_run",
         "hil_status": "not_run",
         "hil_run": None,
+        "elapsed_hil_seconds": None,
+        "final_success": False,
+        "infrastructure_category": infrastructure_category,
+        "infrastructure_error": infrastructure_error,
     }
     if child_error is not None:
         row["agent_error"] = child_error
@@ -196,6 +239,9 @@ def _run_hil(row: dict[str, object], task_root: Path, trial: Path, args: argpars
     if not candidate.is_dir():
         row["hil_status"] = "invalid"
         row["hil_error"] = "completed agent did not produce a candidate directory"
+        row["compile_status"] = "invalid"
+        row["infrastructure_category"] = "candidate"
+        row["infrastructure_error"] = row["hil_error"]
         return
     run_dir = trial / "hil"
     command = [
@@ -207,27 +253,69 @@ def _run_hil(row: dict[str, object], task_root: Path, trial: Path, args: argpars
     usage_path = trial / "usage.json"
     if _has_hil_usage_schema(usage_path):
         command.extend(("--usage-json", str(usage_path)))
+    started = time.monotonic()
     returncode, child_error = _run_child(
         command, ROOT, trial / "matrix-hil.stdout.log", trial / "matrix-hil.stderr.log",
     )
+    row["elapsed_hil_seconds"] = time.monotonic() - started
     run = _read_json(run_dir / "run.json")
     row["hil_run"] = run
     row["hil_child_returncode"] = returncode
     if child_error is not None:
         row["hil_status"] = "invalid"
         row["hil_error"] = child_error
+        row["compile_status"] = "invalid"
+        row["infrastructure_category"] = "hil_runner"
+        row["infrastructure_error"] = _safe_text(child_error)
     elif run is None:
         row["hil_status"] = "invalid"
         row["hil_error"] = "HIL runner did not produce run.json"
+        row["compile_status"] = "invalid"
+        row["infrastructure_category"] = "hil_runner"
+        row["infrastructure_error"] = row["hil_error"]
     else:
         status = run.get("status")
         row["hil_status"] = status if isinstance(status, str) else "invalid"
+        compile_status = run.get("compile_status")
+        row["compile_status"] = compile_status if isinstance(compile_status, str) else None
+        row["final_success"] = row["hil_status"] == "pass"
+
+
+def _display(value: object, width: int) -> str:
+    text = "-" if value is None else str(value)
+    return text[:width]
+
+
+def _seconds(value: object) -> str:
+    return f"{value:.3f}" if isinstance(value, (int, float)) else "-"
+
+
+def _compact_usage(usage: object) -> str:
+    if not isinstance(usage, dict):
+        return "-"
+    fresh = usage.get("fresh_input")
+    cached = usage.get("cached_input")
+    output = usage.get("output")
+    reasoning = usage.get("reasoning")
+    cost = usage.get("estimated_cost_usd")
+    tokens = f"i={fresh if fresh is not None else '-'}+{cached if cached is not None else '-'}"
+    tokens += f" o={output if output is not None else '-'} r={reasoning if reasoning is not None else '-'}"
+    return f"{tokens} ${cost:.6g}" if isinstance(cost, (int, float)) else tokens
 
 
 def _print_summary(rows: list[dict[str, object]]) -> None:
-    print(f"{'RUNTIME':<10} {'AGENT':<22} {'HIL':<12}")
+    print(
+        f"{'RUNTIME':<10} {'MODEL':<20} {'AGENT':<18} {'COMPILE':<12} {'HIL':<12} "
+        f"{'SUCCESS':<7} {'A_SEC':>8} {'H_SEC':>8} TOKENS/COST"
+    )
     for row in rows:
-        print(f"{row['runtime']:<10} {row['agent_status']:<22} {row['hil_status']:<12}")
+        print(
+            f"{_display(row['runtime'], 10):<10} {_display(row['native_model'], 20):<20} "
+            f"{_display(row['agent_status'], 18):<18} {_display(row['compile_status'], 12):<12} "
+            f"{_display(row['hil_status'], 12):<12} {_display(row['final_success'], 7):<7} "
+            f"{_seconds(row['elapsed_agent_seconds']):>8} {_seconds(row['elapsed_hil_seconds']):>8} "
+            f"{_compact_usage(row['usage'])}"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

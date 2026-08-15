@@ -1,0 +1,2 @@
+{"type":"thread.started","thread_id":"thread-native-002"}
+{"type":"turn.completed","usage":{"input_tokens":16431,"cached_input_tokens":12288,"reasoning_output_tokens":621,"output_tokens":1472}}

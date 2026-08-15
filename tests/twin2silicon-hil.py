@@ -46,6 +46,7 @@ from benchmarks.twin2silicon.runtime_adapters import (
     NormalizedUsage,
     build_runtime_command,
     codex_mcp_toml,
+    extract_native_model,
     normalize_usage,
     write_codex_mcp_config,
 )
@@ -168,23 +169,51 @@ class RuntimeAdapterTests(unittest.TestCase):
         lines = [
             json.dumps({"type": "turn.completed", "usage": {
                 "input_tokens": 1000, "cached_input_tokens": 200,
-                "reasoning_tokens": 10, "output_tokens": 500,
+                "reasoning_output_tokens": 10, "output_tokens": 500,
             }}),
             json.dumps({"type": "turn.completed", "usage": {
                 "input_tokens": 1400, "cached_input_tokens": 300,
-                "reasoning_tokens": 48, "output_tokens": 1076,
+                "reasoning_output_tokens": 48, "output_tokens": 1076,
             }}),
         ]
 
         usage = normalize_usage("codex", lines)
 
         self.assertEqual(usage.requests, 1)
-        self.assertEqual(usage.fresh_input, 1400)
+        self.assertEqual(usage.fresh_input, 1100)
         self.assertEqual(usage.cached_input, 300)
         self.assertEqual(usage.reasoning, 48)
         self.assertEqual(usage.output, 1076)
         self.assertIsNone(usage.estimated_cost_usd)
         self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_codex_native_002_usage_keeps_total_output_with_reasoning_subset(self):
+        """Codex native-002 output_tokens is total output, including reasoning."""
+        lines = (REPOSITORY_ROOT / "fixtures/twin2silicon/native-002/codex.stdout.jsonl").read_text().splitlines()
+
+        usage = normalize_usage("codex", lines)
+
+        self.assertEqual(
+            usage,
+            NormalizedUsage(1, 4143, 12288, 621, 1472, None, None),
+        )
+
+    def test_normalize_codex_rejects_cached_input_larger_than_total(self):
+        usage = normalize_usage("codex", [json.dumps({
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": 10,
+                "cached_input_tokens": 11,
+                "reasoning_output_tokens": 2,
+                "output_tokens": 5,
+            },
+        })])
+
+        self.assertEqual(usage.requests, 1)
+        self.assertIsNone(usage.fresh_input)
+        self.assertIsNone(usage.cached_input)
+        self.assertEqual(usage.reasoning, 2)
+        self.assertEqual(usage.output, 5)
 
     def test_normalize_codex_uses_the_final_terminal_event(self):
         lines = [
@@ -239,6 +268,54 @@ class RuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(usage.output, 1076)
         self.assertAlmostEqual(usage.estimated_cost_usd, 0.007476282)
         self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_claude_native_002_usage_excludes_thinking_from_output(self):
+        lines = (REPOSITORY_ROOT / "fixtures/twin2silicon/native-002/claude.stdout.jsonl").read_text().splitlines()
+
+        usage = normalize_usage("claude", lines)
+
+        self.assertEqual(
+            usage,
+            NormalizedUsage(1, 5732, 2048, 417, 544, 0.042, None),
+        )
+
+    def test_normalize_claude_rejects_thinking_larger_than_total_output(self):
+        usage = normalize_usage("claude", [json.dumps({
+            "type": "result",
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 3,
+                "output_tokens_details": {"thinking_tokens": 4},
+            },
+        })])
+
+        self.assertEqual(usage.requests, 1)
+        self.assertEqual(usage.fresh_input, 10)
+        self.assertIsNone(usage.reasoning)
+        self.assertIsNone(usage.output)
+
+    def test_extract_native_model_accepts_only_runtime_event_model_fields(self):
+        self.assertEqual(
+            extract_native_model("claude", [json.dumps({
+                "type": "system", "subtype": "init", "model": "claude-sonnet-4-20250514",
+            })]),
+            "claude-sonnet-4-20250514",
+        )
+        self.assertEqual(
+            extract_native_model("codex", [json.dumps({
+                "type": "turn.started", "model": "gpt-5-codex",
+            })]),
+            "gpt-5-codex",
+        )
+        self.assertEqual(
+            extract_native_model("opencode", [json.dumps({
+                "type": "step_start", "part": {"model": "deepseek-r1"},
+            })]),
+            "deepseek-r1",
+        )
+        self.assertIsNone(extract_native_model("codex", [json.dumps({
+            "type": "turn.completed", "model": "untrusted", "usage": {},
+        })]))
 
     def test_normalize_claude_uses_the_final_result_event(self):
         lines = [
@@ -405,7 +482,9 @@ class RuntimeMatrixTests(unittest.TestCase):
             status = {{"opencode": "completed", "codex": "failed", "claude": "completed"}}[args.runtime]
             (output / "agent-result.json").write_text(json.dumps({{
                 "schema_version": "1.0", "runtime": args.runtime,
+                "native_model": f"fake-{{args.runtime}}-model",
                 "status": status, "returncode": 0 if status == "completed" else 9,
+                "timed_out": False, "elapsed_seconds": 0.25,
             }}))
             usage = {{
                 "requests": 1 if args.runtime != "codex" else None,
@@ -455,7 +534,8 @@ class RuntimeMatrixTests(unittest.TestCase):
             run_dir.mkdir(parents=True)
             status = "pass" if Path(args.candidate).parent.name == "opencode" else "fail"
             (run_dir / "run.json").write_text(json.dumps({
-                "schema_version": "1.0", "status": status, "cost": None,
+                "schema_version": "1.0", "status": status,
+                "compile_status": status, "cost": None,
             }))
             (run_dir / "hil-invocation.json").write_text(json.dumps(vars(args), sort_keys=True))
         """)
@@ -508,6 +588,43 @@ class RuntimeMatrixTests(unittest.TestCase):
                         hil_invocation = (trial / "hil" / "hil-invocation.json").read_text(encoding="utf-8")
                         self.assertNotIn("--usage-json", hil_invocation)
 
+    def test_matrix_emits_complete_comparison_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent"), self._fake_hil(root / "hil"),
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            rows = json.loads((root / "matrix" / "matrix.json").read_text())["trials"]
+            passed, failed, agent_only = rows
+
+            self.assertEqual(passed["native_model"], "fake-opencode-model")
+            self.assertEqual(passed["agent_returncode"], 0)
+            self.assertFalse(passed["agent_timed_out"])
+            self.assertEqual(passed["compile_status"], "pass")
+            self.assertEqual(passed["hil_status"], "pass")
+            self.assertTrue(passed["final_success"])
+            self.assertEqual(passed["elapsed_agent_seconds"], 0.25)
+            self.assertGreaterEqual(passed["elapsed_hil_seconds"], 0)
+            self.assertIsNone(passed["repair_count"])
+            self.assertIsNone(passed["tool_call_count"])
+            self.assertIsNone(passed["invalid_call_count"])
+            self.assertEqual(passed["observability_reason"], "runtime did not expose repair/tool-call counts")
+            self.assertIsNone(passed["infrastructure_category"])
+            self.assertIsNone(passed["infrastructure_error"])
+
+            self.assertEqual(failed["agent_status"], "failed")
+            self.assertEqual(failed["compile_status"], "not_run")
+            self.assertFalse(failed["final_success"])
+            self.assertEqual(agent_only["compile_status"], "fail")
+            self.assertFalse(agent_only["final_success"])
+            self.assertIn("MODEL", completed.stdout)
+            self.assertIn("COMPILE", completed.stdout)
+            self.assertIn("A_SEC", completed.stdout)
+            self.assertIn("H_SEC", completed.stdout)
+            self.assertIn("TOKENS/COST", completed.stdout)
+
     def test_agent_only_skips_hil_and_repeated_runtime_selects_trials(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -522,6 +639,8 @@ class RuntimeMatrixTests(unittest.TestCase):
             self.assertEqual([row["hil_status"] for row in rows], ["not_run", "not_run"])
             self.assertTrue(all(row["hil_run"] is None for row in rows))
             self.assertFalse(any((root / "matrix" / "trials").glob("*/hil")))
+            self.assertTrue(all(row["compile_status"] == "not_run" for row in rows))
+            self.assertTrue(all(not row["final_success"] for row in rows))
 
     def test_matrix_requires_identity_unless_agent_only(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1644,9 +1763,9 @@ class RunAgentTests(unittest.TestCase):
             "opencode": "workspace = Path(args[args.index('--dir') + 1])\nassert args[:2] == ['run', '--format']\nassert args[args.index('--format') + 1] == 'json'\nassert os.environ['OPENCODE_CONFIG'] == str(Path(os.environ['EXPECTED_CONFIG']) / 'opencode.json')",
         }[runtime]
         output = {
-            "codex": "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 12, 'output_tokens': 3}}))",
-            "claude": "print(json.dumps({'type': 'result', 'usage': {'input_tokens': 12, 'output_tokens': 3}, 'total_cost_usd': 0.01}))",
-            "opencode": "print(json.dumps({'type': 'step_finish', 'part': {'tokens': {'input': 12, 'output': 3}, 'cost': 0.01}}))",
+            "codex": "print(json.dumps({'type': 'turn.started', 'model': 'fake-codex-model'})); print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 12, 'cached_input_tokens': 0, 'output_tokens': 3}}))",
+            "claude": "print(json.dumps({'type': 'system', 'subtype': 'init', 'model': 'fake-claude-model'})); print(json.dumps({'type': 'result', 'usage': {'input_tokens': 12, 'output_tokens': 3}, 'total_cost_usd': 0.01}))",
+            "opencode": "print(json.dumps({'type': 'step_start', 'part': {'model': 'fake-opencode-model'}})); print(json.dumps({'type': 'step_finish', 'part': {'tokens': {'input': 12, 'output': 3}, 'cost': 0.01}}))",
         }[runtime]
         body = textwrap.dedent(f"""
             import json
@@ -1746,6 +1865,7 @@ class RunAgentTests(unittest.TestCase):
                 self.assertEqual(result["status"], "completed")
                 self.assertEqual(result["runtime"], runtime)
                 self.assertIsNone(result["model_override"])
+                self.assertEqual(result["native_model"], f"fake-{runtime}-model")
                 self.assertEqual(result["returncode"], 0)
                 self.assertFalse(result["timed_out"])
                 self.assertGreaterEqual(result["elapsed_seconds"], 0)
