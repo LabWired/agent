@@ -3,12 +3,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pty
 import signal
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
+import tty
 from typing import get_args, get_origin, get_type_hints, Literal
 import unittest
 from unittest import mock
@@ -25,6 +28,25 @@ from benchmarks.twin2silicon.hil.results import (
     sha256_file,
     write_json_atomic,
 )
+from benchmarks.twin2silicon.hil.esp32s3 import (
+    BoardLock,
+    BoardLockTimeout,
+    Esp32S3Config,
+    RegisterAssertion,
+    build_openocd_command,
+    capture_uart_nonce,
+    evaluate_registers,
+    flash_firmware,
+    parse_openocd_registers,
+    validate_identity,
+)
+
+
+def executable_fixture(directory, body):
+    path = Path(directory) / "fixture.py"
+    path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+    return path
 
 
 class FixtureContractTests(unittest.TestCase):
@@ -342,6 +364,256 @@ class ProcessContractTests(unittest.TestCase):
 
             self.assertLess(time.monotonic() - started, 2)
             self.assertEqual(result.cleanup_error, "process_group_did_not_exit")
+
+
+class Esp32S3ConfigTests(unittest.TestCase):
+    def test_parses_valid_oracle_and_hex_register_values(self):
+        config = Esp32S3Config.from_oracle(
+            {
+                "uart": {"device": "/dev/cu.board", "baud": 115200, "timeout_seconds": 1},
+                "jtag": {"serial": "JTAG-1", "config": "board/esp32s3.cfg"},
+                "register_assertions": [
+                    {"name": "gpio", "address": "0x60004020", "mask": "0x4", "expected": "0x4"}
+                ],
+            }
+        )
+        self.assertEqual(config.assertions[0].address, 0x60004020)
+        self.assertEqual(config.assertions[0].mask, 4)
+
+    def test_rejects_invalid_bounds_alignment_duplicates_and_names(self):
+        good = {"name": "gpio", "address": "0x60004020", "mask": "0x4", "expected": "0x4"}
+        bad = [
+            {**good, "address": "-1"},
+            {**good, "address": "0x60004021"},
+            {**good, "mask": "0x100000000"},
+            {**good, "expected": "xyz"},
+            {**good, "expected": "4"},
+            {**good, "mask": 1.5},
+            {**good, "name": "gpio; shutdown"},
+        ]
+        for record in bad:
+            with self.subTest(record=record), self.assertRaises((TypeError, ValueError)):
+                RegisterAssertion.from_json(record)
+        with self.assertRaises(ValueError):
+            Esp32S3Config.from_oracle({
+                "uart": {"device": "x", "baud": 115200, "timeout_seconds": 1},
+                "jtag": {"serial": "s", "config": "c"},
+                "register_assertions": [good, {**good, "address": "0x60004024"}],
+            })
+        with self.assertRaises(ValueError):
+            Esp32S3Config.from_oracle({
+                "uart": {"device": "x", "baud": 115200, "timeout_seconds": 1},
+                "jtag": {"serial": "s", "config": "c"},
+                "register_assertions": [good, {**good, "name": "gpio2"}],
+            })
+
+    def test_rejects_empty_configuration_assertions_and_nonfinite_timeout(self):
+        for timeout in (float("nan"), float("inf")):
+            with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                Esp32S3Config.from_oracle({
+                    "uart": {"device": "device", "baud": 115200, "timeout_seconds": timeout},
+                    "jtag": {"serial": "serial", "config": "config"},
+                    "register_assertions": [{"name": "gpio", "address": "0x4", "mask": "0x4", "expected": "0x4"}],
+                })
+        with self.assertRaises(ValueError):
+            Esp32S3Config.from_oracle({
+                "uart": {"device": "", "baud": 115200, "timeout_seconds": 1},
+                "jtag": {"serial": "", "config": ""},
+                "register_assertions": [],
+            })
+
+
+class BoardIdentityAndFlashTests(unittest.TestCase):
+    def test_exactly_one_configured_serial_succeeds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tool = executable_fixture(directory, "print('  JTAG-1  ')\n")
+            result = validate_identity([tool], "JTAG-1", cwd=directory, evidence_dir=directory, timeout_seconds=1)
+            self.assertEqual((result.status, result.category), ("pass", None))
+
+    def test_absent_wrong_and_duplicate_serials_are_infrastructure_before_flash(self):
+        for output in ("", "OTHER\\n", "JTAG-1\\nJTAG-1\\n"):
+            with self.subTest(output=output), tempfile.TemporaryDirectory() as directory:
+                marker = Path(directory) / "flashed"
+                tool = executable_fixture(directory, f"print({output!r}, end='')\n")
+                result = validate_identity([tool], "JTAG-1", cwd=directory, evidence_dir=directory, timeout_seconds=1)
+                self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
+                self.assertFalse(marker.exists())
+
+    def test_identity_tool_timeout_nonzero_and_cleanup_are_infrastructure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            slow = executable_fixture(directory, "import time; time.sleep(30)\n")
+            result = validate_identity([slow], "JTAG-1", cwd=directory, evidence_dir=directory, timeout_seconds=.05)
+            self.assertEqual(result.status, "infrastructure_error")
+        with tempfile.TemporaryDirectory() as directory:
+            failed = executable_fixture(directory, "raise SystemExit(3)\n")
+            result = validate_identity([failed], "JTAG-1", cwd=directory, evidence_dir=directory, timeout_seconds=1)
+            self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
+        fake = CommandResult(("x",), "/", 0, False, "", "", 0, "/tmp/o", "/tmp/e", "cleanup")
+        with tempfile.TemporaryDirectory() as directory:
+            result = validate_identity(["x"], "JTAG-1", cwd=directory, evidence_dir=directory,
+                                       timeout_seconds=1, runner=lambda *a, **k: fake)
+        self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
+
+    def test_command_launch_errors_are_infrastructure(self):
+        def unavailable(*args, **kwargs):
+            raise FileNotFoundError("tool missing")
+        with tempfile.TemporaryDirectory() as directory:
+            identity = validate_identity(["missing"], "JTAG-1", cwd=directory, evidence_dir=directory,
+                                         timeout_seconds=1, runner=unavailable)
+            flash = flash_firmware(["missing"], cwd=directory, evidence_dir=directory,
+                                   timeout_seconds=1, identity_validated=True, runner=unavailable)
+        self.assertEqual(identity.status, "infrastructure_error")
+        self.assertEqual(flash.status, "infrastructure_error")
+
+    def test_flash_classifies_nonzero_as_hardware_and_timeout_cleanup_as_infrastructure(self):
+        def result(code=0, timed_out=False, cleanup=None):
+            return CommandResult(("flash",), "/", code, timed_out, "", "", 0, "/tmp/o", "/tmp/e", cleanup)
+        with tempfile.TemporaryDirectory() as directory:
+            failed = flash_firmware(["flash"], cwd=directory, evidence_dir=directory, timeout_seconds=1,
+                                    identity_validated=True, runner=lambda *a, **k: result(2))
+            timeout = flash_firmware(["flash"], cwd=directory, evidence_dir=directory, timeout_seconds=1,
+                                     identity_validated=True, runner=lambda *a, **k: result(-15, True))
+            cleanup = flash_firmware(["flash"], cwd=directory, evidence_dir=directory, timeout_seconds=1,
+                                     identity_validated=True, runner=lambda *a, **k: result(0, False, "stuck"))
+        self.assertEqual((failed.status, failed.category), ("hardware_fail", "flash"))
+        self.assertEqual(timeout.status, "infrastructure_error")
+        self.assertEqual(cleanup.status, "infrastructure_error")
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(ValueError):
+            flash_firmware(["flash"], cwd=directory, evidence_dir=directory, timeout_seconds=1,
+                           identity_validated=False)
+
+
+class BoardLockTests(unittest.TestCase):
+    def test_lock_is_identity_keyed_bounded_and_released_normally(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = BoardLock(directory, "usb/serial:one", timeout_seconds=.1)
+            with first:
+                self.assertIn("usb_serial_one", first.path.name)
+                started = time.monotonic()
+                with self.assertRaises(BoardLockTimeout):
+                    with BoardLock(directory, "usb/serial:one", timeout_seconds=.05):
+                        pass
+                self.assertLess(time.monotonic() - started, .5)
+            with BoardLock(directory, "usb/serial:one", timeout_seconds=.1):
+                pass
+
+    def test_lock_releases_after_exception_and_stale_metadata_does_not_claim_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock = BoardLock(directory, "JTAG-1", timeout_seconds=.1)
+            lock.path.parent.mkdir(parents=True, exist_ok=True)
+            lock.path.write_text('{"pid": 999999, "identity": "stale"}')
+            with self.assertRaises(RuntimeError):
+                with lock:
+                    metadata = json.loads(lock.path.read_text())
+                    self.assertEqual(metadata["identity"], "JTAG-1")
+                    raise RuntimeError("candidate failed")
+            with BoardLock(directory, "JTAG-1", timeout_seconds=.1):
+                pass
+
+    def test_lock_releases_if_metadata_persistence_fails_and_rejects_nonfinite_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch("benchmarks.twin2silicon.hil.esp32s3.os.fsync", side_effect=OSError("disk")):
+                with self.assertRaises(OSError):
+                    with BoardLock(directory, "JTAG-1", timeout_seconds=.1):
+                        pass
+            with BoardLock(directory, "JTAG-1", timeout_seconds=.1):
+                pass
+            for timeout in (float("nan"), float("inf")):
+                with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                    BoardLock(directory, "JTAG-1", timeout_seconds=timeout)
+
+
+class UartNonceTests(unittest.TestCase):
+    def _capture(self, chunks, nonce="current", timeout=.2):
+        master, slave = pty.openpty()
+        device = os.ttyname(slave)
+        tty.setraw(slave)
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "uart.log"
+            started = threading.Event()
+            def writer():
+                started.wait()
+                for chunk in chunks:
+                    os.write(master, chunk)
+            thread = threading.Thread(target=writer)
+            thread.start()
+            started.set()
+            try:
+                result = capture_uart_nonce(device, 115200, nonce, timeout, log, max_bytes=64)
+            finally:
+                thread.join(1)
+                os.close(master)
+                os.close(slave)
+            return result, log.read_bytes()
+
+    def test_accepts_only_exact_current_nonce_as_complete_line_and_logs_raw_bytes(self):
+        result, raw = self._capture([b"boot\r\nLABWIRED_READY:current\r", b"\n"])
+        self.assertTrue(result.matched)
+        self.assertEqual(raw, b"boot\r\nLABWIRED_READY:current\r\n")
+
+    def test_rejects_absent_wrong_stale_or_incomplete_nonce_with_bounded_evidence(self):
+        for chunks in ([b"boot\n"], [b"LABWIRED_READY:wrong\n"],
+                       [b"LABWIRED_READY:stale\n"], [b"LABWIRED_READY:current"]):
+            with self.subTest(chunks=chunks):
+                started = time.monotonic()
+                result, raw = self._capture(chunks, timeout=.05)
+                self.assertFalse(result.matched)
+                self.assertLess(time.monotonic() - started, .5)
+                self.assertLessEqual(len(raw), 64)
+
+    def test_rejects_unsupported_baud_and_closes_opened_fd(self):
+        master, slave = pty.openpty()
+        device = os.ttyname(slave)
+        os.close(slave)
+        real_close = os.close
+        closed = []
+        with tempfile.TemporaryDirectory() as directory, mock.patch("benchmarks.twin2silicon.hil.esp32s3.os.close", side_effect=lambda fd: (closed.append(fd), real_close(fd))[1]):
+            with self.assertRaises(ValueError):
+                capture_uart_nonce(device, 12345, "n", .01, Path(directory) / "log")
+        real_close(master)
+        self.assertTrue(closed)
+
+
+class OpenOcdEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.assertions = (
+            RegisterAssertion("enable", 0x60004020, 4, 4),
+            RegisterAssertion("high", 0x60004004, 4, 4),
+        )
+
+    def test_command_is_argv_and_requests_marked_records_at_fixed_speed(self):
+        command = build_openocd_command("openocd", "board.cfg", "JTAG-1", self.assertions)
+        self.assertEqual(command[:3], ["openocd", "-f", "board.cfg"])
+        script = command[command.index("-c") + 1]
+        for fragment in ("adapter serial JTAG-1", "adapter speed 4000", "reset run", "sleep 750", "halt",
+                         "echo @@REG enable 0x60004020", "mdw 0x60004020", "exit"):
+            self.assertIn(fragment, script)
+        self.assertNotIn(";", command[:-1])
+
+    def test_parser_accepts_only_immediately_paired_canonical_requested_records(self):
+        text = "noise\n@@REG enable 0x60004020\n0x60004020: 0x00000004\n@@REG high 0x60004004\n0x60004004: 0x00000004\n"
+        self.assertEqual(parse_openocd_registers(text, self.assertions), {"enable": 4, "high": 4})
+        invalid = [
+            text.replace("0x60004020: 0x00000004", "noise\n0x60004020: 0x00000004"),
+            text + "@@REG enable 0x60004020\n0x60004020: 0x00000004\n",
+            text.replace("enable", "other"),
+            text.replace("@@REG enable 0x60004020", "@@REG enable 0x60004024"),
+            text.replace("0x60004020: 0x00000004", "60004020 = 4"),
+            text.replace("@@REG enable 0x60004020", "@@REG enable not-an-address"),
+            text + "@@REG malformed\n",
+            text + "Error: target not halted\n",
+            text.split("@@REG high")[0],
+        ]
+        for evidence in invalid:
+            with self.subTest(evidence=evidence), self.assertRaises(ValueError):
+                parse_openocd_registers(evidence, self.assertions)
+
+    def test_masked_mismatch_fails_and_all_assertions_pass(self):
+        passing = evaluate_registers({"enable": 0x104, "high": 4}, self.assertions)
+        failing = evaluate_registers({"enable": 0, "high": 4}, self.assertions)
+        self.assertEqual(passing.status, "pass")
+        self.assertEqual(failing.status, "hardware_fail")
+        self.assertFalse(failing.observations[0].passed)
 
 
 if __name__ == "__main__":
