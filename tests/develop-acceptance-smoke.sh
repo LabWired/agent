@@ -120,6 +120,10 @@ fi
 hardware_contract=0
 if "$ROOT/tests/hardware-release-contract.sh" >"$WORK/hardware-release.log" 2>&1; then
   hardware_contract=1
+else
+  printf '%s\n' 'hardware contract diagnostics (last 40 redacted lines):' >&2
+  tail -n 40 "$WORK/hardware-release.log" \
+    | sed -E 's/(api[_-]?key|token|password|secret)([=:][^[:space:]]*)?/\1=[REDACTED]/Ig' >&2
 fi
 
 # 1. Greenfield ESP32-C3: a real PlatformIO compile is mandatory.

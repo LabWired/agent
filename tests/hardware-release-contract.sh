@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'rc=$?; [[ "${LABWIRED_TEST_DEBUG:-0}" != 1 ]] || printf "hardware-release-contract: TRACE line=%s rc=%s command=%q\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2' ERR
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE="$ROOT/fixtures/hardware-profiles/esp32c3-acceptance.template.json"
 
