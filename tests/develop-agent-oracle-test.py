@@ -26,7 +26,9 @@ assert set(bundle) == {"event_ids", "tool_names", "order", "source_citations", "
 
 opencode = run("opencode-valid.jsonl")
 assert opencode.returncode == 0, opencode.stderr
-assert json.loads(opencode.stdout)["final_claim"] == "model_verified"
+opencode_bundle = json.loads(opencode.stdout)
+assert opencode_bundle["final_claim"] == "model_verified"
+assert opencode_bundle["source_citations"] == ["catalog:board:esp32-c3-supermini"]
 
 scenario_ok = subprocess.run(
     [sys.executable, str(ORACLE), "validate", str(FIX / "valid-hardware-manifest.jsonl"), "greenfield-esp32c3"],
@@ -81,6 +83,7 @@ for fixture, reason in {
     "invented-hardware-prose.jsonl": "hardware-sensitive",
     "empty-hardware-manifest.jsonl": "hardware-sensitive",
     "fake-echo-opencode.jsonl": "context",
+    "opencode-empty-context.jsonl": "context",
     "compile-error-prose.jsonl": "compile",
     "verify-failed-prose.jsonl": "verify event",
 }.items():

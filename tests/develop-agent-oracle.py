@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 CONTEXT_TOOLS = {"labwired_context"}
-GROUNDING_TOOLS = {"labwired_part", "labwired_datasheet", "labwired_search", "labwired_sdk", "labwired_svd", "labwired_schematic", "labwired_netlist", "labwired_project"}
+GROUNDING_TOOLS = {"labwired_part", "labwired_datasheet", "labwired_search", "labwired_describe", "labwired_sdk", "labwired_svd", "labwired_schematic", "labwired_netlist", "labwired_project"}
 COMPILE_TOOLS = {"labwired_compile", "labwired_build"}
 VERIFY_TOOLS = {"labwired_verify", "labwired_test"}
 RUN_TOOLS = {"labwired_run", "labwired_simulate", "labwired_twin_run"}
@@ -187,8 +187,14 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
     if domain is not True:
         return None
     for result in structured_results(event):
-        if phase == "context" and any(isinstance(result.get(key), str) and result[key].strip() for key in ("project", "workspace", "context")):
-            return True
+        if phase == "context":
+            if any(isinstance(result.get(key), str) and result[key].strip() for key in ("project", "workspace", "context")):
+                return True
+            if result.get("design_context_ok") is True and all(
+                isinstance(result.get(key), str) and result[key].strip()
+                for key in ("board", "mcu")
+            ):
+                return True
         if phase == "compile":
             artifact = typed_record(result, "artifact", "firmware")
             firmware_ref = result.get("firmware_ref")
@@ -241,6 +247,14 @@ def citations(event: dict) -> list[str]:
             text = sanitize_citation(match)
             if text not in found:
                 found.append(text[:512])
+    if tool_name(event).lower() == "labwired_describe":
+        for result in structured_results(event):
+            for key, prefix in (("board", "catalog:board:"), ("type", "catalog:component:")):
+                value = result.get(key)
+                if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._-]+", value):
+                    citation = prefix + value
+                    if citation not in found:
+                        found.append(citation)
     return found
 
 
