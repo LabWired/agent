@@ -773,6 +773,118 @@ class OpenOcdExecutionTests(unittest.TestCase):
             self.assertEqual(terminated.read_text(), "terminated")
 
 
+class SimpleHilRunnerTests(unittest.TestCase):
+    def _run_cli(self, *arguments):
+        return subprocess.run(
+            [sys.executable, str(REPOSITORY_ROOT / "benchmarks/twin2silicon/run_hil.py"),
+             *map(str, arguments)],
+            cwd=REPOSITORY_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=15,
+        )
+
+    def test_complete_fake_hil_pass(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            import shutil
+            shutil.copytree(task / "public", candidate)
+            (candidate / "firmware/src/main.c").write_text(
+                (candidate / "firmware/src/main.c").read_text().replace(
+                    "GPIO_MODE_INPUT", "GPIO_MODE_OUTPUT"
+                )
+            )
+            flash_marker = root / "flashed"
+            pio_dir = root / "pio"
+            pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, textwrap.dedent(f"""
+                import pathlib, sys
+                args = sys.argv[1:]
+                project = pathlib.Path(args[args.index('--project-dir') + 1])
+                if 'clean' in args:
+                    raise SystemExit(0)
+                if 'upload' in args:
+                    pathlib.Path({str(flash_marker)!r}).write_text('flashed')
+                    raise SystemExit(0)
+                artifact = project / '.pio/build/esp32s3/firmware.bin'
+                artifact.parent.mkdir(parents=True, exist_ok=True)
+                artifact.write_bytes(b'firmware')
+            """))
+            identity_dir = root / "identity"
+            identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, "print('JTAG-1')\n")
+            openocd_dir = root / "openocd"
+            openocd_dir.mkdir()
+            openocd = executable_fixture(openocd_dir, textwrap.dedent("""
+                import sys
+                print('@@REG gpio2_output_enabled 0x60004020', file=sys.stderr)
+                print('0x60004020: 00000004', file=sys.stderr)
+                print('@@REG gpio2_output_high 0x60004004', file=sys.stderr)
+                print('0x60004004: 00000004', file=sys.stderr)
+            """))
+            master, slave = pty.openpty()
+            uart = os.ttyname(slave)
+            run_dir = root / "run"
+            def write_uart():
+                deadline = time.monotonic() + 10
+                header = run_dir / "workspace/firmware/include/run_nonce.h"
+                while time.monotonic() < deadline and not (flash_marker.exists() and header.exists()):
+                    time.sleep(.01)
+                if flash_marker.exists() and header.exists():
+                    nonce = header.read_text().split('"')[1]
+                    os.write(master, f"LABWIRED_READY:{nonce}\n".encode())
+            writer = threading.Thread(target=write_uart)
+            writer.start()
+            result = self._run_cli(
+                task, "--run-dir", run_dir, "--candidate", candidate,
+                "--jtag-serial", "JTAG-1", "--uart-device", uart,
+                "--platformio", pio, "--openocd", openocd,
+                "--identity-command-json", json.dumps([str(identity)]),
+            )
+            writer.join(10)
+            os.close(master)
+            os.close(slave)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertEqual(manifest["status"], "pass")
+            self.assertEqual(manifest["compile_status"], "pass")
+            self.assertEqual(manifest["hardware_status"], "pass")
+            self.assertTrue(manifest["uart"]["matched"])
+            self.assertTrue(all(item["passed"] for item in manifest["registers"]))
+
+    def test_compile_failure_never_touches_hardware(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            import shutil
+            shutil.copytree(task / "public", candidate)
+            marker = root / "hardware-ran"
+            pio_dir = root / "pio"
+            pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, "import sys; raise SystemExit(0 if 'clean' in sys.argv else 1)\n")
+            hardware_dir = root / "hardware"
+            hardware_dir.mkdir()
+            hardware = executable_fixture(
+                hardware_dir,
+                f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')\n",
+            )
+            result = self._run_cli(
+                task, "--run-dir", root / "run", "--candidate", candidate,
+                "--jtag-serial", "JTAG-1", "--uart-device", "/dev/null",
+                "--platformio", pio, "--openocd", hardware,
+                "--identity-command-json", json.dumps([str(hardware)]),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((root / "run/run.json").read_text())
+            self.assertEqual(manifest["status"], "fail")
+            self.assertEqual(manifest["compile_status"], "fail")
+            self.assertEqual(manifest["hardware_status"], "not_run")
+            self.assertFalse(marker.exists())
+
+
 if __name__ == "__main__":
     if "-k" in sys.argv:
         pattern_index = sys.argv.index("-k") + 1
