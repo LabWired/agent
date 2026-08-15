@@ -104,8 +104,12 @@ def _normalized_usage(path: Path) -> dict[str, object]:
     reason = source.get("unavailable_reason")
     if not isinstance(reason, str) or not reason:
         reason = None
-    if any(value is None for value in normalized.values()):
-        reason = reason or "runtime did not expose usage"
+    if reason is None:
+        values = tuple(normalized.values())
+        if all(value is None for value in values):
+            reason = "runtime did not expose usage"
+        elif any(value is None for value in values):
+            reason = "one or more usage fields unavailable"
     normalized["unavailable_reason"] = reason
     return normalized
 
@@ -163,6 +167,8 @@ def _agent_row(
     )
     result = _read_json(trial / "agent-result.json")
     agent_status = result.get("status") if result and isinstance(result.get("status"), str) else "infrastructure_error"
+    if child_error is not None or returncode != 0:
+        agent_status = "infrastructure_error"
     row: dict[str, object] = {
         "runtime": runtime,
         "initial_public_sha256": initial_public_sha256,
@@ -175,6 +181,8 @@ def _agent_row(
     }
     if child_error is not None:
         row["agent_error"] = child_error
+    elif returncode != 0:
+        row["agent_error"] = f"agent runner exited with status {returncode}"
     elif result is None:
         row["agent_error"] = "agent runner did not produce agent-result.json"
     return row

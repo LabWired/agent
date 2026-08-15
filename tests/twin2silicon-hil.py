@@ -384,7 +384,7 @@ class RuntimeMatrixTests(unittest.TestCase):
     script = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "run_matrix.py"
     task = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "tasks" / "esp32s3-gpio-hil-001"
 
-    def _fake_agent(self, directory, usage_schema="normalized"):
+    def _fake_agent(self, directory, usage_schema="normalized", child_returncode=0):
         body = textwrap.dedent(f"""
             import argparse
             import json
@@ -426,8 +426,11 @@ class RuntimeMatrixTests(unittest.TestCase):
                     "tokens": {{"fresh_input": 10, "cached_input": 0, "output": 5, "reasoning": None}},
                     "rates_usd_per_million": {{"fresh_input": 1, "cached_input": 1, "output": 1}},
                 }})
+            elif {usage_schema!r} == "partial":
+                usage["estimated_cost_usd"] = 0.000015
             (output / "usage.json").write_text(json.dumps(usage))
             (output / "agent-invocation.json").write_text(json.dumps(vars(args), sort_keys=True))
+            raise SystemExit({child_returncode!r})
         """)
         return executable_fixture(directory, body)
 
@@ -536,6 +539,39 @@ class RuntimeMatrixTests(unittest.TestCase):
                         (output / "trials" / "opencode" / "hil" / "hil-invocation.json").read_text()
                     )
                     self.assertEqual(invocation["usage_json"] is not None, expected_usage_json)
+
+    def test_matrix_preserves_known_partial_usage_with_an_accurate_reason(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent", "partial"), self._fake_hil(root / "hil"),
+                "--agent-only", "--runtime", "opencode",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            usage = json.loads((root / "matrix" / "matrix.json").read_text())["trials"][0]["usage"]
+            self.assertEqual(usage["fresh_input"], 10)
+            self.assertEqual(usage["output"], 5)
+            self.assertEqual(usage["estimated_cost_usd"], 0.000015)
+            self.assertIsNone(usage["reasoning"])
+            self.assertEqual(usage["unavailable_reason"], "one or more usage fields unavailable")
+
+    def test_matrix_does_not_run_hil_after_a_nonzero_agent_child_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            completed = self._run_cli(
+                root / "matrix", self._fake_agent(root / "agent", child_returncode=7), self._fake_hil(root / "hil"),
+                "--runtime", "opencode",
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            row = json.loads((root / "matrix" / "matrix.json").read_text())["trials"][0]
+            self.assertEqual(row["agent_status"], "infrastructure_error")
+            self.assertEqual(row["agent_result"]["status"], "completed")
+            self.assertEqual(row["agent_child_returncode"], 7)
+            self.assertIn("exited with status 7", row["agent_error"])
+            self.assertEqual(row["hil_status"], "not_run")
+            self.assertFalse((root / "matrix" / "trials" / "opencode" / "hil").exists())
 
     def test_matrix_rejects_existing_output_and_invalid_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
