@@ -62,8 +62,9 @@ behavior:
   requirement.
 - `hardware_observed`: a trusted physical provider produced independent,
   identity-bound evidence after exact flash.
-- `untrusted_observation`: an explicitly approved custom source reported an
-  observation; it cannot satisfy a trusted required level.
+- `untrusted_observation`: a reserved evidence level for a possible future
+  custom provider. Profile schema v1 accepts no custom provider and cannot
+  produce this level operationally.
 - `blocked`: a required capability, identity, confirmation, secret, artifact,
   instrument, or piece of evidence was absent.
 - `failed`: a provider ran and contradicted the assertion or failed while

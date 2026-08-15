@@ -53,6 +53,9 @@ if ! (cd "$ROOT" && npm pack --dry-run --json >"$PACK_JSON"); then
   printf 'FAIL package.json: npm pack --dry-run failed\n' >&2
   fail=1
 else
+  if ! node "$ROOT/scripts/check-hardware-package-inventory.mjs" "$ROOT" "$PACK_JSON"; then
+    fail=1
+  fi
   if ! node - "$ROOT" "$PACK_JSON" "${PUBLIC_DOCS[@]}" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -79,14 +82,7 @@ const required = [
   'lib/dispatch.sh', 'lib/prefix.sh', 'lib/resolve-sim.sh',
   'lib/serial-challenge.ps1',
   'lib/serial-capture.ps1', 'lib/rtt-capture.ps1', 'lib/probe-flash.ps1',
-  'lib/hardware/adapters.mjs', 'lib/hardware/evidence.mjs',
-  'lib/hardware/locks.mjs', 'lib/hardware/process.mjs',
-  'lib/hardware/profile.mjs', 'lib/hardware/runner.mjs',
   'scripts/hardware-runner.mjs',
-  'fixtures/hardware-profiles/esp32c3-acceptance.template.json',
-  'fixtures/hardware-profiles/minimal.json',
-  'fixtures/hardware-profiles/logic/led-pass.csv',
-  'fixtures/hardware-profiles/logic/led-flat.csv',
   'server/rpc-server.mjs', 'server/agent-launcher.mjs', 'share/smoke/status-parser-model-verified.json',
   'share/smoke/status-parser-failed.json', 'scripts/profiles/esp32c3-serial.sh',
   'examples/esp32c3-serial/platformio.ini', 'examples/esp32c3-serial/src/main.cpp'
@@ -112,12 +108,7 @@ for (const skill of requiredSkills) {
   if (!files.has(file)) fail(file, 0, 'required runtime skill is missing');
 }
 
-const allowedFixtures = new Set([
-  'fixtures/hardware-profiles/esp32c3-acceptance.template.json',
-  'fixtures/hardware-profiles/minimal.json',
-  'fixtures/hardware-profiles/logic/led-pass.csv',
-  'fixtures/hardware-profiles/logic/led-flat.csv',
-]);
+const allowedFixtures = new Set([...files].filter(file => /^fixtures\/hardware-profiles\/.+\.(?:json|csv)$/i.test(file)));
 const forbiddenPath = /(^|\/)(tests?|fixtures|\.grok|screenshots?|images?|local[-_]?evidence|competitors?)(\/|$)|^docs\/(qa|product|superpowers)\/|(^|\/)(cursor|claude|copilot|windsurf)([._/-]|$)|\.(png|jpe?g|gif|webp|yml)$/i;
 const forbiddenSkillArtifact = /skills\/systematic-debugging\/(CREATION-LOG\.md|test-academic\.md|test-pressure-[123]\.md)$/;
 for (const file of files) {

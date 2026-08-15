@@ -37,6 +37,10 @@ require_text docs/VERIFY.md 'external.*receipt|receipt.*external' 'external rece
 require_text docs/VERIFY.md 'Arduino' 'Arduino twin format limitation is undocumented'
 require_text docs/VERIFY.md 'exact physical flash' 'unsupported twin physical fallback is undocumented'
 require_text docs/VERIFY.md 'BLOCKED' 'strict physical lane missing-profile behavior is undocumented'
+require_text docs/VERIFY.md 'reserved.*untrusted_observation|untrusted_observation.*reserved' 'reserved untrusted level is undocumented'
+require_text docs/USAGE.md 'Ordinary.*BLOCKED' 'ordinary blocked exit behavior is undocumented'
+require_text docs/USAGE.md 'results.*exit `3`' 'ordinary blocked/fail exit code is undocumented'
+require_text scripts/hardware-runner.mjs "return parsed\?\.command === 'run'.*\? 2.*: 3" 'documented exit meanings are not tied to runner constants'
 
 require_text docs/TESTING.md 'hardware-release-contract' 'release hardware lane is undocumented'
 require_text docs/TESTING.md 'windows-hardware-contract' 'Windows hardware lane is undocumented'

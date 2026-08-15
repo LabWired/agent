@@ -116,8 +116,11 @@ Windows PowerShell, invoke the same interface as
 `labwired-agent.ps1 hardware plan ...` and `labwired-agent.ps1 hardware run
 ...`; `labwired.cmd` is also available from Command Prompt.
 
-The runner exits `0` for a completed passing run, `2` for usage, confirmation,
-identity, or capability blocks, and `3` when an executed assertion fails.
+The public hardware CLI exits `0` for successful planning or a passing run.
+Exit `2` is limited to CLI usage errors and missing or wrong confirmation. The
+strict acceptance wrapper also intentionally maps its preflight `BLOCKED`
+conditions to `2`. Ordinary provider, identity, or capability `BLOCKED`
+results and execution or evidence `FAIL` results exit `3`.
 Planning never creates the evidence directory or builds, flashes, or opens an
 instrument. Runs lock the explicit target, probe, and port identities so two
 sessions cannot control the same lab resource.
