@@ -11,7 +11,6 @@ from pathlib import Path
 import secrets
 import shutil
 import sys
-import threading
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -135,30 +134,23 @@ def main(argv: list[str] | None = None) -> int:
             if identity.status != "pass":
                 raise RuntimeError(identity.detail or "board identity failed")
 
-            uart_box = {}
-            uart_errors = []
-            def capture() -> None:
-                try:
-                    uart_box["result"] = capture_uart_nonce(
-                        args.uart_device, config.uart_baud, nonce,
-                        config.uart_timeout_seconds, run_dir / "uart.log")
-                except Exception as error:
-                    uart_errors.append(error)
-            uart_thread = threading.Thread(target=capture)
-            uart_thread.start()
             flash_command = build + ["--target", config.flash_target]
             flashed = flash_firmware(flash_command, cwd=workspace, evidence_dir=run_dir,
                                      timeout_seconds=config.flash_timeout_seconds,
                                      identity_validated=True)
-            uart_thread.join(config.uart_timeout_seconds + 1)
-            if uart_thread.is_alive() or uart_errors:
-                raise RuntimeError("UART capture failed")
-            uart = uart_box["result"]
-            result["uart"] = {"matched": uart.matched, "termination": uart.termination_reason,
-                              "bytes": uart.bytes_captured}
             if flashed.status == "infrastructure_error":
                 raise RuntimeError(flashed.detail or "flash infrastructure failed")
-            if flashed.status == "hardware_fail" or not uart.matched:
+            if flashed.status == "hardware_fail":
+                result.update(status="fail", hardware_status="fail")
+                save()
+                return 0
+
+            uart = capture_uart_nonce(
+                args.uart_device, config.uart_baud, nonce,
+                config.uart_timeout_seconds, run_dir / "uart.log")
+            result["uart"] = {"matched": uart.matched, "termination": uart.termination_reason,
+                              "bytes": uart.bytes_captured}
+            if not uart.matched:
                 result.update(status="fail", hardware_status="fail")
                 save()
                 return 0

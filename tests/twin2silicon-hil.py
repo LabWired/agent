@@ -120,11 +120,19 @@ class FixtureContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("gpio_set_direction(TEST_GPIO, GPIO_MODE_INPUT)", main_source)
+        self.assertLess(
+            main_source.index("for (;;)"),
+            main_source.index('printf("LABWIRED_READY:'),
+        )
         sdkconfig_defaults = (
             task_root / "public" / "firmware" / "sdkconfig.defaults"
         ).read_text(encoding="utf-8")
         self.assertIn("# CONFIG_ESP_CONSOLE_NONE is not set", sdkconfig_defaults)
         self.assertNotIn("CONFIG_ESP_CONSOLE_UART_NONE", sdkconfig_defaults)
+        platformio_ini = (
+            task_root / "public" / "firmware" / "platformio.ini"
+        ).read_text(encoding="utf-8")
+        self.assertIn("board_upload.flash_size = 4MB", platformio_ini)
 
 
 class ResultContractTests(unittest.TestCase):
@@ -379,7 +387,7 @@ class Esp32S3ConfigTests(unittest.TestCase):
         self.assertEqual((config.flash_target, config.flash_artifact, config.flash_timeout_seconds),
                          ("upload", ".pio/build/esp32s3/firmware.bin", 120))
         self.assertEqual((config.openocd_board_config, config.openocd_startup_timeout_seconds,
-                          config.openocd_command_timeout_seconds), ("esp32s3-builtin.cfg", 20, 10))
+                         config.openocd_command_timeout_seconds), ("board/esp32s3-builtin.cfg", 20, 10))
         self.assertEqual((config.platformio_project_dir, config.platformio_environment),
                          ("public/firmware", "esp32s3"))
         self.assertEqual(len(config.assertions), 2)
@@ -665,8 +673,8 @@ class OpenOcdEvidenceTests(unittest.TestCase):
         command = build_openocd_command("openocd", "board.cfg", "JTAG-1", self.assertions)
         self.assertEqual(command, ["openocd", "-f", "board.cfg", "-c",
             'adapter serial JTAG-1; adapter speed 4000; init; reset run; sleep 750; halt; '
-            'echo "@@REG enable 0x60004020"; mdw 0x60004020 1; '
-            'echo "@@REG high 0x60004004"; mdw 0x60004004 1; exit'])
+            'echo "@@REG enable 0x60004020"; echo [capture "mdw 0x60004020 1"]; '
+            'echo "@@REG high 0x60004004"; echo [capture "mdw 0x60004004 1"]; exit'])
 
     def test_empty_assertions_are_rejected_by_all_register_paths(self):
         with self.assertRaises(ValueError):
@@ -797,15 +805,23 @@ class SimpleHilRunnerTests(unittest.TestCase):
                 )
             )
             flash_marker = root / "flashed"
+            run_dir = root / "run"
             pio_dir = root / "pio"
             pio_dir.mkdir()
             pio = executable_fixture(pio_dir, textwrap.dedent(f"""
-                import pathlib, sys
+                import pathlib, sys, time
                 args = sys.argv[1:]
                 project = pathlib.Path(args[args.index('--project-dir') + 1])
                 if 'clean' in args:
                     raise SystemExit(0)
                 if 'upload' in args:
+                    uart_log = pathlib.Path({str(root / "run/uart.log")!r})
+                    deadline = time.monotonic() + 1
+                    while time.monotonic() < deadline and not uart_log.exists():
+                        time.sleep(.01)
+                    if uart_log.exists():
+                        print('UART capture started before flash', file=sys.stderr)
+                        raise SystemExit(2)
                     pathlib.Path({str(flash_marker)!r}).write_text('flashed')
                     raise SystemExit(0)
                 artifact = project / '.pio/build/esp32s3/firmware.bin'
@@ -826,7 +842,6 @@ class SimpleHilRunnerTests(unittest.TestCase):
             """))
             master, slave = pty.openpty()
             uart = os.ttyname(slave)
-            run_dir = root / "run"
             def write_uart():
                 deadline = time.monotonic() + 10
                 header = run_dir / "workspace/firmware/include/run_nonce.h"

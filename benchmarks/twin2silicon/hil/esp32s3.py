@@ -344,7 +344,7 @@ def build_openocd_command(executable: str, config: str, adapter_serial: str,
                 "sleep 750", "halt"]
     for assertion in assertions:
         commands.extend((f'echo "@@REG {assertion.name} 0x{assertion.address:08x}"',
-                         f"mdw 0x{assertion.address:08x} 1"))
+                         f'echo [capture "mdw 0x{assertion.address:08x} 1"]'))
     commands.append("exit")
     return [executable, "-f", config, "-c", "; ".join(commands)]
 

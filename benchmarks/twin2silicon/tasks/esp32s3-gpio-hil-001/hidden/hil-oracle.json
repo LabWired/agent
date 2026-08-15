@@ -20,7 +20,7 @@
     "timeout_seconds": 30
   },
   "openocd": {
-    "board_config": "esp32s3-builtin.cfg",
+    "board_config": "board/esp32s3-builtin.cfg",
     "startup_timeout_seconds": 20,
     "command_timeout_seconds": 10
   },
