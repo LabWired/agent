@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             if identity.status != "pass":
                 raise RuntimeError(identity.detail or "board identity failed")
 
-            flash_command = build + ["--target", config.flash_target]
+            flash_command = build + ["--upload-port", args.uart_device, "--target", config.flash_target]
             flashed = flash_firmware(flash_command, cwd=workspace, evidence_dir=run_dir,
                                      timeout_seconds=config.flash_timeout_seconds,
                                      identity_validated=True)

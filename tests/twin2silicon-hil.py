@@ -1526,6 +1526,9 @@ class SimpleHilRunnerTests(unittest.TestCase):
             )
             flash_marker = root / "flashed"
             run_dir = root / "run"
+            master, slave = pty.openpty()
+            uart = os.ttyname(slave)
+            wrong_uart = "/dev/cu.usbmodem11201"
             pio_dir = root / "pio"
             pio_dir.mkdir()
             pio = executable_fixture(pio_dir, textwrap.dedent(f"""
@@ -1535,6 +1538,8 @@ class SimpleHilRunnerTests(unittest.TestCase):
                 if 'clean' in args:
                     raise SystemExit(0)
                 if 'upload' in args:
+                    assert args[args.index('--upload-port') + 1] == {uart!r}
+                    assert {wrong_uart!r} not in args
                     uart_log = pathlib.Path({str(root / "run/uart.log")!r})
                     deadline = time.monotonic() + 1
                     while time.monotonic() < deadline and not uart_log.exists():
@@ -1560,8 +1565,6 @@ class SimpleHilRunnerTests(unittest.TestCase):
                 print('@@REG gpio2_output_high 0x60004004', file=sys.stderr)
                 print('0x60004004: 00000004', file=sys.stderr)
             """))
-            master, slave = pty.openpty()
-            uart = os.ttyname(slave)
             def write_uart():
                 deadline = time.monotonic() + 10
                 header = run_dir / "workspace/firmware/include/run_nonce.h"
