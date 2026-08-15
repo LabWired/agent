@@ -57,10 +57,11 @@ def executable_fixture(directory, body):
 
 
 class RuntimeAdapterTests(unittest.TestCase):
-    def adapter_context(self, executable="runtime"):
+    def adapter_context(self, runtime, executable=None):
         directory = Path("/tmp/runtime-adapter-test")
         return AdapterContext(
-            executable=executable,
+            runtime=runtime,
+            executable=executable or runtime,
             workspace=directory / "workspace",
             prompt="Complete the public firmware task.",
             config_dir=directory / "config",
@@ -115,6 +116,12 @@ class RuntimeAdapterTests(unittest.TestCase):
             with self.subTest(command=command[:2]):
                 self.assertNotIn("--model", command)
                 self.assertNotIn(hidden_oracle, " ".join(command))
+
+    def test_build_runtime_command_rejects_context_runtime_mismatch(self):
+        context = self.adapter_context("codex")
+
+        with self.assertRaisesRegex(ValueError, "runtime does not match context"):
+            build_runtime_command("claude", context)
 
     def test_adapter_dataclasses_are_frozen(self):
         context = self.adapter_context("codex")

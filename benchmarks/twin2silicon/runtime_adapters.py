@@ -26,6 +26,7 @@ _CLAUDE_MCP_CONFIG = "claude-mcp.json"
 class AdapterContext:
     """Execution inputs shared by the native runtime adapters."""
 
+    runtime: RuntimeName
     executable: str
     workspace: Path
     prompt: str
@@ -50,6 +51,8 @@ class NormalizedUsage:
 def build_runtime_command(runtime: RuntimeName, context: AdapterContext) -> list[str]:
     """Build the native, model-default command for ``runtime``."""
 
+    if runtime != context.runtime:
+        raise ValueError("runtime does not match context")
     if runtime == "codex":
         return [
             context.executable,
