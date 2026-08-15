@@ -97,6 +97,11 @@ class FixtureContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("gpio_set_direction(TEST_GPIO, GPIO_MODE_INPUT)", main_source)
+        sdkconfig_defaults = (
+            task_root / "public" / "firmware" / "sdkconfig.defaults"
+        ).read_text(encoding="utf-8")
+        self.assertIn("# CONFIG_ESP_CONSOLE_NONE is not set", sdkconfig_defaults)
+        self.assertNotIn("CONFIG_ESP_CONSOLE_UART_NONE", sdkconfig_defaults)
 
 
 class ResultContractTests(unittest.TestCase):
