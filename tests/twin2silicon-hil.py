@@ -90,6 +90,7 @@ class RuntimeAdapterTests(unittest.TestCase):
             commands["codex"],
             [
                 "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check",
+                "-c", 'mcp_servers={labwired={command="npx",args=["-y","@labwired/mcp"]}}',
                 "-s", "workspace-write", "-C", str(contexts["codex"].workspace),
                 contexts["codex"].prompt,
             ],
@@ -97,7 +98,7 @@ class RuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(
             commands["claude"],
             [
-                "claude", "--print", "--output-format", "stream-json",
+                "claude", "--print", "--verbose", "--output-format", "stream-json",
                 "--no-session-persistence", "--permission-mode", "acceptEdits",
                 "--mcp-config", str(contexts["claude"].config_dir / "claude-mcp.json"),
                 "--strict-mcp-config",
@@ -1235,9 +1236,10 @@ class RunAgentTests(unittest.TestCase):
     script = REPOSITORY_ROOT / "benchmarks/twin2silicon/run_agent.py"
 
     def _fake_runtime(self, directory, runtime, mode="success", repair_iterations=6):
+        codex_override = 'mcp_servers={labwired={command="npx",args=["-y","@labwired/mcp"]}}'
         workspace_code = {
-            "codex": "workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert args[args.index('-s') + 1] == 'workspace-write'\nassert os.environ['CODEX_HOME'] == str(Path(os.environ['EXPECTED_CONFIG']))",
-            "claude": "workspace = Path.cwd()\nassert args[:2] == ['--print', '--output-format']\nassert args[args.index('--output-format') + 1] == 'stream-json'\nassert args[args.index('--mcp-config') + 1] == str(Path(os.environ['EXPECTED_CONFIG']) / 'claude-mcp.json')\nassert '--strict-mcp-config' in args",
+            "codex": f"workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert args[args.index('-c') + 1] == {codex_override!r}\nassert args[args.index('-s') + 1] == 'workspace-write'\nassert os.environ['CODEX_HOME'] == os.environ['EXPECTED_CODEX_HOME']",
+            "claude": "workspace = Path.cwd()\nassert args[:3] == ['--print', '--verbose', '--output-format']\nassert args[args.index('--output-format') + 1] == 'stream-json'\nassert args[args.index('--mcp-config') + 1] == str(Path(os.environ['EXPECTED_CONFIG']) / 'claude-mcp.json')\nassert '--strict-mcp-config' in args",
             "opencode": "workspace = Path(args[args.index('--dir') + 1])\nassert args[:2] == ['run', '--format']\nassert args[args.index('--format') + 1] == 'json'\nassert os.environ['OPENCODE_CONFIG'] == str(Path(os.environ['EXPECTED_CONFIG']) / 'opencode.json')",
         }[runtime]
         output = {
@@ -1287,6 +1289,8 @@ class RunAgentTests(unittest.TestCase):
         environment = os.environ.copy()
         environment.update({
             "EXPECTED_CONFIG": str((trial / "runtime-config").resolve()),
+            "CODEX_HOME": str((trial.parent / "native-codex-home").resolve()),
+            "EXPECTED_CODEX_HOME": str((trial.parent / "native-codex-home").resolve()),
             "EXPECTED_INSTRUCTIONS": str(
                 REPOSITORY_ROOT / "benchmarks/twin2silicon/shared-agent-instructions.md"
             ),

@@ -20,6 +20,7 @@ RuntimeName = Literal["opencode", "codex", "claude"]
 _MAX_USAGE_COUNT = 1_000_000_000_000
 _MAX_COST_USD = 1_000_000_000.0
 _CLAUDE_MCP_CONFIG = "claude-mcp.json"
+_CODEX_MCP_OVERRIDE = 'mcp_servers={labwired={command="npx",args=["-y","@labwired/mcp"]}}'
 
 
 def codex_mcp_toml() -> str:
@@ -75,6 +76,8 @@ def build_runtime_command(runtime: RuntimeName, context: AdapterContext) -> list
             "--json",
             "--ephemeral",
             "--skip-git-repo-check",
+            "-c",
+            _CODEX_MCP_OVERRIDE,
             "-s",
             "workspace-write",
             "-C",
@@ -85,6 +88,7 @@ def build_runtime_command(runtime: RuntimeName, context: AdapterContext) -> list
         return [
             context.executable,
             "--print",
+            "--verbose",
             "--output-format",
             "stream-json",
             "--no-session-persistence",

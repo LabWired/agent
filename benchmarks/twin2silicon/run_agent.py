@@ -112,7 +112,7 @@ def _prepare_runtime_config(runtime: str, config_dir: Path) -> None:
 @contextmanager
 def _runtime_environment(runtime: str, config_dir: Path) -> Iterator[None]:
     values = {
-        "codex": {"CODEX_HOME": str(config_dir)},
+        "codex": {},
         "opencode": {"OPENCODE_CONFIG": str(config_dir / "opencode.json")},
         "claude": {},
     }[runtime]
