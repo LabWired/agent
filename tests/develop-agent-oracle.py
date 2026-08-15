@@ -202,6 +202,13 @@ def typed_record(result: dict, key: str, expected_type: str) -> dict | None:
 
 
 def phase_outcome(event: dict, phase: str) -> bool | None:
+    # OpenCode's built-in edit tool returns a fixed success sentence rather
+    # than a JSON domain envelope. Accept only that exact canonical response;
+    # arbitrary prose or model-supplied command text remains non-evidence.
+    if phase == "edit" and tool_name(event).lower() == "edit" and outcome(event) is True:
+        payloads = returned_payloads(event)
+        if payloads == ["Edit applied successfully."]:
+            return True
     domain = domain_outcome(event)
     if domain is False:
         return False
@@ -240,7 +247,9 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
             clauses = result.get("oracle_results")
             if (
                 result.get("proven") is True
-                and result.get("stop_reason") == "assertions_passed"
+                and result.get("gaps") == []
+                and result.get("run_status") in (None, "pass")
+                and result.get("stop_reason") in {"assertions_passed", "max_steps"}
                 and isinstance(clauses, list)
                 and clauses
                 and all(isinstance(clause, dict) and clause.get("passed") is True for clause in clauses)

@@ -1,0 +1,5 @@
+{"type":"tool_use","part":{"id":"e1","tool":"labwired_context","state":{"status":"completed","output":"{\"ok\":true,\"design_context_ok\":true,\"board\":\"stm32f103-blinky\",\"mcu\":\"stm32f103\"}"}}}
+{"type":"tool_use","part":{"id":"e2","tool":"labwired_describe","state":{"status":"completed","output":"{\"board\":\"stm32f103-blinky\"}"}}}
+{"type":"tool_use","part":{"id":"e3","tool":"labwired_compile","state":{"status":"completed","output":"{\"ok\":true,\"firmware_ref\":\"sha256:firmware-fixture\",\"runnable\":true}"}}}
+{"type":"tool_use","part":{"id":"e4","tool":"labwired_verify","state":{"status":"completed","output":"{\"ok\":true,\"status\":\"model_verified\",\"proven\":true,\"gaps\":[],\"run_status\":\"pass\",\"stop_reason\":\"max_steps\",\"oracle_results\":[{\"kind\":\"gpio\",\"passed\":true,\"detail\":\"PC13 toggled (gpio evidence)\"}]}"}}}
+{"type":"text","part":{"text":"{\"claim\":\"model_verified\",\"hardware_sensitive_facts\":[{\"fact\":\"PC13 is the board heartbeat LED pin\",\"source\":\"catalog:board:stm32f103-blinky\"}]}"}}

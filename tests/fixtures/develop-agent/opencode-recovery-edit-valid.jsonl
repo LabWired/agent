@@ -1,0 +1,7 @@
+{"type":"tool_use","part":{"id":"r1","tool":"labwired_context","state":{"status":"completed","output":"{\"ok\":true,\"design_context_ok\":true,\"board\":\"esp32-c3-supermini\",\"mcu\":\"esp32c3\"}"}}}
+{"type":"tool_use","part":{"id":"r2","tool":"labwired_describe","state":{"status":"completed","output":"{\"board\":\"esp32-c3-supermini\"}"}}}
+{"type":"tool_use","part":{"id":"r3","tool":"labwired_compile","state":{"status":"error","error":"compiler rejected source"}}}
+{"type":"tool_use","part":{"id":"r4","tool":"edit","state":{"status":"completed","output":"Edit applied successfully."}}}
+{"type":"tool_use","part":{"id":"r5","tool":"labwired_compile","state":{"status":"completed","output":"{\"ok\":true,\"runnable\":true,\"firmware_ref\":\"sha256:repaired-firmware\"}"}}}
+{"type":"tool_use","part":{"id":"r6","tool":"labwired_verify","state":{"status":"completed","output":"{\"ok\":true,\"status\":\"model_verified\",\"proven\":true,\"gaps\":[],\"run_status\":\"pass\",\"stop_reason\":\"assertions_passed\",\"oracle_results\":[{\"kind\":\"serial\",\"passed\":true,\"detail\":\"serial contains alive\"},{\"kind\":\"gpio\",\"passed\":true,\"detail\":\"GPIO8 toggled\"}]}"}}}
+{"type":"text","part":{"text":"{\"claim\":\"model_verified\",\"hardware_sensitive_facts\":[{\"fact\":\"GPIO8 is the active-low board LED pin\",\"source\":\"catalog:board:esp32-c3-supermini\"}]}"}}

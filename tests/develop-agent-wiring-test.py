@@ -34,6 +34,38 @@ assert "no external LED part" in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["greenfield-esp32c3"]
 assert 'source must be exactly catalog:board:stm32f103-blinky' in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["compile-recovery-esp32c3"]
+stm32_prompt = prompts["existing-stm32f103"]
+for required in (
+    "edit only the existing src/main.cpp in place",
+    "do not add, remove, or rename files",
+    "leave platformio.ini byte-identical",
+):
+    assert required in stm32_prompt
+recovery_prompt = prompts["compile-recovery-esp32c3"]
+for required in (
+    "The project already contains the deliberate error in src/main.cpp; do not overwrite or replace it before the first compile.",
+    "After the failed compile, use the edit tool on src/main.cpp for one focused repair",
+    "compile the exact repaired file content",
+):
+    assert required in recovery_prompt
+partial_prompt = prompts["partial-led-wifi"]
+for required in (
+    "upload the complete project with labwired_put_source",
+    "compile its returned source_tree_ref",
+    "target esp32-c3-supermini and the returned flash_image_refs",
+    "serial contains `Connecting to Wi-Fi` plus GPIO8 toggled",
+    'refresh context with exactly pack.board `esp32-c3-supermini` and pack.mcu `esp32c3`',
+    "do not include false context flags",
+):
+    assert required in partial_prompt
+unsupported_prompt = prompts["unsupported-custom-board"]
+for required in (
+    "nucleo-f401re only as a compiler surrogate",
+    "attempt labwired_verify with target custom-board",
+    "Physical confirmation is still required",
+    '"hardware_sensitive_facts":[{"fact":"PA5 is the surrogate board LED pin","source":"catalog:board:nucleo-f401re"}]',
+):
+    assert required in unsupported_prompt
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["partial-led-wifi"]
 for name in ("greenfield-esp32c3", "existing-stm32f103", "compile-recovery-esp32c3", "partial-led-wifi"):
     assert "GPIO oracle state must be toggled" in prompts[name]

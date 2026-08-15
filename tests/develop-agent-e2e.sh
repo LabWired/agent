@@ -95,12 +95,13 @@ prepare_project() {
 
 run_all() {
   check_prerequisites
-  local work evidence
+  local work evidence cleanup_cmd
   work="$(mktemp -d "${TMPDIR:-/tmp}/labwired-develop-agent.XXXXXX")"
   evidence="${LABWIRED_DEVELOP_EVIDENCE_DIR:-$work/evidence}"
   mkdir -p "$evidence"
   chmod 700 "$evidence"
-  trap 'rm -rf "$work"' EXIT
+  printf -v cleanup_cmd 'rm -rf -- %q' "$work"
+  trap "$cleanup_cmd" EXIT
 
   python3 - "$FIX/prompts.json" "$work/prompts.tsv" <<'PY'
 import json, sys

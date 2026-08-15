@@ -30,6 +30,12 @@ opencode_bundle = json.loads(opencode.stdout)
 assert opencode_bundle["final_claim"] == "model_verified"
 assert opencode_bundle["source_citations"] == ["catalog:board:esp32-c3-supermini"]
 
+max_steps_verified = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "opencode-max-steps-verified.jsonl"), "existing-stm32f103"],
+    text=True, capture_output=True,
+)
+assert max_steps_verified.returncode == 0, max_steps_verified.stderr
+
 refreshed = run("empty-refresh-valid.jsonl")
 assert refreshed.returncode == 0, refreshed.stderr
 
@@ -110,6 +116,12 @@ ambiguous = subprocess.run(
 )
 assert ambiguous.returncode != 0
 assert "explicit failed compile" in ambiguous.stderr.lower(), ambiguous.stderr
+
+opencode_recovery = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "opencode-recovery-edit-valid.jsonl"), "compile-recovery-esp32c3"],
+    text=True, capture_output=True,
+)
+assert opencode_recovery.returncode == 0, opencode_recovery.stderr
 
 secrets = run("secrets.jsonl")
 assert secrets.returncode == 0, secrets.stderr

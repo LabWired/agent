@@ -16,5 +16,10 @@ command_line="$(bash "$E2E" --print-command /tmp/project 'fixed prompt')"
 [[ "$command_line" != *"labwired-fast"* ]]
 grep -q 'LABWIRED_DEVELOP_SCENARIO_TIMEOUT_SECONDS' "$E2E"
 grep -q 'subprocess.run' "$E2E"
+grep -q "printf -v cleanup_cmd" "$E2E"
+if grep -q "trap 'rm -rf \"\$work\"'" "$E2E"; then
+  echo "FAIL cleanup trap references expired local work variable" >&2
+  exit 1
+fi
 
 echo "ok   develop-agent-e2e contract"
