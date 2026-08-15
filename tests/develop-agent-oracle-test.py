@@ -117,6 +117,12 @@ ambiguous = subprocess.run(
 assert ambiguous.returncode != 0
 assert "explicit failed compile" in ambiguous.stderr.lower(), ambiguous.stderr
 
+opencode_recovery = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "opencode-recovery-edit-valid.jsonl"), "compile-recovery-esp32c3"],
+    text=True, capture_output=True,
+)
+assert opencode_recovery.returncode == 0, opencode_recovery.stderr
+
 secrets = run("secrets.jsonl")
 assert secrets.returncode == 0, secrets.stderr
 for forbidden in ("secret-token-value", "signed-secret", "person@example.com", "Bearer"):

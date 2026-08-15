@@ -202,6 +202,13 @@ def typed_record(result: dict, key: str, expected_type: str) -> dict | None:
 
 
 def phase_outcome(event: dict, phase: str) -> bool | None:
+    # OpenCode's built-in edit tool returns a fixed success sentence rather
+    # than a JSON domain envelope. Accept only that exact canonical response;
+    # arbitrary prose or model-supplied command text remains non-evidence.
+    if phase == "edit" and tool_name(event).lower() == "edit" and outcome(event) is True:
+        payloads = returned_payloads(event)
+        if payloads == ["Edit applied successfully."]:
+            return True
     domain = domain_outcome(event)
     if domain is False:
         return False

@@ -34,6 +34,13 @@ assert "no external LED part" in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["greenfield-esp32c3"]
 assert 'source must be exactly catalog:board:stm32f103-blinky' in prompts["existing-stm32f103"]
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["compile-recovery-esp32c3"]
+recovery_prompt = prompts["compile-recovery-esp32c3"]
+for required in (
+    "The project already contains the deliberate error in src/main.cpp; do not overwrite or replace it before the first compile.",
+    "After the failed compile, use the edit tool on src/main.cpp for one focused repair",
+    "compile the exact repaired file content",
+):
+    assert required in recovery_prompt
 assert 'source must be exactly catalog:board:esp32-c3-supermini' in prompts["partial-led-wifi"]
 for name in ("greenfield-esp32c3", "existing-stm32f103", "compile-recovery-esp32c3", "partial-led-wifi"):
     assert "GPIO oracle state must be toggled" in prompts[name]
