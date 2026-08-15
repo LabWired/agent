@@ -47,6 +47,7 @@ from benchmarks.twin2silicon.runtime_adapters import (
     build_runtime_command,
     codex_mcp_toml,
     normalize_usage,
+    write_codex_mcp_config,
 )
 
 
@@ -364,6 +365,15 @@ class RuntimeConfigurationTests(unittest.TestCase):
             codex_mcp_toml(),
             '[mcp_servers.labwired]\ncommand = "npx"\nargs = ["-y", "@labwired/mcp"]\n',
         )
+
+    def test_write_codex_mcp_config_creates_an_isolated_config_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory) / "runtime-config"
+
+            config_path = write_codex_mcp_config(config_dir)
+
+            self.assertEqual(config_path, config_dir / "config.toml")
+            self.assertEqual(config_path.read_text(encoding="utf-8"), codex_mcp_toml())
 
 
 class FixtureContractTests(unittest.TestCase):

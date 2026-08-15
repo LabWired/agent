@@ -28,6 +28,15 @@ def codex_mcp_toml() -> str:
     return '[mcp_servers.labwired]\ncommand = "npx"\nargs = ["-y", "@labwired/mcp"]\n'
 
 
+def write_codex_mcp_config(config_dir: Path) -> Path:
+    """Write the isolated Codex MCP configuration and return its path."""
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.toml"
+    config_path.write_text(codex_mcp_toml(), encoding="utf-8")
+    return config_path
+
+
 @dataclass(frozen=True)
 class AdapterContext:
     """Execution inputs shared by the native runtime adapters."""
