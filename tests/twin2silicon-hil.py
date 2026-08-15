@@ -57,11 +57,10 @@ def executable_fixture(directory, body):
 
 
 class RuntimeAdapterTests(unittest.TestCase):
-    def adapter_context(self, runtime, executable=None):
+    def adapter_context(self, executable="runtime"):
         directory = Path("/tmp/runtime-adapter-test")
         return AdapterContext(
-            runtime=runtime,
-            executable=executable or runtime,
+            executable=executable,
             workspace=directory / "workspace",
             prompt="Complete the public firmware task.",
             config_dir=directory / "config",
@@ -76,7 +75,7 @@ class RuntimeAdapterTests(unittest.TestCase):
             "opencode": self.adapter_context("opencode"),
         }
         commands = {
-            runtime: build_runtime_command(context)
+            runtime: build_runtime_command(runtime, context)
             for runtime, context in contexts.items()
         }
 

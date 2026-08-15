@@ -26,7 +26,6 @@ _CLAUDE_MCP_CONFIG = "claude-mcp.json"
 class AdapterContext:
     """Execution inputs shared by the native runtime adapters."""
 
-    runtime: RuntimeName
     executable: str
     workspace: Path
     prompt: str
@@ -48,10 +47,10 @@ class NormalizedUsage:
     unavailable_reason: str | None
 
 
-def build_runtime_command(context: AdapterContext) -> list[str]:
-    """Build the native, model-default command for ``context.runtime``."""
+def build_runtime_command(runtime: RuntimeName, context: AdapterContext) -> list[str]:
+    """Build the native, model-default command for ``runtime``."""
 
-    if context.runtime == "codex":
+    if runtime == "codex":
         return [
             context.executable,
             "exec",
@@ -64,7 +63,7 @@ def build_runtime_command(context: AdapterContext) -> list[str]:
             str(context.workspace),
             context.prompt,
         ]
-    if context.runtime == "claude":
+    if runtime == "claude":
         return [
             context.executable,
             "--print",
@@ -77,7 +76,7 @@ def build_runtime_command(context: AdapterContext) -> list[str]:
             str(context.config_dir / _CLAUDE_MCP_CONFIG),
             context.prompt,
         ]
-    if context.runtime == "opencode":
+    if runtime == "opencode":
         return [
             context.executable,
             "run",
@@ -87,7 +86,7 @@ def build_runtime_command(context: AdapterContext) -> list[str]:
             str(context.workspace),
             context.prompt,
         ]
-    raise ValueError(f"unsupported runtime: {context.runtime}")
+    raise ValueError(f"unsupported runtime: {runtime}")
 
 
 def normalize_usage(runtime: RuntimeName, lines: Iterable[str]) -> NormalizedUsage:
