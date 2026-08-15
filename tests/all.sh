@@ -38,7 +38,9 @@ run_hermetic() {
   local name="$1"
   shift
   local lane_root
-  lane_root="$(mktemp -d)"
+  # Keep heavyweight firmware builds on the checkout volume. Developer system
+  # temp partitions can be small even when the workspace volume has room.
+  lane_root="$(mktemp -d "$ROOT/.labwired-test.XXXXXX")"
   mkdir -p "$lane_root/home" "$lane_root/tmp" "$lane_root/runtime"
   echo ""
   echo "======== $name ========"

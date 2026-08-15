@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST_HOME="${HOME:?HOME is required for the shared PlatformIO tool cache}"
-MATRIX_TMP="$(mktemp -d)"
+MATRIX_TMP="$(mktemp -d "$ROOT/.labwired-matrix.XXXXXX")"
 trap 'rm -rf "$MATRIX_TMP"' EXIT INT TERM HUP
 
 run_lane() {

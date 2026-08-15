@@ -65,8 +65,10 @@ for lane in \
   'tests/hardware-matrix-order\.sh' \
   'tests/probe-exact-flash\.sh' \
   'tests/windows-hardware-contract\.ps1'; do
-  require_text tests/all.sh "$lane" "hardware matrix lane $lane is not registered"
+require_text tests/all.sh "$lane" "hardware matrix lane $lane is not registered"
 done
+require_text tests/all.sh 'mktemp -d.*\$ROOT/\.labwired-test' 'hardware lanes do not use workspace-volume temp isolation'
+require_text tests/hardware-matrix-order.sh 'mktemp -d.*\$ROOT/\.labwired-matrix' 'matrix regression does not use workspace-volume temp isolation'
 
 if grep -Eq 'skip.*(hardware|Windows)|not run.*hardware-(cli|legacy|release)|not run.*probe-exact-flash' "$ROOT/tests/all.sh"; then
   echo 'FAIL tests/all.sh: stale hard-coded hardware skip' >&2
