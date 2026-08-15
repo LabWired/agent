@@ -99,6 +99,7 @@ class RuntimeAdapterTests(unittest.TestCase):
                 "claude", "--print", "--output-format", "stream-json",
                 "--no-session-persistence", "--permission-mode", "acceptEdits",
                 "--mcp-config", str(contexts["claude"].config_dir / "claude-mcp.json"),
+                "--strict-mcp-config",
                 contexts["claude"].prompt,
             ],
         )
@@ -342,6 +343,8 @@ class RuntimeConfigurationTests(unittest.TestCase):
 
         self.assertNotIn("model", opencode)
         self.assertNotIn("provider", opencode)
+        self.assertEqual(set(opencode["mcp"]), {"labwired"})
+        self.assertEqual(set(claude["mcpServers"]), {"labwired"})
         self.assertEqual(opencode["mcp"]["labwired"]["type"], "local")
         self.assertEqual(
             opencode["mcp"]["labwired"]["command"],

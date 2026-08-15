@@ -92,6 +92,7 @@ def build_runtime_command(runtime: RuntimeName, context: AdapterContext) -> list
             "acceptEdits",
             "--mcp-config",
             str(context.config_dir / _CLAUDE_MCP_CONFIG),
+            "--strict-mcp-config",
             context.prompt,
         ]
     if runtime == "opencode":
