@@ -21,7 +21,7 @@ from .results import CommandResult, PathLike
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SERIAL = re.compile(r"^[A-Za-z0-9_.:/+-]+$")
 _MARKER = re.compile(r"^@@REG ([A-Za-z_][A-Za-z0-9_]*) (0x[0-9A-Fa-f]{8})$")
-_VALUE = re.compile(r"^(0x[0-9A-Fa-f]{8}): (0x[0-9A-Fa-f]{8})$")
+_VALUE = re.compile(r"^(0x[0-9A-Fa-f]{8}): ((?:0x)?[0-9A-Fa-f]{8})$")
 
 
 def _uint32(value: object, field: str) -> int:
@@ -241,7 +241,7 @@ def validate_identity(command: Sequence[os.PathLike[str] | str], expected_serial
     try:
         lines = [line.strip() for line in Path(result.stdout_path).read_text(encoding="utf-8").splitlines()
                  if line.strip()]
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         return PhaseResult("infrastructure_error", "board_identity", str(error), result)
     if lines != [expected_serial]:
         return PhaseResult("infrastructure_error", "board_identity",
@@ -272,6 +272,7 @@ class UartResult:
     matched: bool
     bytes_captured: int
     timed_out: bool
+    termination_reason: Literal["matched", "timeout", "max_bytes"]
 
 
 def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds: float,
@@ -319,7 +320,14 @@ def capture_uart_nonce(device: PathLike, baud: int, nonce: str, timeout_seconds:
                     break
         Path(log).parent.mkdir(parents=True, exist_ok=True)
         Path(log).write_bytes(captured)
-        return UartResult(matched, len(captured), not matched)
+        reason: Literal["matched", "timeout", "max_bytes"]
+        if matched:
+            reason = "matched"
+        elif len(captured) >= max_bytes:
+            reason = "max_bytes"
+        else:
+            reason = "timeout"
+        return UartResult(matched, len(captured), reason == "timeout", reason)
     finally:
         os.close(fd)
 
@@ -396,6 +404,11 @@ def evaluate_registers(observed: Mapping[str, int], assertions: Sequence[Registe
         raise ValueError("at least one register assertion is required")
     if set(observed) != {item.name for item in assertions}:
         raise ValueError("observed registers do not exactly match assertions")
+    for name, value in observed.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"observed register {name} must be an integer")
+        if value < 0 or value > 0xFFFFFFFF:
+            raise ValueError(f"observed register {name} is outside uint32 bounds")
     results = tuple(RegisterObservation(item.name, item.address, observed[item.name], item.mask,
                                         item.expected, (observed[item.name] & item.mask) == item.expected)
                     for item in assertions)

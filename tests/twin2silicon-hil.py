@@ -500,6 +500,13 @@ class BoardIdentityAndFlashTests(unittest.TestCase):
                                        timeout_seconds=1, runner=lambda *a, **k: fake)
         self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
 
+    def test_non_utf8_identity_output_is_infrastructure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tool = executable_fixture(directory, "import sys; sys.stdout.buffer.write(b'\\xff\\xfe')\n")
+            result = validate_identity([tool], "JTAG-1", cwd=directory, evidence_dir=directory,
+                                       timeout_seconds=1)
+        self.assertEqual((result.status, result.category), ("infrastructure_error", "board_identity"))
+
     def test_command_launch_errors_are_infrastructure(self):
         def unavailable(*args, **kwargs):
             raise FileNotFoundError("tool missing")
@@ -570,7 +577,7 @@ class BoardLockTests(unittest.TestCase):
 
 
 class UartNonceTests(unittest.TestCase):
-    def _capture(self, chunks, nonce="current", timeout=.2):
+    def _capture(self, chunks, nonce="current", timeout=.2, max_bytes=64):
         master, slave = pty.openpty()
         device = os.ttyname(slave)
         tty.setraw(slave)
@@ -585,7 +592,7 @@ class UartNonceTests(unittest.TestCase):
             thread.start()
             started.set()
             try:
-                result = capture_uart_nonce(device, 115200, nonce, timeout, log, max_bytes=64)
+                result = capture_uart_nonce(device, 115200, nonce, timeout, log, max_bytes=max_bytes)
             finally:
                 thread.join(1)
                 os.close(master)
@@ -632,10 +639,19 @@ class UartNonceTests(unittest.TestCase):
         os.close(master)
         os.close(slave)
         self.assertFalse(result.matched)
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.termination_reason, "timeout")
         self.assertEqual(len(opened), 1)
         with self.assertRaises(OSError) as error:
             os.fstat(opened[0])
         self.assertEqual(error.exception.errno, 9)
+
+    def test_max_bytes_exhaustion_is_not_reported_as_timeout(self):
+        result, raw = self._capture([b"1234567890"], timeout=1, max_bytes=10)
+        self.assertFalse(result.matched)
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.termination_reason, "max_bytes")
+        self.assertEqual(raw, b"1234567890")
 
 
 class OpenOcdEvidenceTests(unittest.TestCase):
@@ -678,12 +694,21 @@ class OpenOcdEvidenceTests(unittest.TestCase):
             with self.subTest(evidence=evidence), self.assertRaises(ValueError):
                 parse_openocd_registers(evidence, self.assertions)
 
+    def test_parser_accepts_real_espressif_bare_eight_digit_mdw_value(self):
+        text = "@@REG enable 0x60004020\n0x60004020: 00000004\n@@REG high 0x60004004\n0x60004004: 00000004\n"
+        self.assertEqual(parse_openocd_registers(text, self.assertions), {"enable": 4, "high": 4})
+
     def test_masked_mismatch_fails_and_all_assertions_pass(self):
         passing = evaluate_registers({"enable": 0x104, "high": 4}, self.assertions)
         failing = evaluate_registers({"enable": 0, "high": 4}, self.assertions)
         self.assertEqual(passing.status, "pass")
         self.assertEqual(failing.status, "hardware_fail")
         self.assertFalse(failing.observations[0].passed)
+
+    def test_evaluation_rejects_non_uint32_observed_values(self):
+        for value in (True, -1, 0x100000000, 1.5, "4"):
+            with self.subTest(value=value), self.assertRaises((TypeError, ValueError)):
+                evaluate_registers({"enable": value, "high": 4}, self.assertions)
 
 
 class OpenOcdExecutionTests(unittest.TestCase):
