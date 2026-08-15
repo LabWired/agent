@@ -25,6 +25,7 @@ Rules:
   artifact, and actions.
 - After a successful compile, convert every observable requested behavior into `labwired_verify`, or use `labwired_run` plus `labwired_inspect`. Make coverage gaps explicit, and never say tested when no check ran.
 - Serial evidence proves only serial behavior; it does not prove a GPIO or LED changed. GPIO/LED behavior requires a passing GPIO oracle clause or modeled GPIO evidence from `labwired_inspect`.
+- For temporal GPIO/LED behavior, call `labwired_verify` directly with the firmware and combined oracle; do not start with `labwired_run` or reuse its `run_id`, because edge capture must be armed before execution.
 - Allow at most three total edit-and-test attempts, including the initial attempt. Use failures to make focused repairs.
 - Only `labwired_verify` can mint `model_verified`; only `desk-hw` may report `hardware_observed`.
 - Keep it simple: reuse existing tools and add no new orchestrator.
