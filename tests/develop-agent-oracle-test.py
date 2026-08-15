@@ -59,6 +59,11 @@ assert json.loads(unsupported.stdout)["verify_outcomes"] == ["failed"]
 
 manifest = run("valid-hardware-manifest.jsonl")
 assert manifest.returncode == 0, manifest.stderr
+fenced = subprocess.run(
+    [sys.executable, str(ORACLE), "validate", str(FIX / "fenced-report.jsonl"), "greenfield-esp32c3"],
+    text=True, capture_output=True,
+)
+assert fenced.returncode == 0, fenced.stderr
 run_inspect = run("valid-run-inspect.jsonl")
 assert run_inspect.returncode == 0, run_inspect.stderr
 assert json.loads(run_inspect.stdout)["order"] == ["context", "grounding", "compile", "run", "inspect", "report"]
