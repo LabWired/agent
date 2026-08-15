@@ -95,6 +95,7 @@ run_hermetic "hardware-node" node --test tests/hardware-*.test.mjs
 run_hermetic "hardware-cli" bash "$ROOT/tests/hardware-cli.sh"
 run_hermetic "hardware-legacy-compat" bash "$ROOT/tests/hardware-legacy-compat.sh"
 run_hermetic "hardware-release-contract" bash "$ROOT/tests/hardware-release-contract.sh"
+run_hermetic "hardware-debug-diagnostics" bash "$ROOT/tests/hardware-debug-traps.sh"
 run_hermetic "probe-exact-flash" bash "$ROOT/tests/probe-exact-flash.sh"
 run "hardware-public-docs" "$ROOT/tests/hardware-public-docs.sh"
 run "hardware-matrix-order" "$ROOT/tests/hardware-matrix-order.sh"

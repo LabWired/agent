@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'rc=$?; [[ "${LABWIRED_TEST_DEBUG:-0}" != 1 ]] || printf "hardware-cli: TRACE line=%s rc=%s command=%q\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2' ERR
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/tests/helpers/hardware-err-trap.sh"
+trap 'hardware_test_err_trace "$?" "$LINENO" "$BASH_COMMAND" hardware-cli' ERR
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/project"
