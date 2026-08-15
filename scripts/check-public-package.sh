@@ -79,6 +79,14 @@ const required = [
   'lib/dispatch.sh', 'lib/prefix.sh', 'lib/resolve-sim.sh',
   'lib/serial-challenge.ps1',
   'lib/serial-capture.ps1', 'lib/rtt-capture.ps1', 'lib/probe-flash.ps1',
+  'lib/hardware/adapters.mjs', 'lib/hardware/evidence.mjs',
+  'lib/hardware/locks.mjs', 'lib/hardware/process.mjs',
+  'lib/hardware/profile.mjs', 'lib/hardware/runner.mjs',
+  'scripts/hardware-runner.mjs',
+  'fixtures/hardware-profiles/esp32c3-acceptance.template.json',
+  'fixtures/hardware-profiles/minimal.json',
+  'fixtures/hardware-profiles/logic/led-pass.csv',
+  'fixtures/hardware-profiles/logic/led-flat.csv',
   'server/rpc-server.mjs', 'server/agent-launcher.mjs', 'share/smoke/status-parser-model-verified.json',
   'share/smoke/status-parser-failed.json', 'scripts/profiles/esp32c3-serial.sh',
   'examples/esp32c3-serial/platformio.ini', 'examples/esp32c3-serial/src/main.cpp'
@@ -104,10 +112,19 @@ for (const skill of requiredSkills) {
   if (!files.has(file)) fail(file, 0, 'required runtime skill is missing');
 }
 
+const allowedFixtures = new Set([
+  'fixtures/hardware-profiles/esp32c3-acceptance.template.json',
+  'fixtures/hardware-profiles/minimal.json',
+  'fixtures/hardware-profiles/logic/led-pass.csv',
+  'fixtures/hardware-profiles/logic/led-flat.csv',
+]);
 const forbiddenPath = /(^|\/)(tests?|fixtures|\.grok|screenshots?|images?|local[-_]?evidence|competitors?)(\/|$)|^docs\/(qa|product|superpowers)\/|(^|\/)(cursor|claude|copilot|windsurf)([._/-]|$)|\.(png|jpe?g|gif|webp|yml)$/i;
 const forbiddenSkillArtifact = /skills\/systematic-debugging\/(CREATION-LOG\.md|test-academic\.md|test-pressure-[123]\.md)$/;
 for (const file of files) {
-  if (forbiddenPath.test(file) || forbiddenSkillArtifact.test(file)) fail(file, 0, 'forbidden public package path');
+  if ((!allowedFixtures.has(file) && forbiddenPath.test(file)) || forbiddenSkillArtifact.test(file)) fail(file, 0, 'forbidden public package path');
+  if (/(^|\/)(\.labwired|node_modules|evidence|credentials?|secrets?|machine-profiles?)(\/|$)/i.test(file)) {
+    fail(file, 0, 'private, generated, or machine-local path must not be published');
+  }
 }
 
 const publicSources = new Set([...files, ...publicDocs]);

@@ -20,6 +20,19 @@ run() {
   fi
 }
 
+run_command() {
+  local name="$1"
+  shift
+  echo ""
+  echo "======== $name ========"
+  if "$@"; then
+    echo "PASS $name"
+  else
+    echo "FAIL $name"
+    fail=1
+  fi
+}
+
 run "harness"           "$ROOT/tests/harness.sh"
 run "run-bounded"       "$ROOT/tests/run-bounded.sh"
 run "skills-inventory"  "$ROOT/tests/skills-inventory.sh"
@@ -51,6 +64,20 @@ run "rpc-probe-resolution" "$ROOT/tests/rpc-probe-resolution.sh"
 run "rpc-claim-shape"   "$ROOT/tests/rpc-claim-shape.sh"
 run "rpc-promote"       "$ROOT/tests/rpc-promote.sh"
 run "tools-manifest"    "$ROOT/tests/tools-manifest.sh"
+run_command "hardware-node" node --test tests/hardware-*.test.mjs
+run "hardware-cli" "$ROOT/tests/hardware-cli.sh"
+run "hardware-legacy-compat" "$ROOT/tests/hardware-legacy-compat.sh"
+run "hardware-release-contract" "$ROOT/tests/hardware-release-contract.sh"
+run "probe-exact-flash" "$ROOT/tests/probe-exact-flash.sh"
+run "hardware-public-docs" "$ROOT/tests/hardware-public-docs.sh"
+run_command "hardware-node18-min" npm run test:node18-min
+if command -v pwsh >/dev/null 2>&1; then
+  run_command "windows-hardware-contract" pwsh -NoProfile -File "$ROOT/tests/windows-hardware-contract.ps1"
+elif command -v powershell.exe >/dev/null 2>&1; then
+  run_command "windows-hardware-contract" powershell.exe -NoProfile -File "$ROOT/tests/windows-hardware-contract.ps1"
+else
+  echo "not run windows-hardware-contract: PowerShell is unavailable on this lane"
+fi
 run "upgrade-contract"   "$ROOT/tests/upgrade-contract.sh"
 echo ""
 echo "======== release-evidence-contract ========"

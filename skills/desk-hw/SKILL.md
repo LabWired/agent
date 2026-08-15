@@ -22,6 +22,13 @@ metadata:
 4. Target from env/task: `LABWIRED_HW_PORT`, `LABWIRED_HW_MARKER`, `LABWIRED_HW_CHIP`  
    — not a fixed product MCU.  
 5. Prefer **`prove`** (twin) first when twin path exists.
+6. Run `hardware plan` first. Stop on missing or ambiguous target, probe, or
+   port identity; missing confirmation; unsafe or unspecified wiring; or a
+   changed digest. Never choose the first detected device.
+7. Serial output is not GPIO proof. LED behavior requires an independent logic
+   capture, and Wi-Fi behavior requires a correlated device/host challenge.
+8. Record the plan, provider versions, artifact hashes, exact identities, raw
+   physical captures, behavior receipts, and the final result as evidence.
 
 ## A. Flash
 

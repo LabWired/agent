@@ -46,3 +46,65 @@ and receipts the existing artifact without claiming it was compiled. Serial
 capture is currently fixed at 115200 baud, and custom
 `LABWIRED_HW_TWIN_STEPS` is not representable in profile v1; both unsupported
 overrides fail closed instead of being ignored.
+
+## Generic evidence vocabulary
+
+The generic hardware runner records one of these levels for each stage or
+behavior:
+
+- `imported`: a `prebuilt` artifact was found, hashed, and receipted; it was
+  not compiled by this run.
+- `compiled`: the native build produced the recorded artifact.
+- `model_observed`: the twin executed that exact native artifact and observed
+  the behavior.
+- `surrogate_model_observed`: a separately built artifact with declared shared
+  sources produced the model observation. This never clears an exact-artifact
+  requirement.
+- `hardware_observed`: a trusted physical provider produced independent,
+  identity-bound evidence after exact flash.
+- `untrusted_observation`: an explicitly approved custom source reported an
+  observation; it cannot satisfy a trusted required level.
+- `blocked`: a required capability, identity, confirmation, secret, artifact,
+  instrument, or piece of evidence was absent.
+- `failed`: a provider ran and contradicted the assertion or failed while
+  collecting it.
+
+The plan JSON, stage receipts, behavior receipts, raw captures, hashes, tool
+versions, and final `result.json` are written below the selected evidence
+directory. Verify an external receipt by checking its recorded SHA-256 hashes
+against the referenced artifact and capture files, confirming the profile and
+plan digests, and matching provider versions and explicit identities to the
+reviewed plan. A copied summary without those files is not proof.
+
+## Physical behavior evidence
+
+Physical execution needs a reviewed profile, exact probe serial and serial-port
+identity, unambiguous enumeration, available instruments, safe wiring, and an
+operator-confirmed digest. The strict acceptance lane reports `BLOCKED` when
+`LABWIRED_HW_PROFILE` is absent or incomplete. This repository has not claimed
+a real physical acceptance PASS merely because deterministic provider tests
+passed.
+
+For an LED claim, connect a logic analyzer to the declared GPIO and common
+ground, use a voltage-compatible input, and record edges plus frequency bounds.
+Serial text is not GPIO proof and cannot satisfy the LED behavior.
+
+For Wi-Fi, firmware must emit a fresh runner-provided nonce and device address;
+the host then probes that address and verifies the same nonce. A static serial
+message, a host-only request, or a mismatched nonce fails correlation.
+
+When an Arduino ELF or other native artifact uses a format the twin cannot
+execute, report the twin behavior as unsupported/blocked. The exact native
+artifact can still use exact physical flash plus independent hardware evidence;
+do not relabel a surrogate or compilation result as exact model evidence.
+
+## Legacy environment migration
+
+Prefer `.labwired/hardware.json`. Existing `LABWIRED_HW_ELF`,
+`LABWIRED_HW_CHIP`, `LABWIRED_HW_PORT`, `LABWIRED_HW_MARKER`, and related
+wrapper inputs are translated to a temporary version 1 profile. The wrappers
+still require the exact `LABWIRED_HW_CONFIRM` digest before physical execution.
+They cannot represent arbitrary twin steps, fix serial capture at 115200 baud,
+and preserve prebuilt artifacts as imported rather than compiled. Migrate any
+workflow needing other providers, observations, baud rates, or behavior-level
+claims to the checked-in generic profile.

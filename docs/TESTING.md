@@ -36,6 +36,15 @@ npx --yes node@18.0.0 tests/hardware-runner.test.mjs
 - Live twin tests check behavior when a twin is available.
 - Model tests check an optional model provider.
 - Windows CI runs the PowerShell contract test.
+- Generic hardware Node tests run with `node --test tests/hardware-*.test.mjs`.
+- `hardware-cli.sh` and `hardware-legacy-compat.sh` cover CLI/RPC parity and
+  legacy translation.
+- `hardware-release-contract.sh` exercises deterministic positive and negative
+  behavior evidence; strict mode needs an operator-supplied lab profile and
+  otherwise reports a block, never a pass.
+- `probe-exact-flash.sh` checks artifact hashes and exact provider arguments.
+- `windows-hardware-contract.ps1` checks native PowerShell helpers and dispatch;
+  it runs only on a lane with PowerShell.
 
 Deterministic lanes must pass in CI. A physical board, paid model, or live
 service may be unavailable. Its optional lane must print `not run`. Missing
