@@ -210,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
         "runtime": args.runtime,
         "model_override": None,
         "native_model": None,
+        "native_model_unavailable_reason": "runtime did not expose model",
         "status": "infrastructure_error",
         "returncode": None,
         "timed_out": False,
@@ -276,6 +277,9 @@ def main(argv: list[str] | None = None) -> int:
                     ).splitlines()
                     usage = normalize_usage(args.runtime, stdout_lines)
                     result["native_model"] = extract_native_model(args.runtime, stdout_lines)
+                    result["native_model_unavailable_reason"] = (
+                        None if result["native_model"] is not None else "runtime did not expose model"
+                    )
                 except OSError:
                     usage = _unavailable_usage()
     except Exception as error:

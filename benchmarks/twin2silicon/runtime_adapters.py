@@ -5,8 +5,9 @@ directory. Claude does not expose a workspace command-line option, so its MCP
 configuration is deliberately placed beneath ``config_dir``; the command uses
 ``config_dir / 'claude-mcp.json'`` without creating that file.
 
-Codex reports ``output_tokens`` as its total output token count, so its
-``reasoning_output_tokens`` is retained as a subset rather than subtracted.
+``NormalizedUsage.output`` consistently excludes separately reported reasoning
+tokens. Codex reports ``output_tokens`` as its total output token count, so
+its ``reasoning_output_tokens`` is subtracted when both values are valid.
 Claude's ``output_tokens_details.thinking_tokens`` is also a subset of the
 reported output total; for a non-overlapping comparison output field we retain
 thinking as ``reasoning`` and subtract it from ``output``.
@@ -293,11 +294,19 @@ def _codex_token_values(usage: dict[str, object] | None) -> dict[str, int | None
             cached_input = None
     else:
         fresh_input = total_input - cached_input
+    reasoning = _bounded_int(usage.get("reasoning_output_tokens"))
+    output = _bounded_int(usage.get("output_tokens"))
+    if reasoning is not None and output is not None:
+        if reasoning > output:
+            reasoning = None
+            output = None
+        else:
+            output -= reasoning
     return {
         "fresh_input": fresh_input,
         "cached_input": cached_input,
-        "reasoning": _bounded_int(usage.get("reasoning_output_tokens")),
-        "output": _bounded_int(usage.get("output_tokens")),
+        "reasoning": reasoning,
+        "output": output,
     }
 
 

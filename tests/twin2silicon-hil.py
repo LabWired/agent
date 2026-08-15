@@ -183,19 +183,18 @@ class RuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(usage.fresh_input, 1100)
         self.assertEqual(usage.cached_input, 300)
         self.assertEqual(usage.reasoning, 48)
-        self.assertEqual(usage.output, 1076)
+        self.assertEqual(usage.output, 1028)
         self.assertIsNone(usage.estimated_cost_usd)
         self.assertIsNone(usage.unavailable_reason)
 
-    def test_normalize_codex_native_002_usage_keeps_total_output_with_reasoning_subset(self):
-        """Codex native-002 output_tokens is total output, including reasoning."""
+    def test_normalize_codex_native_002_usage_excludes_reasoning_from_output(self):
         lines = (REPOSITORY_ROOT / "fixtures/twin2silicon/native-002/codex.stdout.jsonl").read_text().splitlines()
 
         usage = normalize_usage("codex", lines)
 
         self.assertEqual(
             usage,
-            NormalizedUsage(1, 4143, 12288, 621, 1472, None, None),
+            NormalizedUsage(1, 4143, 12288, 621, 2271, None, None),
         )
 
     def test_normalize_codex_rejects_cached_input_larger_than_total(self):
@@ -213,7 +212,30 @@ class RuntimeAdapterTests(unittest.TestCase):
         self.assertIsNone(usage.fresh_input)
         self.assertIsNone(usage.cached_input)
         self.assertEqual(usage.reasoning, 2)
+        self.assertEqual(usage.output, 3)
+
+    def test_normalize_codex_keeps_output_total_when_reasoning_is_absent(self):
+        usage = normalize_usage("codex", [json.dumps({
+            "type": "turn.completed",
+            "usage": {"input_tokens": 10, "cached_input_tokens": 0, "output_tokens": 5},
+        })])
+
+        self.assertIsNone(usage.reasoning)
         self.assertEqual(usage.output, 5)
+
+    def test_normalize_codex_rejects_reasoning_larger_than_total_output(self):
+        usage = normalize_usage("codex", [json.dumps({
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": 10,
+                "cached_input_tokens": 0,
+                "reasoning_output_tokens": 6,
+                "output_tokens": 5,
+            },
+        })])
+
+        self.assertIsNone(usage.reasoning)
+        self.assertIsNone(usage.output)
 
     def test_normalize_codex_uses_the_final_terminal_event(self):
         lines = [
@@ -483,6 +505,7 @@ class RuntimeMatrixTests(unittest.TestCase):
             (output / "agent-result.json").write_text(json.dumps({{
                 "schema_version": "1.0", "runtime": args.runtime,
                 "native_model": f"fake-{{args.runtime}}-model",
+                "native_model_unavailable_reason": None,
                 "status": status, "returncode": 0 if status == "completed" else 9,
                 "timed_out": False, "elapsed_seconds": 0.25,
             }}))
@@ -600,6 +623,7 @@ class RuntimeMatrixTests(unittest.TestCase):
             passed, failed, agent_only = rows
 
             self.assertEqual(passed["native_model"], "fake-opencode-model")
+            self.assertIsNone(passed["native_model_unavailable_reason"])
             self.assertEqual(passed["agent_returncode"], 0)
             self.assertFalse(passed["agent_timed_out"])
             self.assertEqual(passed["compile_status"], "pass")
@@ -621,9 +645,16 @@ class RuntimeMatrixTests(unittest.TestCase):
             self.assertFalse(agent_only["final_success"])
             self.assertIn("MODEL", completed.stdout)
             self.assertIn("COMPILE", completed.stdout)
+            self.assertIn("RETURN", completed.stdout)
+            self.assertIn("TIMEOUT", completed.stdout)
+            self.assertIn("REPAIR", completed.stdout)
+            self.assertIn("TOOLS", completed.stdout)
+            self.assertIn("INVALID", completed.stdout)
+            self.assertIn("INFRA", completed.stdout)
             self.assertIn("A_SEC", completed.stdout)
             self.assertIn("H_SEC", completed.stdout)
             self.assertIn("TOKENS/COST", completed.stdout)
+            self.assertIn("fake-opencode-model", completed.stdout)
 
     def test_agent_only_skips_hil_and_repeated_runtime_selects_trials(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1866,6 +1897,7 @@ class RunAgentTests(unittest.TestCase):
                 self.assertEqual(result["runtime"], runtime)
                 self.assertIsNone(result["model_override"])
                 self.assertEqual(result["native_model"], f"fake-{runtime}-model")
+                self.assertIsNone(result["native_model_unavailable_reason"])
                 self.assertEqual(result["returncode"], 0)
                 self.assertFalse(result["timed_out"])
                 self.assertGreaterEqual(result["elapsed_seconds"], 0)
@@ -1962,6 +1994,33 @@ class RunAgentTests(unittest.TestCase):
                 self.assertEqual(result["status"], "completed")
                 self.assertEqual(usage["unavailable_reason"], "runtime did not expose usage")
                 self._assert_trial_does_not_expose_hidden_oracle(trial)
+
+    def test_missing_native_model_has_an_explicit_unavailable_reason(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = executable_fixture(root / "runtime", textwrap.dedent("""
+                import json
+                import sys
+
+                if sys.argv[1:] == ["--version"]:
+                    print("fake-claude 1.0")
+                    raise SystemExit(0)
+                print(json.dumps({
+                    "type": "result",
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                }))
+            """))
+            trial = root / "trial"
+
+            completed = self._run_cli("claude", executable, trial)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertIsNone(result["native_model"])
+            self.assertEqual(
+                result["native_model_unavailable_reason"],
+                "runtime did not expose model",
+            )
 
     def test_existing_output_is_rejected_without_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:

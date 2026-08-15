@@ -200,9 +200,17 @@ def _agent_row(
         infrastructure_category = "agent_runtime"
         infrastructure_error = _safe_text(result.get("error")) or "agent runtime infrastructure error"
     native_model = _safe_text(result.get("native_model")) if result else None
+    native_model_unavailable_reason = (
+        None
+        if native_model is not None
+        else _safe_text(result.get("native_model_unavailable_reason")) if result else None
+    )
+    if native_model is None and native_model_unavailable_reason is None:
+        native_model_unavailable_reason = "runtime did not expose model"
     row: dict[str, object] = {
         "runtime": runtime,
         "native_model": native_model,
+        "native_model_unavailable_reason": native_model_unavailable_reason,
         "initial_public_sha256": initial_public_sha256,
         "agent_status": agent_status,
         "agent_returncode": _result_number(result, "returncode"),
@@ -305,14 +313,18 @@ def _compact_usage(usage: object) -> str:
 
 def _print_summary(rows: list[dict[str, object]]) -> None:
     print(
-        f"{'RUNTIME':<10} {'MODEL':<20} {'AGENT':<18} {'COMPILE':<12} {'HIL':<12} "
-        f"{'SUCCESS':<7} {'A_SEC':>8} {'H_SEC':>8} TOKENS/COST"
+        f"{'RUNTIME':<10} {'MODEL':<20} {'AGENT':<18} {'RETURN':<7} {'TIMEOUT':<7} "
+        f"{'REPAIR':<7} {'TOOLS':<7} {'INVALID':<7} {'COMPILE':<12} {'HIL':<12} "
+        f"{'SUCCESS':<7} {'INFRA':<14} {'A_SEC':>8} {'H_SEC':>8} TOKENS/COST"
     )
     for row in rows:
         print(
             f"{_display(row['runtime'], 10):<10} {_display(row['native_model'], 20):<20} "
-            f"{_display(row['agent_status'], 18):<18} {_display(row['compile_status'], 12):<12} "
-            f"{_display(row['hil_status'], 12):<12} {_display(row['final_success'], 7):<7} "
+            f"{_display(row['agent_status'], 18):<18} {_display(row['agent_returncode'], 7):<7} "
+            f"{_display(row['agent_timed_out'], 7):<7} {_display(row['repair_count'], 7):<7} "
+            f"{_display(row['tool_call_count'], 7):<7} {_display(row['invalid_call_count'], 7):<7} "
+            f"{_display(row['compile_status'], 12):<12} {_display(row['hil_status'], 12):<12} "
+            f"{_display(row['final_success'], 7):<7} {_display(row['infrastructure_category'], 14):<14} "
             f"{_seconds(row['elapsed_agent_seconds']):>8} {_seconds(row['elapsed_hil_seconds']):>8} "
             f"{_compact_usage(row['usage'])}"
         )
