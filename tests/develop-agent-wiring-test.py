@@ -21,6 +21,7 @@ assert len(prompts) == 5
 assert all("hardware_sensitive_facts" in prompt and "citation token returned" in prompt for prompt in prompts.values())
 assert all("Do not delegate" in prompt and "this session" in prompt for prompt in prompts.values())
 assert all("call labwired_context again" in prompt and "before compiling" in prompt for prompt in prompts.values())
+assert all("Use labwired_compile" in prompt and "not a shell compile" in prompt for prompt in prompts.values())
 assert "call labwired_verify directly" in prompts["greenfield-esp32c3"]
 assert "do not start with labwired_run" in prompts["greenfield-esp32c3"]
 assert "output summary" in prompts["greenfield-esp32c3"]
