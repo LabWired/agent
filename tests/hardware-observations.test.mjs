@@ -56,6 +56,20 @@ function harness(onRun, overrides = {}) {
   return { adapters, calls };
 }
 
+function trustedLogic(overrides = {}) {
+  return { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 'time', valueColumn: 'CH0', edgeCountAtLeast: 3,
+    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
+    timeoutSeconds: 5, requiredLevel: 'hardware_observed', ...overrides };
+}
+
+function captureHarness(body, overrides = {}) {
+  return harness(async (descriptor) => {
+    const outputIndex = descriptor.args.indexOf('--output-file');
+    if (outputIndex >= 0 && body !== undefined) await writeFile(descriptor.args[outputIndex + 1], body);
+    return { classification: 'exit', exitCode: 0, stdout: '', stderr: '', truncated: { stdout: false, stderr: false } };
+  }, overrides);
+}
+
 test('flash adapters delegate exact identities and artifact to the existing shell-free CLI', async (t) => {
   for (const provider of ['platformio', 'probe-rs']) await t.test(provider, async () => {
     const root = await sandbox();
@@ -182,17 +196,16 @@ test('serial and RTT delegate to existing capture commands and cannot share capa
 
 test('logic CSV proves real transitions and frequency independently of serial text', async () => {
   const root = await sandbox();
-  const capture = path.join(root, 'logic.csv');
-  await writeFile(capture, 'time,CH0\n0,0\n0.5,1\n1,0\n1.5,1\n');
   const p = profile(root);
-  const observation = { id: 'led', provider: 'logic-csv', file: capture, channel: 0, timeColumn: 'time', valueColumn: 'CH0', edgeCountAtLeast: 3, frequencyMinHz: 0.9, frequencyMaxHz: 1.1, requiredLevel: 'hardware_observed' };
+  const observation = trustedLogic({ frequencyMinHz: 0.9, frequencyMaxHz: 1.1 });
   const bundle = await evidence(root, p);
-  const { adapters } = harness();
+  const { adapters, calls } = captureHarness('time,CH0\n0,0\n0.5,1\n1,0\n1.5,1\n');
   const hash = await sha256File(p.build.artifact);
   const result = await adapters.observation['logic-csv'].execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash, serialCapture: 'LED ON\nLED OFF' });
   assert.equal(result.level, 'hardware_observed');
   assert.equal(result.transitions, 3);
   assert.equal(result.frequencyHz, 1);
+  assert.deepEqual(calls[0].descriptor.args.slice(0, 8), ['--driver', 'demo:conn=analyzer-1', '--channels', 'D0', '--samples', '2000', '--output-format', 'csv']);
   assert.deepEqual(result.rawEvidenceRefs, ['observations/led.csv', 'observations/led.json']);
   const rawLogic = await readFile(path.join(bundle, result.rawEvidenceRefs[0]), 'utf8');
   assert.match(rawLogic, /0\.5,1/);
@@ -201,16 +214,37 @@ test('logic CSV proves real transitions and frequency independently of serial te
 });
 
 test('validated profile frequency bounds flow unchanged into the logic adapter', async () => {
-  const root = await sandbox(); await writeFile(path.join(root, 'logic.csv'), 'time,v\n0,0\n0.5,1\n1,0\n');
+  const root = await sandbox();
   const normalized = validateHardwareProfile({
     schema: 1,
     target: { id: 'desk', chip: 'esp32c3', probeSerial: 'probe-1', serialPort: '/dev/ttyACM0' },
     build: { provider: 'platformio', workspace: '.', environment: 'release', artifact: 'build/firmware.bin' },
-    observations: [{ id: 'led', provider: 'logic-csv', file: 'logic.csv', channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 2, frequencyMinHz: 0.9, frequencyMaxHz: 1.1, requiredLevel: 'hardware_observed' }],
+    observations: [trustedLogic({ valueColumn: 'v', edgeCountAtLeast: 2, frequencyMinHz: 0.9, frequencyMaxHz: 1.1 })],
   }, path.join(root, 'hardware.json'));
   const hash = await sha256File(normalized.build.artifact);
-  const result = await harness().adapters.observation['logic-csv'].execute(normalized, normalized.observations[0], { flashedArtifactSha256: hash });
+  const result = await captureHarness('time,v\n0,0\n0.5,1\n1,0\n').adapters.observation['logic-csv'].execute(normalized, normalized.observations[0], { flashedArtifactSha256: hash });
   assert.equal(result.level, 'hardware_observed'); assert.equal(result.frequencyHz, 1);
+});
+
+test('trusted logic capture refuses missing output, forged capability, and instrument mutation', async () => {
+  const root = await sandbox(); const p = profile(root); const hash = await sha256File(p.build.artifact);
+  const observation = trustedLogic({ edgeCountAtLeast: 1 });
+  const absent = await harness().adapters.observation['logic-csv'].execute(p, observation, { flashedArtifactSha256: hash });
+  assert.equal(absent.level, 'failed'); assert.match(absent.diagnostics, /did not create|absent/);
+  const { adapters } = captureHarness('time,CH0\n0,0\n1,1\n');
+  assert.throws(() => adapters.observation['logic-csv'].plan(p, observation, {}, {}), /capability/);
+  const prepared = await adapters.observation['logic-csv'].preflight(p, observation);
+  const changed = { ...observation, instrumentId: 'analyzer-2' };
+  const result = await adapters.observation['logic-csv'].execute(p, changed, { prepared, flashedArtifactSha256: hash });
+  assert.equal(result.level, 'failed'); assert.match(result.diagnostics, /capability|inputs changed/);
+});
+
+test('trusted logic capture preserves timeout and cancellation failure boundaries', async (t) => {
+  for (const classification of ['timeout', 'cancelled']) await t.test(classification, async () => {
+    const root = await sandbox(); const p = profile(root); const hash = await sha256File(p.build.artifact);
+    const result = await harness(async () => ({ classification, exitCode: null, stdout: '', stderr: '', truncated: {} })).adapters.observation['logic-csv'].execute(p, trustedLogic(), { flashedArtifactSha256: hash });
+    assert.equal(result.level, 'failed'); assert.match(result.diagnostics, new RegExp(classification));
+  });
 });
 
 test('physical raw evidence rejects symlink roots/directories and publication swaps', async (t) => {
@@ -224,10 +258,9 @@ test('physical raw evidence rejects symlink roots/directories and publication sw
     const hooks = scenario === 'swap-root' ? { async beforePublish() { await rename(bundle, original); await symlink(external, bundle); } }
       : scenario === 'swap-directory' ? { async beforePublish() { await rename(path.join(bundle, 'observations'), path.join(bundle, 'observations-original')); await symlink(external, path.join(bundle, 'observations')); } }
         : undefined;
-    const capture = path.join(root, 'logic.csv'); await writeFile(capture, 't,v\n0,0\n1,1\n');
-    const observation = { id: 'led', provider: 'logic-csv', file: capture, channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' };
+    const observation = trustedLogic({ timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1 });
     const hash = await sha256File(p.build.artifact);
-    const result = await harness(undefined, { physicalEvidenceHooks: hooks }).adapters.observation['logic-csv'].execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash });
+    const result = await captureHarness('t,v\n0,0\n1,1\n', { physicalEvidenceHooks: hooks }).adapters.observation['logic-csv'].execute(p, observation, { evidenceDir: bundle, flashedArtifactSha256: hash });
     assert.equal(result.level, 'failed');
     assert.equal(await readFile(path.join(external, 'sentinel'), 'utf8'), 'untouched');
     await assert.rejects(readFile(path.join(external, 'led.csv')), /ENOENT/);
@@ -242,29 +275,27 @@ test('logic CSV rejects static, malformed, non-monotonic, symlinked, and raced c
     ['digital', 'time,v\n0,0\n1,2\n', /digital/],
   ]) await t.test(name, async () => {
     const root = await sandbox();
-    const file = path.join(root, 'logic.csv'); await writeFile(file, body);
-    const obs = { id: 'led', provider: 'logic-csv', file, channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' };
-    const result = await harness().adapters.observation['logic-csv'].execute(profile(root), obs);
+    const obs = trustedLogic({ timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1 });
+    const result = await captureHarness(body).adapters.observation['logic-csv'].execute(profile(root), obs);
     assert.equal(result.level, 'failed'); assert.match(result.diagnostics, pattern);
   });
-  await t.test('symlink', async () => {
-    const root = await sandbox(); const outside = path.join(os.tmpdir(), `logic-${Date.now()}.csv`); roots.add(outside);
-    await writeFile(outside, 'time,v\n0,0\n1,1\n'); const file = path.join(root, 'logic.csv'); await symlink(outside, file);
-    const obs = { id: 'led', provider: 'logic-csv', file, channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' };
-    assert.equal((await harness().adapters.observation['logic-csv'].execute(profile(root), obs)).level, 'failed');
+  await t.test('checked-in replay stays untrusted and provider is not invoked', async () => {
+    const root = await sandbox(); const file = path.join(root, 'led-pass.csv');
+    await writeFile(file, 'time,v\n0,0\n1,1\n'); let invoked = false;
+    const obs = { id: 'led', provider: 'logic-csv', file, channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'untrusted_observation' };
+    const result = await harness(async () => { invoked = true; }).adapters.observation['logic-csv'].execute(profile(root), obs);
+    assert.equal(result.level, 'untrusted_observation'); assert.equal(invoked, false);
   });
   await t.test('invalid frequency bound', async () => {
-    const root = await sandbox(); const file = path.join(root, 'logic.csv');
-    await writeFile(file, 'time,v\n0,0\n1,1\n');
-    const obs = { id: 'led', provider: 'logic-csv', file, channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, frequencyMinHz: Number.NaN, requiredLevel: 'hardware_observed' };
-    const result = await harness().adapters.observation['logic-csv'].execute(profile(root), obs);
+    const root = await sandbox();
+    const obs = trustedLogic({ timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, frequencyMinHz: Number.NaN });
+    const result = await captureHarness('time,v\n0,0\n1,1\n').adapters.observation['logic-csv'].execute(profile(root), obs);
     assert.equal(result.level, 'failed'); assert.match(result.diagnostics, /frequency bound/);
   });
   await t.test('mutation race', async () => {
-    const root = await sandbox(); const file = path.join(root, 'logic.csv');
-    await writeFile(file, 'time,v\n0,0\n1,1\n');
-    const obs = { id: 'led', provider: 'logic-csv', file, channel: 0, timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' };
-    const { adapters } = harness(undefined, { snapshotHooks: { async duringRead({ file: readPath }) { if (readPath === file) await writeFile(file, 'time,v\n0,0\n2,1\n'); } } });
+    const root = await sandbox();
+    const obs = trustedLogic({ timeColumn: 'time', valueColumn: 'v', edgeCountAtLeast: 1 });
+    const { adapters } = captureHarness('time,v\n0,0\n1,1\n', { snapshotHooks: { async duringRead({ file: readPath }) { if (readPath.endsWith('capture.csv')) await writeFile(readPath, 'time,v\n0,0\n2,1\n'); } } });
     const result = await adapters.observation['logic-csv'].execute(profile(root), obs);
     assert.equal(result.level, 'failed'); assert.match(result.diagnostics, /changed/);
   });

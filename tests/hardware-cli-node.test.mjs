@@ -94,3 +94,16 @@ test('already-aborted enumeration never spawns a provider', async () => {
   const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio' }, flash: { provider: 'platformio' } };
   await assert.rejects(resolveHardwareIdentities(profile, { signal: abort.signal }), /cancelled/);
 });
+
+test('logic analyzer enumeration requires one exact provider-owned instrument identity', async () => {
+  if (process.platform === 'win32') return;
+  const root = await mkdtemp(path.join(os.tmpdir(), 'labwired-instrument-')); activeRoots.push(root);
+  await writeFile(path.join(root, 'pio'), '#!/usr/bin/env bash\nprintf \'[{"port":"/dev/tty0","serialNumber":"probe"}]\\n\'\n', { mode: 0o755 });
+  const sigrok = path.join(root, 'sigrok-cli');
+  const profile = { target: { id: 'desk', probeSerial: 'probe', serialPort: '/dev/tty0' }, build: { provider: 'platformio', workspace: root }, flash: { provider: 'platformio' }, observations: [{ id: 'led', provider: 'logic-csv', requiredLevel: 'hardware_observed', driver: 'demo', instrumentId: 'analyzer-1' }] };
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'demo - analyzer-1\\n\'\n', { mode: 0o755 });
+  const exact = await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } });
+  assert.equal(exact.length, 1); assert.equal(exact[0].instruments['instrument-led'], 'analyzer-1');
+  await writeFile(sigrok, '#!/usr/bin/env bash\nprintf \'demo - analyzer-1\\ndemo - analyzer-1\\n\'\n', { mode: 0o755 });
+  assert.deepEqual(await resolveHardwareIdentities(profile, { environment: { PATH: `${root}:/usr/bin:/bin` } }), []);
+});

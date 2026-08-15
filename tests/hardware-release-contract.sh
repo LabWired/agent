@@ -30,6 +30,8 @@ try {
   const led = p.observations.find(o => o?.id === 'led');
   if (led?.provider !== 'logic-csv' || led.requiredLevel !== 'hardware_observed'
       || !Number.isInteger(led.channel) || led.channel < 0 || !explicit(led.timeColumn) || !explicit(led.valueColumn)
+      || led.captureProvider !== 'sigrok-cli' || !explicit(led.instrumentId) || !explicit(led.driver) || !explicit(led.sourceChannel)
+      || !Number.isInteger(led.sampleRateHz) || led.sampleRateHz < 1 || !Number.isFinite(led.durationSeconds) || led.durationSeconds <= 0
       || !Number.isInteger(led.edgeCountAtLeast) || led.edgeCountAtLeast < 1
       || !Number.isFinite(led.frequencyMinHz) || led.frequencyMinHz <= 0
       || !Number.isFinite(led.frequencyMaxHz) || led.frequencyMaxHz < led.frequencyMinHz) throw 'hardware LED logic behavior with frequency bounds is required';
@@ -104,6 +106,20 @@ if [[ "${1:-}" == '--version' ]]; then echo 'labwired-sim acceptance-fake-1'; ex
 echo 'exact ESP32-C3 Arduino execution unsupported by this twin' >&2
 exit 1
 SH
+cat >"$WORK/bin/sigrok-cli" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == '--version' ]]; then echo 'sigrok-cli acceptance-fake-1'; exit 0; fi
+if [[ "${1:-}" == '--scan' ]]; then printf 'demo - acceptance-logic\n'; exit 0; fi
+out=''
+while [[ $# -gt 0 ]]; do [[ "$1" == '--output-file' ]] && { out="$2"; shift 2; continue; }; shift; done
+[[ -n "$out" && ! -e "$out" ]]
+case "$(cat "${TMP}/labwired-logic-mode")" in
+  flat) printf 'time_s,gpio8\n0,1\n1,1\n2,1\n' >"$out" ;;
+  malformed) printf 'time_s,gpio8\n0,nope\n' >"$out" ;;
+  *) printf 'time_s,gpio8\n0,0\n0.5,1\n1,0\n1.5,1\n2,0\n' >"$out" ;;
+esac
+SH
 # The serial helpers invoke python3 with explicit LABWIRED_SC_* fields. This
 # double returns only data correlated to the current invocation and shares the
 # Wi-Fi nonce with the bounded local HTTP fixture.
@@ -122,7 +138,7 @@ else
   printf '{"status":"hardware_observed","output":"alive"}\n'
 fi
 SH
-chmod +x "$WORK/bin/pio" "$WORK/bin/labwired-sim" "$WORK/bin/python3"
+chmod +x "$WORK/bin/pio" "$WORK/bin/labwired-sim" "$WORK/bin/sigrok-cli" "$WORK/bin/python3"
 
 cat >"$WORK/server.py" <<'PY'
 import http.server, os, pathlib, socketserver
@@ -149,13 +165,10 @@ fi
 
 instantiate() {
   local logic="$1"
-  if [[ "$logic" == malformed ]]; then
-    printf 'time_s,gpio8\n0,nope\n' >"$WORK/project/logic.csv"
-  else
-    cp "$ROOT/fixtures/hardware-profiles/logic/$logic" "$WORK/project/logic.csv"
-  fi
+  case "$logic" in flat) printf flat >"$WORK/labwired-logic-mode" ;; malformed) printf malformed >"$WORK/labwired-logic-mode" ;; pass) printf pass >"$WORK/labwired-logic-mode" ;; *) return 64 ;; esac
+  rm -f "$WORK/project/logic.csv"
   cp "$TEMPLATE" "$WORK/project/hardware.json"
-  sed -i.bak -e 's/${TARGET_ID}/acceptance-c3/g' -e 's/${PROBE_SERIAL}/acceptance-probe/g' -e 's/${SERIAL_PORT}/acceptance-port/g' "$WORK/project/hardware.json"
+  sed -i.bak -e 's/${TARGET_ID}/acceptance-c3/g' -e 's/${PROBE_SERIAL}/acceptance-probe/g' -e 's/${SERIAL_PORT}/acceptance-port/g' -e 's/${LOGIC_INSTRUMENT_ID}/acceptance-logic/g' "$WORK/project/hardware.json"
   rm -f "$WORK/project/hardware.json.bak"
   printf '[env:esp32-c3-devkitm-1]\nplatform = espressif32\nboard = esp32-c3-devkitm-1\nframework = arduino\n' >"$WORK/project/platformio.ini"
   printf 'board: esp32c3\n' >"$WORK/project/system.yaml"
@@ -175,11 +188,12 @@ strict_semantic_block() {
   [[ "$output" != *'hardware plan'* ]]
 }
 
-instantiate led-pass.csv
+instantiate pass
 strict_semantic_block no-heartbeat 'p.observations=p.observations.filter(o=>o.id!=="heartbeat")' 'hardware heartbeat behavior is required'
 strict_semantic_block weak-heartbeat 'p.observations.find(o=>o.id==="heartbeat").requiredLevel="compiled"' 'hardware heartbeat behavior is required'
 strict_semantic_block no-led 'p.observations=p.observations.filter(o=>o.id!=="led")' 'hardware LED logic behavior with frequency bounds is required'
 strict_semantic_block weak-led 'delete p.observations.find(o=>o.id==="led").frequencyMaxHz' 'hardware LED logic behavior with frequency bounds is required'
+strict_semantic_block replay-led 'const o=p.observations.find(o=>o.id==="led");delete o.captureProvider;delete o.instrumentId;delete o.driver;delete o.sourceChannel;delete o.sampleRateHz;delete o.durationSeconds;o.file="logic/led-pass.csv"' 'hardware LED logic behavior with frequency bounds is required'
 strict_semantic_block no-wifi 'p.observations=p.observations.filter(o=>o.id!=="wifi")' 'hardware Wi-Fi challenge behavior is required'
 strict_semantic_block substituted-wifi 'p.observations.find(o=>o.id==="wifi").id="network-ok"' 'hardware Wi-Fi challenge behavior is required'
 
@@ -223,13 +237,13 @@ NODE
   fi
 }
 
-run_case positive PASS led-pass.csv
-run_case flat-led FAIL led-flat.csv pass led
+run_case positive PASS pass
+run_case flat-led FAIL flat pass led
 run_case malformed-led FAIL malformed pass led
-run_case bad-nonce FAIL led-pass.csv nonce wifi
-run_case bad-address FAIL led-pass.csv address wifi
-run_case bad-status FAIL led-pass.csv status wifi
+run_case bad-nonce FAIL pass nonce wifi
+run_case bad-address FAIL pass address wifi
+run_case bad-status FAIL pass status wifi
 
 # Serial output alone must never satisfy the independently required LED claim.
-run_case serial-only FAIL led-flat.csv pass led
+run_case serial-only FAIL flat pass led
 echo 'PASS hardware-release-contract deterministic behavior evidence and negative boundaries'

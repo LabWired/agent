@@ -84,8 +84,11 @@ The complete schema has these fields:
 - `flash`: optional `platformio` or `probe-rs` provider and timeout.
 - `observations`: behavior IDs using `serial`, `RTT` (`rtt` in JSON),
   `logic-csv`, or `network`, with a required evidence level and timeout.
-  Serial/RTT use `contains`. Logic CSV declares the file, channel, time/value
-  columns, minimum edge count, and optional frequency bounds. Network declares
+  Serial/RTT use `contains`. A hardware-level logic CSV declares trusted
+  `sigrok-cli` capture, an exact instrument ID/driver/source channel, bounded
+  sample rate and duration, time/value columns, minimum edge count, and
+  optional frequency bounds. A pre-existing `file` is import-only and can
+  produce at most `untrusted_observation`; it can never prove hardware. Network declares
   a device marker, the marker field containing the host address, and a bounded
   host probe path.
 
@@ -122,5 +125,5 @@ strict acceptance wrapper also intentionally maps its preflight `BLOCKED`
 conditions to `2`. Ordinary provider, identity, or capability `BLOCKED`
 results and execution or evidence `FAIL` results exit `3`.
 Planning never creates the evidence directory or builds, flashes, or opens an
-instrument. Runs lock the explicit target, probe, and port identities so two
-sessions cannot control the same lab resource.
+instrument. Runs lock the explicit target, probe, port, and analyzer identities
+so two sessions cannot control the same lab resource.

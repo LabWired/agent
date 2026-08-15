@@ -62,9 +62,9 @@ behavior:
   requirement.
 - `hardware_observed`: a trusted physical provider produced independent,
   identity-bound evidence after exact flash.
-- `untrusted_observation`: a reserved evidence level for a possible future
-  custom provider. Profile schema v1 accepts no custom provider and cannot
-  produce this level operationally.
+- `untrusted_observation`: an imported, pre-existing logic CSV was parsed, but
+  no provider-owned capture operation established physical provenance. It can
+  never satisfy `hardware_observed`.
 - `blocked`: a required capability, identity, confirmation, secret, artifact,
   instrument, or piece of evidence was absent.
 - `failed`: a provider ran and contradicted the assertion or failed while
@@ -86,9 +86,14 @@ operator-confirmed digest. The strict acceptance lane reports `BLOCKED` when
 a real physical acceptance PASS merely because deterministic provider tests
 passed.
 
-For an LED claim, connect a logic analyzer to the declared GPIO and common
-ground, use a voltage-compatible input, and record edges plus frequency bounds.
-Serial text is not GPIO proof and cannot satisfy the LED behavior.
+For an LED claim, connect the explicitly identified logic analyzer to the
+declared GPIO and common ground and use a voltage-compatible input. After
+flash, the trusted `sigrok-cli` adapter creates a new private capture using the
+confirmed driver, instrument ID, channel, sample rate, and duration, then
+records edges and frequency bounds. Checked-in CSV files, copied captures,
+mtime changes, and serial text are not GPIO proof and cannot satisfy the LED
+behavior. The checked-in `fixtures/hardware-profiles/logic/*.csv` files are
+parser/import fixtures only and are deliberately untrusted.
 
 For Wi-Fi, firmware must emit a fresh runner-provided nonce and device address;
 the host then probes that address and verifies the same nonce. A static serial

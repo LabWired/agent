@@ -101,7 +101,7 @@ function fingerprint(value) {
 }
 
 async function platformIoDevices(options) {
-  const executable = executableOnPath('pio');
+  const executable = executableOnPath('pio', options.environment);
   if (!executable) throw new Error('BLOCKED: PlatformIO provider is unavailable for exact device enumeration');
   let devices;
   try { devices = JSON.parse(await runJson(executable, ['device', 'list', '--json-output'], options)); } catch (error) {
@@ -133,7 +133,7 @@ async function platformIoIdentities(profile, options) {
 }
 
 async function probeRsIdentities(profile, options) {
-  const probeExecutable = executableOnPath('probe-rs');
+  const probeExecutable = executableOnPath('probe-rs', options.environment);
   if (!probeExecutable) throw new Error('BLOCKED: probe-rs provider is unavailable for exact probe enumeration');
   const [probeText, devices] = await Promise.all([
     runJson(probeExecutable, ['list'], { ...options, cwd: profile.build.workspace }),
@@ -164,9 +164,24 @@ export async function resolveHardwareIdentities(profile, options = {}) {
   for (const [label, value] of [['target', profile.target.id], ['probe', profile.target.probeSerial], ['serial', profile.target.serialPort]]) {
     if (typeof value !== 'string' || !value || AMBIGUOUS.has(value.toLowerCase())) throw new Error(`BLOCKED: explicit non-ambiguous ${label} identity is required`);
   }
-  if (profile.flash?.provider === 'probe-rs') return probeRsIdentities(profile, options);
-  if (profile.build.provider === 'platformio' || profile.flash?.provider === 'platformio') return platformIoIdentities(profile, options);
-  throw new Error('BLOCKED: this provider has no correlated probe-and-serial identity enumerator');
+  let base;
+  if (profile.flash?.provider === 'probe-rs') base = await probeRsIdentities(profile, options);
+  else if (profile.build.provider === 'platformio' || profile.flash?.provider === 'platformio') base = await platformIoIdentities(profile, options);
+  else throw new Error('BLOCKED: this provider has no correlated probe-and-serial identity enumerator');
+  const logic = (profile.observations ?? []).filter((item) => item.provider === 'logic-csv' && item.requiredLevel === 'hardware_observed');
+  if (logic.length === 0) return base;
+  const executable = executableOnPath('sigrok-cli', options.environment);
+  if (!executable) throw new Error('BLOCKED: sigrok-cli provider is unavailable for analyzer enumeration');
+  const instruments = {}; const stableIds = {};
+  for (const observation of logic) {
+    const output = await runJson(executable, ['--scan', '--driver', observation.driver], { ...options, cwd: profile.build.workspace });
+    const matches = output.split(/\r?\n/).map((line) => line.match(/^([^\s]+)\s+-\s+(.+)$/)).filter((match) => match && match[1] === observation.driver && match[2] === observation.instrumentId);
+    if (matches.length !== 1) return [];
+    const key = `instrument-${observation.id}`;
+    instruments[key] = observation.instrumentId;
+    stableIds[key] = `sigrok:${fingerprint({ driver: observation.driver, instrumentId: observation.instrumentId, record: matches[0][0] })}`;
+  }
+  return base.map((identity) => ({ ...identity, instruments: { ...instruments }, stableIds: { ...identity.stableIds, ...stableIds } }));
 }
 
 export async function main(argv = process.argv.slice(2)) {

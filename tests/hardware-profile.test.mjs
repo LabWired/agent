@@ -43,6 +43,12 @@ function minimal(overrides = {}) {
   };
 }
 
+function trustedLogic(overrides = {}) {
+  return { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 1,
+    captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 2,
+    requiredLevel: 'hardware_observed', ...overrides };
+}
+
 test('loads and deeply freezes the minimal profile with trusted providers', async () => {
   const profile = await loadHardwareProfile(fixturePath, { realpath: true });
 
@@ -141,7 +147,7 @@ test('resolves logic CSV files under the workspace', async () => {
   const observation = {
     id: 'led', provider: 'logic-csv', file: 'captures/logic.csv', channel: 0,
     timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 2,
-    requiredLevel: 'hardware_observed',
+    requiredLevel: 'untrusted_observation',
   };
   await withProfile(minimal({
     target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0' },
@@ -154,7 +160,7 @@ test('resolves logic CSV files under the workspace', async () => {
 
 test('normalizes and freezes optional positive logic frequency bounds', async () => {
   const value = minimal();
-  value.observations = [{ id: 'led', provider: 'logic-csv', file: 'logic.csv', channel: 0, timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 1, frequencyMinHz: 0.5, frequencyMaxHz: 2, requiredLevel: 'hardware_observed' }];
+  value.observations = [trustedLogic({ frequencyMinHz: 0.5, frequencyMaxHz: 2 })];
   value.target.probeSerial = 'probe-1'; value.target.serialPort = '/dev/ttyACM0';
   await withProfile(value, async ({ profilePath }) => {
     const normalized = validateHardwareProfile(value, profilePath);
@@ -216,6 +222,14 @@ test('requires a physical profile to name the target, probe, and serial port', (
     target: { id: 'desk-c3', chip: 'esp32c3' },
     flash: { provider: 'probe-rs' },
   }), fixturePath), /probeSerial.*serialPort|physical.*identity/i);
+  assert.throws(() => validateHardwareProfile(minimal({
+    target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0' },
+    observations: [{ id: 'led', provider: 'logic-csv', file: 'capture.csv', channel: 0, timeColumn: 'time', valueColumn: 'value', edgeCountAtLeast: 2, requiredLevel: 'hardware_observed' }],
+  }), fixturePath), /trusted capture/i);
+  assert.doesNotThrow(() => validateHardwareProfile(minimal({
+    target: { id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0' },
+    observations: [trustedLogic()],
+  }), fixturePath));
   assert.doesNotThrow(() => validateHardwareProfile(minimal({
     target: {
       id: 'desk-c3', chip: 'esp32c3', probeSerial: 'probe-123', serialPort: '/dev/ttyACM0',

@@ -36,7 +36,7 @@ async function fixture(overrides = {}) {
     flash: { provider: 'platformio' },
     observations: [
       { id: 'heartbeat', provider: 'serial', contains: 'alive', requiredLevel: 'hardware_observed' },
-      { id: 'led', provider: 'logic-csv', file: path.join(root, 'logic.csv'), channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, requiredLevel: 'hardware_observed' },
+      { id: 'led', provider: 'logic-csv', channel: 0, timeColumn: 't', valueColumn: 'v', edgeCountAtLeast: 1, captureProvider: 'sigrok-cli', instrumentId: 'analyzer-1', driver: 'demo', sourceChannel: 'D0', sampleRateHz: 1000, durationSeconds: 1, requiredLevel: 'hardware_observed' },
     ],
     ...overrides,
   };
@@ -110,11 +110,13 @@ function harness(profile, behavior = {}) {
     createAdapters() { calls.push('adapters'); return adapters; },
     async resolveHardwareIdentities() {
       calls.push('resolve');
-      return behavior.identities?.shift?.() ?? [{ target: profile.target.id, probe: profile.target.probeSerial, serial: profile.target.serialPort, stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' } }];
+      const hasLogic = profile.observations.some((item) => item.provider === 'logic-csv' && item.requiredLevel === 'hardware_observed');
+      return behavior.identities?.shift?.() ?? [{ target: profile.target.id, probe: profile.target.probeSerial, serial: profile.target.serialPort, ...(hasLogic ? { instruments: { 'instrument-led': 'analyzer-1' } } : {}), stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1', ...(hasLogic ? { 'instrument-led': 'sigrok:analyzer-1' } : {}) } }];
     },
     async acquireLocks(identities, options) {
       calls.push('locks');
-      assert.deepEqual(identities, { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' });
+      const hasLogic = profile.observations.some((item) => item.provider === 'logic-csv' && item.requiredLevel === 'hardware_observed');
+      assert.deepEqual(identities, { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1', ...(hasLogic ? { 'instrument-led': 'sigrok:analyzer-1' } : {}) });
       behavior.lockSignal = options.signal;
       return { async release() { calls.push('release'); if (behavior.releaseError) throw new Error('release broke'); } };
     },
@@ -209,8 +211,8 @@ test('ambiguous or drifting identities fail closed', async (t) => {
     assert.equal(h.calls.includes('locks'), false); assert.equal(h.calls.includes('flash'), false);
   });
   for (const [name, enumeration] of [['zero matches', []], ['multiple matches', [
-    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 't1', probe: 'p1', serial: 's1' } },
-    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 't2', probe: 'p2', serial: 's2' } },
+    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', instruments: { 'instrument-led': 'analyzer-1' }, stableIds: { target: 't1', probe: 'p1', serial: 's1', 'instrument-led': 'i1' } },
+    { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', instruments: { 'instrument-led': 'analyzer-1' }, stableIds: { target: 't2', probe: 'p2', serial: 's2', 'instrument-led': 'i2' } },
   ]]]) await t.test(name, async () => {
     const f = await fixture(); const h = harness(f.profile, { identities: [enumeration] });
     await assert.rejects(planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies }), /exactly one|unique/i);
@@ -221,7 +223,7 @@ test('ambiguous or drifting identities fail closed', async (t) => {
     await assert.rejects(planHardwareRun({ profilePath: f.profilePath, evidenceDir: f.evidenceDir, dependencies: h.dependencies }), /ambiguous|explicit/i);
   });
   await t.test('drift after flash', async () => {
-    const exact = { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1' } };
+    const exact = { target: 'desk-c3', probe: 'probe-123', serial: '/dev/ttyACM0', instruments: { 'instrument-led': 'analyzer-1' }, stableIds: { target: 'usb:target-1', probe: 'usb:probe-1', serial: 'usb:port-1', 'instrument-led': 'sigrok:analyzer-1' } };
     const f = await fixture(); const h = harness(f.profile, { identities: [
       [exact],
       [exact],
