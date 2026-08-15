@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import stat
 import time
 from typing import Mapping, Optional, Sequence, Union
 
@@ -43,6 +44,7 @@ def run_command(
     stderr_path: PathLike,
     timeout_seconds: float,
     env: Optional[Mapping[str, str]] = None,
+    redact_values: Sequence[Union[str, bytes]] = (),
 ) -> CommandResult:
     normalized_command = tuple(os.fspath(part) for part in command)
     normalized_cwd = str(Path(cwd).resolve())
@@ -85,6 +87,7 @@ def run_command(
             except subprocess.TimeoutExpired:
                 pass
             _wait_for_process_group_exit(process.pid, 1.0)
+            _redact_logs((normalized_stdout, normalized_stderr), redact_values)
             raise interruption
         except subprocess.TimeoutExpired:
             timed_out = True
@@ -111,7 +114,22 @@ def run_command(
             group_exited = _wait_for_process_group_exit(process.pid, 0.5)
             if not group_exited and cleanup_error is None:
                 cleanup_error = "process_group_did_not_exit"
+        else:
+            if _process_group_exists(process.pid):
+                cleanup_error = "unexpected_descendant_processes"
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except (PermissionError, ProcessLookupError):
+                    pass
+                if not _wait_for_process_group_exit(process.pid, 0.5):
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except (PermissionError, ProcessLookupError):
+                        pass
+                    if not _wait_for_process_group_exit(process.pid, 1.0):
+                        cleanup_error = "process_group_did_not_exit"
 
+    _redact_logs((normalized_stdout, normalized_stderr), redact_values)
     ended_at = _utc_now()
     return CommandResult(
         command=normalized_command,
@@ -125,3 +143,30 @@ def run_command(
         stderr_path=normalized_stderr,
         cleanup_error=cleanup_error,
     )
+
+
+def _redact_logs(paths: Sequence[str], values: Sequence[Union[str, bytes]]) -> None:
+    needles = tuple(value.encode() if isinstance(value, str) else value for value in values if value)
+    if not needles:
+        return
+    for path in paths:
+        try:
+            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode):
+                    raise OSError("evidence log is not a regular file")
+                contents = bytearray()
+                while chunk := os.read(fd, 1024 * 1024):
+                    contents.extend(chunk)
+                redacted = contents
+                for needle in needles:
+                    redacted = redacted.replace(needle, b"[REDACTED]")
+                if redacted != contents:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    os.ftruncate(fd, 0)
+                    os.write(fd, redacted)
+            finally:
+                os.close(fd)
+        except FileNotFoundError:
+            pass

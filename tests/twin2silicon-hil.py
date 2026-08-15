@@ -179,6 +179,30 @@ class ResultContractTests(unittest.TestCase):
 
 
 class ProcessContractTests(unittest.TestCase):
+    def test_successful_leader_cannot_leave_mutating_descendant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); child_path = evidence / "child"; mutation = evidence / "mutation"
+            script = textwrap.dedent(f"""
+                import pathlib, subprocess, sys
+                child = '''
+                import os, pathlib, time
+                pathlib.Path({str(child_path)!r}).write_text(str(os.getpid()))
+                time.sleep(.4)
+                pathlib.Path({str(mutation)!r}).write_text('late')
+                time.sleep(30)
+                '''
+                subprocess.Popen([sys.executable, '-c', child])
+                while not pathlib.Path({str(child_path)!r}).exists(): pass
+                print('leader done')
+            """)
+            result = run_command([sys.executable, "-c", script], cwd=evidence,
+                                 stdout_path=evidence / "o", stderr_path=evidence / "e", timeout_seconds=2)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.cleanup_error, "unexpected_descendant_processes")
+            with self.assertRaises(ProcessLookupError): os.kill(int(child_path.read_text()), 0)
+            time.sleep(.5)
+            self.assertFalse(mutation.exists())
+
     def test_run_command_interrupt_terminates_process_group_before_reraising(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
@@ -197,6 +221,18 @@ class ProcessContractTests(unittest.TestCase):
                 if pid_path.exists():
                     try: os.kill(int(pid_path.read_text()), signal.SIGKILL)
                     except ProcessLookupError: pass
+
+    def test_run_command_redacts_exact_bytes_before_interrupt_reraises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory); output = evidence / "o"
+            timer = threading.Timer(.15, lambda: os.kill(os.getpid(), signal.SIGINT)); timer.start()
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    run_command([sys.executable, "-c", "import time; print('TOKEN_SENTINEL', flush=True); time.sleep(30)"],
+                                cwd=evidence, stdout_path=output, stderr_path=evidence / "e", timeout_seconds=30,
+                                redact_values=(b"TOKEN_SENTINEL",))
+            finally: timer.cancel()
+            self.assertEqual(output.read_text(), "[REDACTED]\n")
 
     def test_run_command_interrupt_kills_sigterm_ignoring_descendant_after_leader_exits(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -946,11 +982,11 @@ class HilOrchestrationTests(unittest.TestCase):
                         "infrastructure_status": "ok", "termination": "completed", "failure_category": None,
                         "uart": None, "register_assertions": [], "hashes": {}, "run": {}, "latency_seconds": .001,
                         "budget_validity": {"wall_time_seconds": {"configured": .01, "observed": None, "within_budget": None}}}
-            real_hash = run_hil.sha256_file
+            real_hash = run_hil._safe_hash
             def slow_hash(path):
                 time.sleep(.05)
                 return real_hash(path)
-            with mock.patch.object(run_hil, "sha256_file", side_effect=slow_hash):
+            with mock.patch.object(run_hil, "_safe_hash", side_effect=slow_hash):
                 run_hil._finalize(Path(directory), manifest, time.monotonic())
             wall = manifest["budget_validity"]["wall_time_seconds"]
             self.assertGreaterEqual(wall["observed"], .05)
@@ -985,6 +1021,7 @@ class HilOrchestrationTests(unittest.TestCase):
                 if '--version' in sys.argv: print('agent fixture 1'); raise SystemExit(0)
                 assert os.environ['HOME'] == 'HOME_SENTINEL'
                 assert os.environ['LABWIRED_HOME'] == 'LABWIRED_HOME_SENTINEL'
+                print(os.environ['LABWIRED_ACCESS_TOKEN'], os.environ['LABWIRED_MODEL_KEY'])
                 assert 'hidden' not in ' '.join(sys.argv).lower()
                 source = pathlib.Path('firmware/src/main.c')
                 source.write_text(source.read_text().replace('GPIO_MODE_INPUT', 'GPIO_MODE_OUTPUT'))
@@ -992,9 +1029,10 @@ class HilOrchestrationTests(unittest.TestCase):
             """))
             pio_dir = root / "pio"
             pio_dir.mkdir()
-            pio = executable_fixture(pio_dir, "import sys\nif '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
+            pio = executable_fixture(pio_dir, "import os,sys\nprint(os.environ.get('LABWIRED_ACCESS_TOKEN','ABSENT'), os.environ.get('HOST_SECRET','ABSENT'))\nif '--version' in sys.argv: print('pio fixture 1'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
             env = {**os.environ, "HOME": "HOME_SENTINEL", "LABWIRED_HOME": "LABWIRED_HOME_SENTINEL",
-                   "LABWIRED_ACCESS_TOKEN": "SECRET_TOKEN_SENTINEL"}
+                   "LABWIRED_ACCESS_TOKEN": "SECRET_TOKEN_SENTINEL", "LABWIRED_MODEL_KEY": "MODEL_KEY_SENTINEL",
+                   "HOST_SECRET": "HOST_SECRET_SENTINEL"}
             usage = root / "usage.json"
             usage.write_text(json.dumps({"schema_version": "1.0", "requests": 1,
                 "tokens": {"fresh_input": 1000, "cached_input": 2000, "output": 3000, "reasoning": 4},
@@ -1011,10 +1049,55 @@ class HilOrchestrationTests(unittest.TestCase):
             self.assertEqual(call["cwd"], "workspace")
             manifest_text = (run_dir / "run.json").read_text()
             self.assertNotIn("SECRET_TOKEN_SENTINEL", manifest_text)
+            for path in run_dir.rglob("*"):
+                if path.is_file():
+                    contents = path.read_bytes()
+                    for sentinel in (b"SECRET_TOKEN_SENTINEL", b"MODEL_KEY_SENTINEL", b"HOST_SECRET_SENTINEL"):
+                        self.assertNotIn(sentinel, contents)
             manifest = json.loads(manifest_text)
             self.assertEqual(manifest["model_status"], "pass")
             self.assertEqual(manifest["budget_validity"]["model_tokens"]["observed"], 55)
             self.assertNotEqual(manifest["hashes"]["source_initial"], manifest["hashes"]["source_final"])
+
+    def test_agent_symlink_and_fifo_are_rejected_without_reading_external_secret(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); secret = root / "secret"; secret.write_text("EXTERNAL_SECRET_SENTINEL")
+            agent_dir = root / "agent"; agent_dir.mkdir()
+            agent = executable_fixture(agent_dir, textwrap.dedent(f"""
+                import os, pathlib, sys
+                if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                pathlib.Path('escape').symlink_to({str(secret)!r})
+                os.mkfifo('special.fifo')
+            """))
+            tool_dir = root / "tool"; tool_dir.mkdir()
+            tool = executable_fixture(tool_dir, "print('v')\n")
+            run_dir = root / "run"
+            result = self._run_cli(task, "--run-dir", run_dir, "--agent-bin", agent, "--model", "fixture",
+                "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", tool, "--platformio", tool)
+            self.assertEqual(result.returncode, 2)
+            manifest_text = (run_dir / "run.json").read_text()
+            self.assertNotIn("EXTERNAL_SECRET_SENTINEL", manifest_text)
+            self.assertNotIn("escape", json.loads(manifest_text).get("artifacts", []))
+
+    def test_agent_credential_written_to_workspace_is_rejected_before_hash_or_build(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); agent_dir = root / "agent"; agent_dir.mkdir()
+            agent = executable_fixture(agent_dir, """import os,pathlib,sys
+if '--version' in sys.argv: print('v'); raise SystemExit(0)
+pathlib.Path('credential.txt').write_text(os.environ['LABWIRED_ACCESS_TOKEN'])
+""")
+            tool_dir = root / "tool"; tool_dir.mkdir(); marker = root / "tool-ran"
+            tool = executable_fixture(tool_dir, f"import sys\nif '--version' in sys.argv: print('v'); raise SystemExit(0)\nfrom pathlib import Path; Path({str(marker)!r}).write_text('ran')\n")
+            run_dir = root / "run"; env = {**os.environ, "LABWIRED_ACCESS_TOKEN": "WORKSPACE_TOKEN_SENTINEL"}
+            result = self._run_cli(task, "--run-dir", run_dir, "--agent-bin", agent, "--model", "fixture",
+                "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", tool, "--platformio", tool, env=env)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(marker.exists())
+            manifest_text = (run_dir / "run.json").read_text()
+            self.assertNotIn("WORKSPACE_TOKEN_SENTINEL", manifest_text)
+            self.assertNotIn("credential.txt", json.loads(manifest_text).get("artifacts", []))
 
     def test_cli_physical_pass_uses_pty_and_records_ordered_evidence(self):
         task = self._short_task()
@@ -1099,6 +1182,28 @@ class HilOrchestrationTests(unittest.TestCase):
             manifest = json.loads((run_dir / "run.json").read_text())
             self.assertEqual((manifest["compile_status"], manifest["infrastructure_status"]), ("not_run", "error"))
             self.assertEqual([phase["name"] for phase in manifest["phases"]], ["prepared", "clean"])
+
+    def test_overall_wall_deadline_bounds_cumulative_phases(self):
+        task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); marker = root / "identity"
+            pio_dir = root / "pio"; pio_dir.mkdir()
+            pio = executable_fixture(pio_dir, """import pathlib,sys,time
+if '--version' in sys.argv: print('v'); raise SystemExit(0)
+time.sleep(.18)
+if '--target' not in sys.argv:
+ p=pathlib.Path(sys.argv[sys.argv.index('--project-dir')+1])/'.pio/build/esp32s3/firmware.bin'; p.parent.mkdir(parents=True); p.write_bytes(b'fw')
+""")
+            identity_dir = root / "id"; identity_dir.mkdir()
+            identity = executable_fixture(identity_dir, f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')\n")
+            run_dir = root / "run"
+            result = self._run_cli(task, "--run-dir", run_dir, "--evaluate-only", "--candidate", task / "public",
+                "--jtag-serial", "J", "--uart-device", "/dev/null", "--openocd", pio, "--platformio", pio,
+                "--identity-command-json", json.dumps([str(identity)]), "--fixture-wall-time-seconds", ".45")
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(marker.exists())
+            manifest = json.loads((run_dir / "run.json").read_text())
+            self.assertFalse(manifest["budget_validity"]["wall_time_seconds"]["within_budget"])
 
     def test_uart_startup_hang_is_killed_before_bounded_finalization(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
