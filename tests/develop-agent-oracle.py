@@ -171,6 +171,27 @@ def domain_outcome(event: dict) -> bool | None:
     return True if wrapper is True and affirmative else None
 
 
+def grounding_outcome(event: dict) -> bool | None:
+    """Accept canonical knowledge records that have no redundant ``ok`` flag.
+
+    Hosted ``labwired_describe`` returns the described board/component object
+    directly. A completed canonical call plus its typed catalog identifier is
+    affirmative domain evidence; errors still fail through ``domain_outcome``.
+    """
+    domain = domain_outcome(event)
+    if domain is not None:
+        return domain
+    if outcome(event) is not True or tool_name(event).lower() != "labwired_describe":
+        return None
+    for result in structured_results(event):
+        if any(
+            isinstance(result.get(key), str) and re.fullmatch(r"[A-Za-z0-9._-]+", result[key])
+            for key in ("board", "type")
+        ):
+            return True
+    return None
+
+
 def typed_record(result: dict, key: str, expected_type: str) -> dict | None:
     record = result.get(key)
     if not isinstance(record, dict) or record.get("type") != expected_type:
@@ -199,6 +220,15 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
             artifact = typed_record(result, "artifact", "firmware")
             firmware_ref = result.get("firmware_ref")
             if isinstance(firmware_ref, str) and firmware_ref.strip():
+                return True
+            image_refs = result.get("flash_image_refs")
+            if result.get("runnable") is True and isinstance(image_refs, list) and image_refs and all(
+                isinstance(image, dict)
+                and isinstance(image.get("ref"), str)
+                and image["ref"].startswith("sha256:")
+                and len(image["ref"]) > len("sha256:")
+                for image in image_refs
+            ):
                 return True
             if artifact and str(artifact.get("path", artifact.get("ref", ""))).lower().endswith((".elf", ".bin", ".hex", ".uf2")):
                 return True
@@ -316,7 +346,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         raise Rejected("structured tool events required; prose/self-report is not evidence")
 
     context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and phase_outcome(e, "context") is True]
-    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and domain_outcome(e) is True and citations(e)]
+    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and grounding_outcome(e) is True and citations(e)]
     compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and phase_outcome(e, "compile") is not None]
     verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and phase_outcome(e, "verify") is not None]
     runs = [(i, e, n) for i, e, n in tools if n.lower() in RUN_TOOLS and phase_outcome(e, "run") is not None]
