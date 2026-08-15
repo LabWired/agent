@@ -41,6 +41,12 @@ from benchmarks.twin2silicon.hil.esp32s3 import (
     read_registers,
     validate_identity,
 )
+from benchmarks.twin2silicon.runtime_adapters import (
+    AdapterContext,
+    NormalizedUsage,
+    build_runtime_command,
+    normalize_usage,
+)
 
 
 def executable_fixture(directory, body):
@@ -48,6 +54,253 @@ def executable_fixture(directory, body):
     path.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")
     path.chmod(0o755)
     return path
+
+
+class RuntimeAdapterTests(unittest.TestCase):
+    def adapter_context(self, runtime, executable=None):
+        directory = Path("/tmp/runtime-adapter-test")
+        return AdapterContext(
+            runtime=runtime,
+            executable=executable or runtime,
+            workspace=directory / "workspace",
+            prompt="Complete the public firmware task.",
+            config_dir=directory / "config",
+            stdout_path=directory / "stdout.log",
+            stderr_path=directory / "stderr.log",
+        )
+
+    def test_build_runtime_commands_use_native_structured_modes(self):
+        contexts = {
+            "codex": self.adapter_context("codex"),
+            "claude": self.adapter_context("claude"),
+            "opencode": self.adapter_context("opencode"),
+        }
+        commands = {
+            runtime: build_runtime_command(context)
+            for runtime, context in contexts.items()
+        }
+
+        self.assertEqual(commands["codex"][:2], ["codex", "exec"])
+        self.assertEqual(commands["claude"][:2], ["claude", "--print"])
+        self.assertEqual(commands["opencode"][:2], ["opencode", "run"])
+        self.assertEqual(
+            commands["codex"],
+            [
+                "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check",
+                "-s", "workspace-write", "-C", str(contexts["codex"].workspace),
+                contexts["codex"].prompt,
+            ],
+        )
+        self.assertEqual(
+            commands["claude"],
+            [
+                "claude", "--print", "--output-format", "stream-json",
+                "--no-session-persistence", "--permission-mode", "acceptEdits",
+                "--mcp-config", str(contexts["claude"].config_dir / "claude-mcp.json"),
+                contexts["claude"].prompt,
+            ],
+        )
+        self.assertEqual(
+            commands["opencode"],
+            [
+                "opencode", "run", "--format", "json", "--dir",
+                str(contexts["opencode"].workspace), contexts["opencode"].prompt,
+            ],
+        )
+        self.assertEqual(
+            Path(commands["claude"][commands["claude"].index("--mcp-config") + 1]).parent,
+            contexts["claude"].config_dir,
+        )
+        hidden_oracle = "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001/hidden/hil-oracle.json"
+        for command in commands.values():
+            with self.subTest(command=command[:2]):
+                self.assertNotIn("--model", command)
+                self.assertNotIn(hidden_oracle, " ".join(command))
+
+    def test_adapter_dataclasses_are_frozen(self):
+        context = self.adapter_context("codex")
+        usage = NormalizedUsage(None, None, None, None, None, None, None)
+
+        with self.assertRaises((AttributeError, TypeError)):
+            context.prompt = "another prompt"
+        with self.assertRaises((AttributeError, TypeError)):
+            usage.output = 1
+
+    def test_normalize_opencode_step_finish_events(self):
+        lines = [
+            json.dumps({
+                "type": "step_finish",
+                "part": {
+                    "tokens": {"input": 800, "cache": {"read": 200}, "reasoning": 20, "output": 500},
+                    "cost": 0.002476282,
+                },
+            }),
+            json.dumps({
+                "type": "step_finish",
+                "part": {
+                    "tokens": {"input": 600, "cache": {"read": 300}, "reasoning": 28, "output": 576},
+                    "cost": 0.005,
+                },
+            }),
+        ]
+
+        usage = normalize_usage("opencode", lines)
+
+        self.assertEqual(usage.requests, 2)
+        self.assertEqual(usage.fresh_input, 1400)
+        self.assertEqual(usage.cached_input, 500)
+        self.assertEqual(usage.reasoning, 48)
+        self.assertEqual(usage.output, 1076)
+        self.assertAlmostEqual(usage.estimated_cost_usd, 0.007476282)
+        self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_codex_uses_final_cumulative_usage(self):
+        lines = [
+            json.dumps({"type": "turn.completed", "usage": {
+                "input_tokens": 1000, "cached_input_tokens": 200,
+                "reasoning_tokens": 10, "output_tokens": 500,
+            }}),
+            json.dumps({"type": "turn.completed", "usage": {
+                "input_tokens": 1400, "cached_input_tokens": 300,
+                "reasoning_tokens": 48, "output_tokens": 1076,
+            }}),
+        ]
+
+        usage = normalize_usage("codex", lines)
+
+        self.assertEqual(usage.requests, 1)
+        self.assertEqual(usage.fresh_input, 1400)
+        self.assertEqual(usage.cached_input, 300)
+        self.assertEqual(usage.reasoning, 48)
+        self.assertEqual(usage.output, 1076)
+        self.assertIsNone(usage.estimated_cost_usd)
+        self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_codex_uses_the_final_terminal_event(self):
+        lines = [
+            json.dumps({"type": "turn.completed", "usage": {
+                "input_tokens": 1400, "output_tokens": 1076,
+            }}),
+            json.dumps({"type": "turn.completed"}),
+        ]
+
+        usage = normalize_usage("codex", lines)
+
+        self.assertEqual(
+            usage,
+            NormalizedUsage(None, None, None, None, None, None, "runtime did not expose usage"),
+        )
+
+    def test_normalize_codex_accepts_zero_token_usage(self):
+        usage = normalize_usage(
+            "codex",
+            [json.dumps({
+                "type": "turn.completed",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+            })],
+        )
+
+        self.assertEqual(usage.requests, 1)
+        self.assertEqual(usage.fresh_input, 0)
+        self.assertEqual(usage.output, 0)
+        self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_claude_final_result_usage_and_cost(self):
+        lines = [
+            json.dumps({"type": "assistant", "message": {"content": []}}),
+            json.dumps({
+                "type": "result",
+                "subtype": "success",
+                "usage": {
+                    "input_tokens": 1400,
+                    "cache_read_input_tokens": 300,
+                    "output_tokens": 1076,
+                },
+                "total_cost_usd": 0.007476282,
+            }),
+        ]
+
+        usage = normalize_usage("claude", lines)
+
+        self.assertEqual(usage.requests, 1)
+        self.assertEqual(usage.fresh_input, 1400)
+        self.assertEqual(usage.cached_input, 300)
+        self.assertIsNone(usage.reasoning)
+        self.assertEqual(usage.output, 1076)
+        self.assertAlmostEqual(usage.estimated_cost_usd, 0.007476282)
+        self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_claude_uses_the_final_result_event(self):
+        lines = [
+            json.dumps({
+                "type": "result",
+                "usage": {"input_tokens": 1400, "output_tokens": 1076},
+                "total_cost_usd": 0.007476282,
+            }),
+            json.dumps({"type": "result", "subtype": "success", "result": "complete"}),
+        ]
+
+        usage = normalize_usage("claude", lines)
+
+        self.assertEqual(
+            usage,
+            NormalizedUsage(None, None, None, None, None, None, "runtime did not expose usage"),
+        )
+
+    def test_normalize_claude_accepts_zero_token_usage(self):
+        usage = normalize_usage(
+            "claude",
+            [json.dumps({
+                "type": "result",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "total_cost_usd": 0.0,
+            })],
+        )
+
+        self.assertEqual(usage.requests, 1)
+        self.assertEqual(usage.fresh_input, 0)
+        self.assertEqual(usage.output, 0)
+        self.assertEqual(usage.estimated_cost_usd, 0.0)
+        self.assertIsNone(usage.unavailable_reason)
+
+    def test_normalize_usage_ignores_malformed_lines(self):
+        usage = normalize_usage("opencode", ["not json", "{", "[]"])
+
+        self.assertEqual(
+            usage,
+            NormalizedUsage(None, None, None, None, None, None, "runtime did not expose usage"),
+        )
+
+    def test_normalize_opencode_rejects_aggregate_overflow(self):
+        lines = [
+            json.dumps({
+                "type": "step_finish",
+                "part": {
+                    "tokens": {"output": 1_000_000_000_000},
+                    "cost": 1_000_000_000.0,
+                },
+            }),
+            json.dumps({
+                "type": "step_finish",
+                "part": {"tokens": {"output": 1}, "cost": 0.01},
+            }),
+        ]
+
+        usage = normalize_usage("opencode", lines)
+
+        self.assertEqual(usage.requests, 2)
+        self.assertIsNone(usage.output)
+        self.assertIsNone(usage.estimated_cost_usd)
+        self.assertEqual(usage.unavailable_reason, "runtime did not expose usage")
+
+    def test_normalize_usage_marks_success_without_accounting_unavailable(self):
+        usage = normalize_usage(
+            "claude",
+            [json.dumps({"type": "result", "subtype": "success", "result": "complete"})],
+        )
+
+        self.assertEqual(usage.estimated_cost_usd, None)
+        self.assertEqual(usage.unavailable_reason, "runtime did not expose usage")
 
 
 class FixtureContractTests(unittest.TestCase):
