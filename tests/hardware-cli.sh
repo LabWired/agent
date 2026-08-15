@@ -65,7 +65,7 @@ set -e
 [[ "$old_code" -eq 2 && "$old_output" == *'Node.js 18+'* && ! -e "$TMP/old-ran" ]]
 
 set +e
-plan="$("${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/evidence" 2>&1)"
+plan="$(env 'npm_package_bin_labwired-agent-install=bin/install.js' "${CLI[@]}" plan --profile "$TMP/project/compiled.json" --out "$TMP/evidence" 2>&1)"
 plan_rc=$?
 set -e
 if [[ "$plan_rc" -ne 0 ]]; then
