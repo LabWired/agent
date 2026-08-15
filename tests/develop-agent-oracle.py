@@ -286,6 +286,8 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     facts = payload.get("hardware_sensitive_facts")
     cited = {c for _, e, _ in grounding for c in citations(e)}
     report_text = json.dumps(report, ensure_ascii=False)
+    if scenario and (not isinstance(facts, list) or not facts):
+        raise Rejected("hardware-sensitive fixed scenario requires a nonempty structured fact/source manifest")
     if HARDWARE_FACT.search(report_text) and (not isinstance(facts, list) or not facts):
         raise Rejected("hardware-sensitive final claim requires a structured fact/source manifest")
     if facts is not None:

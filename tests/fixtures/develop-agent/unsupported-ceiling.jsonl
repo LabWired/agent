@@ -2,4 +2,4 @@
 {"type":"tool","id":"e2","tool":"labwired_netlist","result":{"citation":"netlist:custom-board"}}
 {"type":"tool","id":"e3","tool":"labwired_compile","result":{"ok":true}}
 {"type":"tool","id":"e4","tool":"labwired_verify","result":{"ok":false,"status":"unsupported_target"}}
-{"type":"final","id":"e5","claim":"compiled_only"}
+{"type":"final","id":"e5","result":{"claim":"compiled_only","hardware_sensitive_facts":[{"fact":"The custom board target has no supported twin model","source":"netlist:custom-board"}]}}

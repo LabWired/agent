@@ -29,12 +29,19 @@ assert opencode.returncode == 0, opencode.stderr
 assert json.loads(opencode.stdout)["final_claim"] == "model_verified"
 
 scenario_ok = subprocess.run(
-    [sys.executable, str(ORACLE), "validate", str(FIX / "valid.jsonl"), "greenfield-esp32c3"],
+    [sys.executable, str(ORACLE), "validate", str(FIX / "valid-hardware-manifest.jsonl"), "greenfield-esp32c3"],
     text=True, capture_output=True,
 )
 assert scenario_ok.returncode == 0, scenario_ok.stderr
+for fixture in ("scenario-missing-manifest.jsonl", "scenario-empty-manifest.jsonl", "scenario-malformed-manifest.jsonl"):
+    missing_manifest = subprocess.run(
+        [sys.executable, str(ORACLE), "validate", str(FIX / fixture), "greenfield-esp32c3"],
+        text=True, capture_output=True,
+    )
+    assert missing_manifest.returncode != 0, fixture
+    assert "hardware-sensitive" in missing_manifest.stderr.lower(), (fixture, missing_manifest.stderr)
 scenario_ceiling = subprocess.run(
-    [sys.executable, str(ORACLE), "validate", str(FIX / "valid.jsonl"), "unsupported-custom-board"],
+    [sys.executable, str(ORACLE), "validate", str(FIX / "valid-hardware-manifest.jsonl"), "unsupported-custom-board"],
     text=True, capture_output=True,
 )
 assert scenario_ceiling.returncode != 0 and "rejects final claim" in scenario_ceiling.stderr
