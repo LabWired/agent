@@ -4,6 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 HOST_HOME="${HOME:?HOME is required for the shared PlatformIO tool cache}"
+SUITE_TMP="$(mktemp -d "$ROOT/.labwired-suite.XXXXXX")"
+trap 'rm -rf "$SUITE_TMP"' EXIT INT TERM HUP
+mkdir -p "$SUITE_TMP/tmp"
+export TMPDIR="$SUITE_TMP/tmp"
+export TMP="$SUITE_TMP/tmp"
+export TEMP="$SUITE_TMP/tmp"
 
 export LABWIRED_FAST="${LABWIRED_FAST:-1}"
 export LABWIRED_INSTALL_PIO="${LABWIRED_INSTALL_PIO:-0}"
