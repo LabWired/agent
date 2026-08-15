@@ -187,18 +187,47 @@ def _safe_files(root: Path, deadline: float | None = None) -> list[Path]:
 
 def _safe_remove_tree(path: Path) -> None:
     try:
-        info = os.lstat(path)
+        parent_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     except FileNotFoundError:
         return
-    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
-        path.unlink(missing_ok=True)
-        return
-    with os.scandir(path) as entries:
-        children = [path / entry.name for entry in entries]
-    for child in children:
-        _safe_remove_tree(child)
-    try: path.rmdir()
-    except FileNotFoundError: pass
+    try:
+        _remove_entry_at(parent_fd, path.name)
+    finally:
+        os.close(parent_fd)
+
+
+def _remove_entry_at(parent_fd: int, name: str) -> None:
+    for _ in range(3):
+        try:
+            info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            try:
+                os.unlink(name, dir_fd=parent_fd)
+                return
+            except IsADirectoryError:
+                continue
+        try:
+            child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            continue
+        try:
+            opened = os.fstat(child_fd)
+            if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+                continue
+            for child_name in os.listdir(child_fd):
+                _remove_entry_at(child_fd, child_name)
+        finally:
+            os.close(child_fd)
+        try:
+            os.rmdir(name, dir_fd=parent_fd)
+            return
+        except (FileNotFoundError, NotADirectoryError):
+            return
+        except OSError:
+            continue
+    raise UnsafeWorkspaceError("quarantine deletion race detected")
 
 
 def _quarantine_workspace(workspace: Path) -> None:
@@ -207,19 +236,23 @@ def _quarantine_workspace(workspace: Path) -> None:
     root = Path(tempfile.mkdtemp(prefix="hil-quarantine-", dir=workspace.parent.parent))
     quarantined = root / "workspace"
     os.rename(workspace, quarantined)
-    _safe_remove_tree(quarantined)
-    _safe_remove_tree(root)
+    try:
+        _safe_remove_tree(quarantined)
+        _safe_remove_tree(root)
+    except UnsafeWorkspaceError:
+        pass
 
 
-def _freeze_workspace(workspace: Path, deadline: float | None) -> None:
+def _freeze_workspace(workspace: Path, deadline: float | None) -> Path:
     root = Path(tempfile.mkdtemp(prefix="hil-snapshot-", dir=workspace.parent.parent))
-    frozen = root / "workspace"
+    frozen = root / "snapshot"
     try:
         _copy_public(workspace, frozen, deadline)
         _quarantine_workspace(workspace)
-        os.rename(frozen, workspace)
-    finally:
+        return frozen
+    except BaseException:
         _safe_remove_tree(root)
+        raise
 
 
 def _safe_hash(path: Path) -> str:
@@ -394,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         "hashes": {}, "artifacts": [], "environment": {}, "phases": [],
     }
     workspace: Path | None = None
+    trusted_snapshot: Path | None = None
     overall_deadline: float | None = None
     def bounded_timeout(cap: float) -> float:
         if overall_deadline is None:
@@ -455,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("fixture identity timeout must be finite, nonnegative, and no larger than oracle timeout")
             config = replace(config, identity_timeout_seconds=fixture_timeout)
         source = _safe_tree(args.candidate, "candidate") if args.evaluate_only else _safe_tree(public, "public")
-        workspace = run_dir / "workspace"
+        workspace = run_dir / (f"agent-workspace-{secrets.token_hex(8)}" if args.agent_bin else "workspace")
         _copy_public(source, workspace, overall_deadline)
         nonce = secrets.token_hex(16)
         nonce_header = workspace / "firmware/include/run_nonce.h"
@@ -516,10 +550,16 @@ def main(argv: list[str] | None = None) -> int:
                 manifest["termination"], manifest["failure_category"] = "completed", "model"
                 record_phase("agent", agent)
                 manifest["hashes"]["source_final"] = _tree_hash(workspace)
-                return _finalize(run_dir, manifest, run_started_monotonic)
+                _quarantine_workspace(workspace)
+                workspace = None
+                return _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
             record_phase("agent", agent)
             _reject_secret_files(workspace, credential_values)
-            _freeze_workspace(workspace, overall_deadline)
+            frozen = _freeze_workspace(workspace, overall_deadline)
+            build_workspace = run_dir / f"build-workspace-{secrets.token_hex(8)}"
+            _copy_public(frozen, build_workspace, overall_deadline)
+            trusted_snapshot = frozen
+            workspace = build_workspace
         else:
             manifest["model_status"] = "not_run"
         manifest["hashes"]["source_final"] = _tree_hash(workspace)
@@ -553,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest["hardware_status"] = "not_run"
             manifest["termination"], manifest["failure_category"] = "completed", "compile"
             record_phase("build", build)
-            return _finalize(run_dir, manifest, run_started_monotonic)
+            return _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
         manifest["compile_status"] = "pass"
         record_phase("build", build)
         artifact = firmware / config.flash_artifact
@@ -641,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
             if flashed.status == "hardware_fail" or not uart_payload["matched"]:
                 manifest["hardware_status"] = "fail"
                 manifest["termination"], manifest["failure_category"] = "completed", flashed.category or "uart_nonce"
-                return _finalize(run_dir, manifest, run_started_monotonic)
+                return _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
             registers = read_registers(args.openocd, config.openocd_board_config, args.jtag_serial,
                                        config.assertions, cwd=workspace, evidence_dir=run_dir,
                                        timeout_seconds=bounded_timeout(config.openocd_command_timeout_seconds), runner=tool_runner)
@@ -658,7 +698,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest["failure_category"] = None if registers.status == "pass" else "register_mismatch"
             record_phase("register", registers.command_result, status=registers.status,
                          assertions=manifest["register_assertions"])
-        return _finalize(run_dir, manifest, run_started_monotonic)
+        return _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
     except UnsafeWorkspaceError as error:
         if workspace is not None:
             _quarantine_workspace(workspace)
@@ -683,7 +723,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest["failure_category"] = "interrupt"
         manifest["detail"] = sanitize(type(error).__name__)
         try:
-            _finalize(run_dir, manifest, run_started_monotonic)
+            _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
         except (OSError, ValueError):
             persist()
         return 2
@@ -695,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest["failure_category"] = "infrastructure"
         manifest["detail"] = sanitize(str(error))
         try:
-            _finalize(run_dir, manifest, run_started_monotonic)
+            _finalize(run_dir, manifest, run_started_monotonic, trusted_snapshot)
         except (OSError, ValueError) as final_error:
             manifest["detail"] = sanitize(f"{error}; evidence rejected: {final_error}")
             persist()
@@ -703,8 +743,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
-def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float) -> int:
-    _safe_remove_tree(run_dir / "workspace/firmware/.pio")
+def _finalize(run_dir: Path, manifest: dict[str, Any], started_monotonic: float,
+              trusted_snapshot: Path | None = None) -> int:
+    if trusted_snapshot is not None:
+        build_names = [name for name in os.listdir(run_dir) if name.startswith("build-workspace-")]
+        second_snapshot = None
+        for name in build_names:
+            build_path = run_dir / name
+            _safe_remove_tree(build_path / "firmware/.pio")
+            if build_path.exists():
+                second_snapshot = _freeze_workspace(build_path, None)
+        chosen = second_snapshot if second_snapshot is not None and _tree_hash(second_snapshot) == _tree_hash(trusted_snapshot) else trusted_snapshot
+        delivered = run_dir / "source"
+        if delivered.exists(): _safe_remove_tree(delivered)
+        _copy_public(chosen, delivered)
+        if second_snapshot is not None: _safe_remove_tree(second_snapshot.parent)
+        _safe_remove_tree(trusted_snapshot.parent)
+        for name in os.listdir(run_dir):
+            if name.startswith("build-workspace-"): _quarantine_workspace(run_dir / name)
+    else:
+        _safe_remove_tree(run_dir / "workspace/firmware/.pio")
     credential_values = tuple(filter(None, (os.environ.get(name, "") for name in (
         "LABWIRED_ACCESS_TOKEN", "LABWIRED_PROJECT", "LABWIRED_MODEL_URL", "LABWIRED_MODEL_KEY"))))
     _reject_secret_files(run_dir, credential_values)

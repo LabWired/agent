@@ -180,6 +180,17 @@ class ResultContractTests(unittest.TestCase):
 
 
 class ProcessContractTests(unittest.TestCase):
+    def test_streaming_redaction_handles_cross_chunk_secret_and_oversize_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); crossed=root/'crossed'; secret=b'CROSS_BOUNDARY_SECRET'
+            crossed.write_bytes(b'A'*(1024*1024-len(secret)//2)+secret+b'Z')
+            self.assertIsNone(process_module._redact_logs((str(crossed),),(secret,)))
+            self.assertNotIn(secret,crossed.read_bytes()); self.assertIn(b'[REDACTED]',crossed.read_bytes())
+            huge=root/'huge';
+            with huge.open('wb') as output: output.truncate(20*1024*1024)
+            self.assertEqual(process_module._redact_logs((str(huge),),(b'x',)),"evidence_log_too_large")
+            self.assertEqual(huge.read_bytes(),b'[EVIDENCE LOG TOO LARGE]\n')
+
     def test_successful_leader_cannot_leave_mutating_descendant(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory); child_path = evidence / "child"; mutation = evidence / "mutation"
@@ -234,6 +245,17 @@ class ProcessContractTests(unittest.TestCase):
                                 redact_values=(b"TOKEN_SENTINEL",))
             finally: timer.cancel()
             self.assertEqual(output.read_text(), "[REDACTED]\n")
+
+    def test_interrupted_sparse_log_is_replaced_boundedly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence=Path(directory); output=evidence/'o'
+            timer=threading.Timer(.15,lambda: os.kill(os.getpid(),signal.SIGINT)); timer.start()
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    run_command([sys.executable,'-c',"import os,time; os.lseek(1,20*1024*1024,0); os.write(1,b'x'); time.sleep(30)"],
+                        cwd=evidence,stdout_path=output,stderr_path=evidence/'e',timeout_seconds=30,redact_values=(b'secret',))
+            finally: timer.cancel()
+            self.assertEqual(output.read_bytes(),b'[EVIDENCE LOG TOO LARGE]\n')
 
     def test_run_command_interrupt_kills_sigterm_ignoring_descendant_after_leader_exits(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1047,7 +1069,7 @@ class HilOrchestrationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             call = json.loads(invocation.read_text())
             self.assertEqual(call["argv"][:4], ["agent", "run", "--model", "fixture/model"])
-            self.assertEqual(call["cwd"], "workspace")
+            self.assertTrue(call["cwd"].startswith("agent-workspace-"))
             manifest_text = (run_dir / "run.json").read_text()
             self.assertNotIn("SECRET_TOKEN_SENTINEL", manifest_text)
             for path in run_dir.rglob("*"):
@@ -1121,6 +1143,27 @@ with pathlib.Path('huge.bin').open('wb') as out: out.truncate(40 * 1024 * 1024)
             self.assertFalse((run_dir/'workspace').exists())
             self.assertEqual(json.loads((run_dir/'run.json').read_text())["failure_category"],"unsafe_workspace")
 
+    def test_fd_relative_quarantine_delete_never_follows_swapped_symlink(self):
+        sys.path.insert(0,str(REPOSITORY_ROOT/'benchmarks/twin2silicon')); import run_hil
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); victim=root/'victim'; child=victim/'child'; child.mkdir(parents=True)
+            for index in range(500): (child/f'f{index}').write_text('x')
+            external=root/'external'; external.mkdir(); sentinel=external/'sentinel'; sentinel.write_text('safe')
+            moved=victim/'moved'; stop=threading.Event()
+            def swap():
+                while not stop.is_set():
+                    try:
+                        child.rename(moved); child.symlink_to(external, target_is_directory=True)
+                        child.unlink(); moved.rename(child)
+                    except (FileNotFoundError,OSError): pass
+            thread=threading.Thread(target=swap); thread.start()
+            try:
+                try: run_hil._safe_remove_tree(victim)
+                except run_hil.UnsafeWorkspaceError: pass
+            finally:
+                stop.set(); thread.join(1)
+            self.assertEqual(sentinel.read_text(),'safe')
+
     def test_detached_agent_mutator_cannot_change_frozen_workspace(self):
         task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
         with tempfile.TemporaryDirectory() as directory:
@@ -1133,20 +1176,31 @@ with pathlib.Path('huge.bin').open('wb') as out: out.truncate(40 * 1024 * 1024)
                 import pathlib
                 while not pathlib.Path({str(pid_path)!r}).exists(): time.sleep(.01)
             """))
-            tool_dir=root/'tool'; tool_dir.mkdir()
-            tool=executable_fixture(tool_dir,"import sys\nif '--version' in sys.argv: print('v'); raise SystemExit(0)\nraise SystemExit(0 if 'clean' in sys.argv else 1)\n")
+            build_pid=root/'build-child.pid'; tool_dir=root/'tool'; tool_dir.mkdir()
+            tool=executable_fixture(tool_dir,textwrap.dedent(f"""
+                import pathlib,subprocess,sys
+                if '--version' in sys.argv: print('v'); raise SystemExit(0)
+                if 'clean' in sys.argv: raise SystemExit(0)
+                project=pathlib.Path(sys.argv[sys.argv.index('--project-dir')+1])
+                child="import os,pathlib,time; p=pathlib.Path(%r); pathlib.Path(%r).write_text(str(os.getpid()));\\nwhile True:\\n p.parent.mkdir(parents=True,exist_ok=True); open(p,'ab').write(b'Y'); time.sleep(.01)" % (str(project/'src/main.c'), {str(build_pid)!r})
+                subprocess.Popen([sys.executable,'-c',child],start_new_session=True)
+                raise SystemExit(1)
+            """))
             run_dir=root/'run'
             try:
                 result=self._run_cli(task,'--run-dir',run_dir,'--agent-bin',agent,'--model','m','--jtag-serial','J',
                     '--uart-device','/dev/null','--openocd',tool,'--platformio',tool)
                 self.assertEqual(result.returncode,0,result.stderr)
                 sys.path.insert(0,str(REPOSITORY_ROOT/'benchmarks/twin2silicon')); import run_hil
-                before=run_hil._tree_hash(run_dir/'workspace'); time.sleep(.2)
-                self.assertEqual(before,run_hil._tree_hash(run_dir/'workspace'))
+                before=run_hil._tree_hash(run_dir/'source'); time.sleep(.2)
+                self.assertEqual(before,run_hil._tree_hash(run_dir/'source'))
                 self.assertEqual(before,json.loads((run_dir/'run.json').read_text())["hashes"]["source_final"])
             finally:
                 if pid_path.exists():
                     try: os.kill(int(pid_path.read_text()),signal.SIGKILL)
+                    except ProcessLookupError: pass
+                if build_pid.exists():
+                    try: os.kill(int(build_pid.read_text()),signal.SIGKILL)
                     except ProcessLookupError: pass
 
     def test_cli_physical_pass_uses_pty_and_records_ordered_evidence(self):

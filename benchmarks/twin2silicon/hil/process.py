@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import stat
+import tempfile
 import time
 from typing import Mapping, Optional, Sequence, Union
 
@@ -129,7 +130,9 @@ def run_command(
                     if not _wait_for_process_group_exit(process.pid, 1.0):
                         cleanup_error = "process_group_did_not_exit"
 
-    _redact_logs((normalized_stdout, normalized_stderr), redact_values)
+    redaction_error = _redact_logs((normalized_stdout, normalized_stderr), redact_values)
+    if redaction_error is not None and cleanup_error is None:
+        cleanup_error = redaction_error
     ended_at = _utc_now()
     return CommandResult(
         command=normalized_command,
@@ -145,28 +148,69 @@ def run_command(
     )
 
 
-def _redact_logs(paths: Sequence[str], values: Sequence[Union[str, bytes]]) -> None:
+def _redact_logs(paths: Sequence[str], values: Sequence[Union[str, bytes]]) -> Optional[str]:
     needles = tuple(value.encode() if isinstance(value, str) else value for value in values if value)
     if not needles:
-        return
+        for path in paths:
+            try:
+                if os.lstat(path).st_size > 16 * 1024 * 1024:
+                    temporary_fd, temporary = tempfile.mkstemp(prefix=".redacted-", dir=str(Path(path).parent))
+                    try: os.write(temporary_fd, b"[EVIDENCE LOG TOO LARGE]\n"); os.fsync(temporary_fd)
+                    finally: os.close(temporary_fd)
+                    os.replace(temporary, path)
+                    return "evidence_log_too_large"
+            except FileNotFoundError: pass
+        return None
+    error = None
     for path in paths:
+        temporary = None
         try:
-            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            if os.lstat(path).st_size > 16 * 1024 * 1024:
+                temporary_fd, temporary = tempfile.mkstemp(prefix=".redacted-", dir=str(Path(path).parent))
+                try:
+                    os.write(temporary_fd, b"[EVIDENCE LOG TOO LARGE]\n"); os.fsync(temporary_fd)
+                finally: os.close(temporary_fd)
+                os.replace(temporary, path); temporary = None
+                error = "evidence_log_too_large"
+                continue
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            temporary_fd, temporary = tempfile.mkstemp(prefix=".redacted-", dir=str(Path(path).parent))
             try:
                 info = os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode):
                     raise OSError("evidence log is not a regular file")
-                contents = bytearray()
+                overlap = b""; maximum = max(map(len, needles))
                 while chunk := os.read(fd, 1024 * 1024):
-                    contents.extend(chunk)
-                redacted = contents
-                for needle in needles:
-                    redacted = redacted.replace(needle, b"[REDACTED]")
-                if redacted != contents:
-                    os.lseek(fd, 0, os.SEEK_SET)
-                    os.ftruncate(fd, 0)
-                    os.write(fd, redacted)
+                    data = overlap + chunk
+                    limit = max(0, len(data) - maximum + 1)
+                    overlap = _write_redacted_prefix(temporary_fd, data, limit, needles)
+                _write_redacted_prefix(temporary_fd, overlap, len(overlap), needles)
+                os.fsync(temporary_fd)
             finally:
                 os.close(fd)
+                os.close(temporary_fd)
+            os.replace(temporary, path); temporary = None
         except FileNotFoundError:
             pass
+        finally:
+            if temporary is not None:
+                try: os.unlink(temporary)
+                except FileNotFoundError: pass
+    return error
+
+
+def _write_redacted_prefix(output_fd: int, data: bytes, limit: int,
+                           needles: Sequence[bytes]) -> bytes:
+    cursor = 0
+    while cursor < limit:
+        matches = [(position, needle) for needle in needles
+                   if (position := data.find(needle, cursor)) != -1 and position < limit]
+        if not matches:
+            os.write(output_fd, data[cursor:limit])
+            cursor = limit
+            break
+        position, needle = min(matches, key=lambda item: item[0])
+        os.write(output_fd, data[cursor:position])
+        os.write(output_fd, b"[REDACTED]")
+        cursor = position + len(needle)
+    return data[max(cursor, limit):]
