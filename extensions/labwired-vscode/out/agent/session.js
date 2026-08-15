@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AgentSession = void 0;
 const child_process_1 = require("child_process");
 const vscode = __importStar(require("vscode"));
+const cloudSession_1 = require("../cli/cloudSession");
 /**
  * In-panel freeform LLM — no interactive terminal hop.
  *
@@ -66,6 +67,18 @@ class AgentSession {
         this.stop();
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
         const enriched = this.enrichPrompt(prompt, mode);
+        const configuredHostedEnv = {
+            ...process.env,
+            LABWIRED_MODEL_URL: process.env.LABWIRED_MODEL_URL ||
+                vscode.workspace.getConfiguration("labwired").get("modelUrl"),
+            LABWIRED_MODEL_KEY: process.env.LABWIRED_MODEL_KEY ||
+                vscode.workspace.getConfiguration("labwired").get("modelKey"),
+        };
+        if ((0, cloudSession_1.isHostedLabWiredEnv)(configuredHostedEnv)) {
+            const disclosure = (0, cloudSession_1.hostedDisclosureMessage)(process.env);
+            if (disclosure)
+                onEvent({ type: "text", text: `${disclosure}\n\n` });
+        }
         // Try OpenCode first (real agent)
         const oc = await this.tryOpencode(enriched, cwd, mode, onEvent);
         if (oc)

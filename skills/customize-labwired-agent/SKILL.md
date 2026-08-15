@@ -5,7 +5,7 @@ description: >-
   ~/.config/labwired-agent/ (or LABWIRED_AGENT_CONFIG_DIR): agent.json-equivalent
   runtime files, tui.json, themes, plugins, skills, AGENTS.md, MCP (labwired),
   providers/models, permissions, or install/login. Prefer product names
-  (LabWired Agent, Hosted / Default / Fast, labwired agent login). Do not use
+  (LabWired Agent, Hosted / Default, labwired agent login). Do not use
   for the user's firmware/application code.
 license: MIT
 compatibility: opencode
@@ -35,7 +35,7 @@ Kit sources live under the install prefix, e.g. `~/.labwired/agent/config/`, `pl
 ## Product names (always)
 
 - Product: **LabWired Agent** (`labwired agent`)
-- Hosted provider label: **Hosted** · models **Default** / **Fast**
+- Hosted provider label: **Hosted** · model **Default**
 - Auth: **`labwired agent login`** (LabWired account) — never engine /connect or third-party marketplaces
 - Config dir: **`~/.config/labwired-agent/`** (product path). Runtime file may still be named `opencode.json` inside that dir (engine filename).
 
@@ -49,8 +49,12 @@ Kit sources live under the install prefix, e.g. `~/.labwired/agent/config/`, `pl
 
 ## Common edits
 
-### Switch model SKU
-Hosted: `labwired/labwired-default` or `labwired/labwired-fast` in `opencode.json` `model`.
+### Hosted model
+Hosted uses the single public model id `labwired/labwired-default` in `opencode.json`.
+On first hosted start for each disclosure version, LabWired explains that hosted
+conversations are stored under the Privacy Policy and customer content is not
+used for training by default. The acknowledgement belongs in LabWired user
+state, never in a firmware repository.
 
 ### Local / BYO model
 User sets `LABWIRED_MODEL_URL` + `LABWIRED_MODEL_KEY` and uses local config profile — do not force Ollama defaults.

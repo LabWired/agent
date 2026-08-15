@@ -44,8 +44,7 @@ assert "{env:LABWIRED_ACCESS_TOKEN}" in str(opts.get("apiKey")), opts
 headers = opts.get("headers") or {}
 assert "{env:LABWIRED_PROJECT}" in str(headers.get("X-LabWired-Project", "")), headers
 models = prov.get("models") or {}
-assert "labwired-default" in models, prov
-assert "labwired-fast" in models, prov
+assert sorted(models) == ["labwired-default"], models
 assert cfg.get("model") == "labwired/labwired-default", cfg.get("model")
 # Skills allowlist must include primary LabWired packs (legacy verify-firmware → prove)
 skills = (cfg.get("permission") or {}).get("skill") or {}
@@ -59,6 +58,19 @@ assert "model_verified" in desc or "labwired_verify" in desc or "never invent" i
 print("ok   hosted config schema")
 PY
 
+# Hosted product surfaces expose one stable public model name. Provider/model
+# implementation names must not leak back into hosted config or customization.
+if rg -n -i 'labwired-fast|glm[ -]?5\.1' \
+  "$ROOT/config/opencode.hosted.json" \
+  "$ROOT/skills/customize-labwired-agent/SKILL.md" \
+  "$ROOT/lib/cloud-session.sh" \
+  "$ROOT/bin/labwired-agent" \
+  "$ROOT/extensions/labwired-vscode/src/cli/cloudSession.ts"; then
+  bad "removed hosted model names remain"
+else
+  ok "one hosted model vocabulary"
+fi
+
 # Session save/load round-trip
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -68,9 +80,46 @@ labwired_cloud_session_load
 [[ "$LABWIRED_ACCESS_TOKEN" == "lwd_test_access" ]] && ok "session load access" || bad "session load access"
 [[ "$LABWIRED_PROJECT" == "proj_abc" ]] && ok "session load project" || bad "session load project"
 [[ "$LABWIRED_MODEL_URL" == "https://api.labwired.com/v1" ]] && ok "model url" || bad "model url got $LABWIRED_MODEL_URL"
+[[ "$LABWIRED_MODEL" == "labwired-default" ]] && ok "sole model export" || bad "model export got $LABWIRED_MODEL"
 labwired_cloud_hosted_ready && ok "hosted ready" || bad "hosted ready"
 labwired_cloud_session_clear
 if [[ -f "$(labwired_cloud_session_path)" ]]; then bad "session clear"; else ok "session clear"; fi
+
+# Hosted disclosure is stored under user state, shown once per version, and a
+# failed acknowledgement write never blocks a hosted session.
+export LABWIRED_HOSTED_DISCLOSURE_VERSION=1
+first="$(labwired_cloud_hosted_disclosure)"
+second="$(labwired_cloud_hosted_disclosure)"
+[[ "$first" == *"Hosted conversations are stored by LabWired under the Privacy Policy."* \
+  && "$first" == *"Customer content is not used for training by default."* ]] \
+  && ok "first hosted disclosure" || bad "first hosted disclosure: $first"
+[[ -z "$second" ]] && ok "same disclosure version suppressed" || bad "same disclosure repeated: $second"
+export LABWIRED_HOSTED_DISCLOSURE_VERSION=2
+third="$(labwired_cloud_hosted_disclosure)"
+[[ -n "$third" ]] && ok "new disclosure version shown" || bad "new disclosure version suppressed"
+export LABWIRED_HOSTED_DISCLOSURE_VERSION=concurrent
+for n in 1 2 3 4 5 6; do
+  (labwired_cloud_hosted_disclosure >"$TMP/disclosure-$n") &
+done
+wait
+shown="$(cat "$TMP"/disclosure-* | grep -c '^Hosted conversations' || true)"
+[[ "$shown" -eq 1 ]] && ok "concurrent launches disclose once" || bad "concurrent launches disclosed $shown times"
+ack="$(labwired_cloud_disclosure_ack_dir)"
+case "$ack" in
+  "$LABWIRED_HOME"/*) ok "disclosure acknowledgement is user state" ;;
+  *) bad "disclosure acknowledgement escaped user state: $ack" ;;
+esac
+
+readonly_home="$TMP/read-only-home"
+mkdir -p "$readonly_home"
+chmod 500 "$readonly_home"
+fallback="$(
+  LABWIRED_HOME="$readonly_home/missing" \
+  LABWIRED_HOSTED_DISCLOSURE_VERSION=3 \
+  labwired_cloud_hosted_disclosure
+)"
+[[ -n "$fallback" ]] && ok "acknowledgement failure does not block disclosure" || bad "acknowledgement failure hid disclosure"
+chmod 700 "$readonly_home"
 
 # CLI surfaces
 if grep -q 'cmd_login' "$ROOT/bin/labwired-agent" && grep -q 'labwired_prepare_agent_start' "$ROOT/bin/labwired-agent"; then

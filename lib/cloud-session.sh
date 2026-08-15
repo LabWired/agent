@@ -33,6 +33,37 @@ labwired_cloud_session_path() {
   echo "$(labwired_cloud_session_dir)/cloud.json"
 }
 
+labwired_cloud_disclosure_ack_dir() {
+  local h
+  if declare -F labwired_prefix_home >/dev/null 2>&1; then
+    h="$(labwired_prefix_home)"
+  else
+    h="${LABWIRED_HOME:-$HOME/.labwired}"
+  fi
+  echo "${h%/}/state/agent"
+}
+
+# Print the hosted conversation disclosure once per local disclosure version.
+# The acknowledgement directory is created atomically so concurrent launches do
+# not repeat it. If user state is unavailable, show the notice and keep starting.
+labwired_cloud_hosted_disclosure() {
+  local version="${LABWIRED_HOSTED_DISCLOSURE_VERSION:-1}" dir ack
+  case "$version" in
+    *[!A-Za-z0-9._-]*) version=1 ;;
+  esac
+  dir="$(labwired_cloud_disclosure_ack_dir)"
+  ack="$dir/hosted-disclosure-v$version"
+  if [[ -d "$ack" ]]; then
+    return 0
+  fi
+  if mkdir -p "$dir" 2>/dev/null && mkdir "$ack" 2>/dev/null; then
+    :
+  elif [[ -d "$ack" ]]; then
+    return 0
+  fi
+  printf '%s\n' 'Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.'
+}
+
 # Write session JSON. Args: access refresh expires_in [project] [email]
 labwired_cloud_session_save() {
   local access="$1" refresh="${2:-}" expires_in="${3:-3600}" project="${4:-}" email="${5:-}"
@@ -362,7 +393,7 @@ labwired_cloud_export_runtime() {
   export LABWIRED_API_URL="$api"
   export LABWIRED_MODEL_URL="${LABWIRED_MODEL_URL:-$api/v1}"
   export LABWIRED_MODEL_KEY="${LABWIRED_ACCESS_TOKEN}"
-  export LABWIRED_MODEL="${LABWIRED_MODEL:-labwired-default}"
+  export LABWIRED_MODEL="labwired-default"
   export LABWIRED_PROJECT="${LABWIRED_PROJECT:-}"
   # Auto-heal empty project so gateway + MCP work after older logins
   if [[ -z "${LABWIRED_PROJECT:-}" ]]; then

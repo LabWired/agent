@@ -802,6 +802,7 @@ labwired_prepare_agent_start() {
     # No engine auth.json seeding — LabWired account login is the product credential.
     say "mode: LabWired Agent (hosted · api.labwired.com)"
     say "model: ${LABWIRED_MODEL_URL:-}/  id=${LABWIRED_MODEL:-labwired-default}"
+    labwired_cloud_hosted_disclosure || true
   else
     labwired_export_sim || true
     # Local default config if none

@@ -7,6 +7,41 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
+export const HOSTED_DISCLOSURE =
+  "Hosted conversations are stored by LabWired under the Privacy Policy. Customer content is not used for training by default.";
+export const HOSTED_DISCLOSURE_VERSION = "1";
+
+export function isHostedLabWiredEnv(env: NodeJS.ProcessEnv): boolean {
+  return (
+    (env.LABWIRED_MODEL_URL || "").includes("api.labwired.com") ||
+    /^(lwd_|lwk_)/.test(env.LABWIRED_ACCESS_TOKEN || env.LABWIRED_MODEL_KEY || "")
+  );
+}
+
+/** Return the notice only when this disclosure version has not been acknowledged. */
+export function hostedDisclosureMessage(
+  env: NodeJS.ProcessEnv = process.env,
+  version = HOSTED_DISCLOSURE_VERSION
+): string | undefined {
+  const safeVersion = /^[A-Za-z0-9._-]+$/.test(version) ? version : HOSTED_DISCLOSURE_VERSION;
+  const home = env.LABWIRED_HOME || path.join(os.homedir(), ".labwired");
+  const dir = path.join(home, "state", "agent");
+  const ack = path.join(dir, `hosted-disclosure-v${safeVersion}`);
+  try {
+    if (fs.statSync(ack).isDirectory()) return undefined;
+  } catch {
+    /* first display or unavailable state */
+  }
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(ack, { mode: 0o700 });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+    // Honest fallback: display again when local acknowledgement cannot persist.
+  }
+  return HOSTED_DISCLOSURE;
+}
+
 export type CloudSession = {
   accessToken: string;
   refreshToken?: string;
@@ -128,6 +163,6 @@ export function cloudSessionEnv(
   set("LABWIRED_API_URL", s.apiBase);
   set("LABWIRED_MODEL_URL", s.modelUrl);
   set("LABWIRED_MODEL_KEY", s.accessToken);
-  set("LABWIRED_MODEL", "labwired-default");
+  env.LABWIRED_MODEL = "labwired-default";
   return env;
 }

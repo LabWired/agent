@@ -52,9 +52,6 @@
       "models": {
         "labwired-default": {
           "name": "Default"
-        },
-        "labwired-fast": {
-          "name": "Fast"
         }
       }
     }

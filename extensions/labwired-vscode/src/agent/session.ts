@@ -3,6 +3,10 @@ import * as vscode from "vscode";
 import type { CatalogService } from "../catalog/service";
 import type { ToolRunner } from "../tools/runner";
 import type { AgentMode } from "../services/sessionState";
+import {
+  hostedDisclosureMessage,
+  isHostedLabWiredEnv,
+} from "../cli/cloudSession";
 
 export type AgentStreamEvent =
   | { type: "text"; text: string }
@@ -45,6 +49,20 @@ export class AgentSession {
     const cwd =
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
     const enriched = this.enrichPrompt(prompt, mode);
+
+    const configuredHostedEnv = {
+      ...process.env,
+      LABWIRED_MODEL_URL:
+        process.env.LABWIRED_MODEL_URL ||
+        vscode.workspace.getConfiguration("labwired").get<string>("modelUrl"),
+      LABWIRED_MODEL_KEY:
+        process.env.LABWIRED_MODEL_KEY ||
+        vscode.workspace.getConfiguration("labwired").get<string>("modelKey"),
+    };
+    if (isHostedLabWiredEnv(configuredHostedEnv)) {
+      const disclosure = hostedDisclosureMessage(process.env);
+      if (disclosure) onEvent({ type: "text", text: `${disclosure}\n\n` });
+    }
 
     // Try OpenCode first (real agent)
     const oc = await this.tryOpencode(enriched, cwd, mode, onEvent);

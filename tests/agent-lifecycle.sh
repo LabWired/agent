@@ -158,6 +158,7 @@ p = sys.argv[1]
 with open(p) as f:
     data = json.load(f)
 assert data.get("model") == "labwired/labwired-default", data.get("model")
+assert sorted(data["provider"]["labwired"]["models"]) == ["labwired-default"]
 assert data.get("default_agent") == "build", data.get("default_agent")
 assert "labwired" in data.get("provider", {}), data.get("provider")
 assert "labwired" in data.get("mcp", {}), data.get("mcp")
