@@ -7,9 +7,11 @@ import argparse
 from contextlib import contextmanager
 from dataclasses import asdict
 import json
+import math
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -63,18 +65,39 @@ def _task_root(value: str) -> Path:
     return candidate.resolve()
 
 
-def _public_inputs(task_root: Path) -> tuple[Path, float]:
+def _public_inputs(task_root: Path) -> tuple[Path, float, int]:
     task = json.loads((task_root / "task.json").read_text(encoding="utf-8"))
     public_dir = task["public_dir"]
     budget = task["budgets"]["wall_time_seconds"]
+    repair_iterations = task["budgets"]["repair_iterations"]
     if isinstance(public_dir, Path) or not isinstance(public_dir, str):
         raise ValueError("task public_dir must be a path string")
-    if isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget <= 0:
+    if (
+        isinstance(budget, bool)
+        or not isinstance(budget, (int, float))
+        or not math.isfinite(float(budget))
+        or budget <= 0
+    ):
         raise ValueError("task wall_time_seconds must be positive")
-    public_root = (task_root / public_dir).resolve()
-    if task_root not in public_root.parents or not public_root.is_dir():
+    if (
+        isinstance(repair_iterations, bool)
+        or not isinstance(repair_iterations, int)
+        or repair_iterations <= 0
+    ):
+        raise ValueError("task repair_iterations must be a positive integer")
+    source_root = task_root / public_dir
+    public_root = source_root.resolve()
+    if task_root not in public_root.parents or not source_root.is_dir():
         raise ValueError("task public_dir must name a directory below the task root")
-    return public_root, float(budget)
+    _reject_public_symlinks(source_root)
+    return public_root, float(budget), repair_iterations
+
+
+def _reject_public_symlinks(public_root: Path) -> None:
+    for directory, directories, files in os.walk(public_root, followlinks=False):
+        for path in (Path(directory), *(Path(directory) / name for name in directories + files)):
+            if stat.S_ISLNK(os.lstat(path).st_mode):
+                raise ValueError("public inputs must not contain symlinks")
 
 
 def _prepare_runtime_config(runtime: str, config_dir: Path) -> None:
@@ -122,10 +145,13 @@ def _version(executable: str, cwd: Path, timeout_seconds: float) -> str | None:
     return output.splitlines()[0][:4096] if output else None
 
 
-def _prompt(candidate: Path, instructions: str) -> str:
+def _prompt(candidate: Path, instructions: str, repair_iterations: int) -> str:
     readme = candidate / "README.md"
     task_prompt = readme.read_text(encoding="utf-8") if readme.is_file() else "Repair the public firmware task."
-    return f"{instructions}\n\n# Public task\n\n{task_prompt}"
+    return (
+        f"{instructions}\n\n# Trial limit\n\n"
+        f"Maximum repair attempts: {repair_iterations}\n\n# Public task\n\n{task_prompt}"
+    )
 
 
 def _unavailable_usage() -> NormalizedUsage:
@@ -160,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
-        public_root, budget_seconds = _public_inputs(_task_root(args.task))
+        public_root, budget_seconds, repair_iterations = _public_inputs(_task_root(args.task))
         timeout_seconds = min(args.timeout_seconds or budget_seconds, budget_seconds)
         candidate = trial / "candidate"
         shutil.copytree(public_root, candidate)
@@ -175,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
             runtime=args.runtime,
             executable=executable,
             workspace=candidate,
-            prompt=_prompt(candidate, instructions),
+            prompt=_prompt(candidate, instructions, repair_iterations),
             config_dir=config_dir,
             stdout_path=trial / "agent.stdout.log",
             stderr_path=trial / "agent.stderr.log",

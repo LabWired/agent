@@ -1234,7 +1234,7 @@ class RunAgentTests(unittest.TestCase):
     task = REPOSITORY_ROOT / "benchmarks/twin2silicon/tasks/esp32s3-gpio-hil-001"
     script = REPOSITORY_ROOT / "benchmarks/twin2silicon/run_agent.py"
 
-    def _fake_runtime(self, directory, runtime, mode="success"):
+    def _fake_runtime(self, directory, runtime, mode="success", repair_iterations=6):
         workspace_code = {
             "codex": "workspace = Path(args[args.index('-C') + 1])\nassert args[:2] == ['exec', '--json']\nassert '--ephemeral' in args and '--skip-git-repo-check' in args\nassert args[args.index('-s') + 1] == 'workspace-write'\nassert os.environ['CODEX_HOME'] == str(Path(os.environ['EXPECTED_CONFIG']))",
             "claude": "workspace = Path.cwd()\nassert args[:2] == ['--print', '--output-format']\nassert args[args.index('--output-format') + 1] == 'stream-json'\nassert args[args.index('--mcp-config') + 1] == str(Path(os.environ['EXPECTED_CONFIG']) / 'claude-mcp.json')\nassert '--strict-mcp-config' in args",
@@ -1259,6 +1259,7 @@ class RunAgentTests(unittest.TestCase):
             assert '--model' not in args
             assert Path(os.environ['EXPECTED_INSTRUCTIONS']).read_text(encoding='utf-8') in args[-1]
             assert 'GPIO 2 is driven high' in args[-1]
+            assert 'Maximum repair attempts: {repair_iterations}' in args[-1]
             assert 'hil-oracle.json' not in args[-1]
             # workspace checks
             source = workspace / 'firmware/src/main.c'
@@ -1282,7 +1283,7 @@ class RunAgentTests(unittest.TestCase):
         """).replace("# workspace checks", workspace_code)
         return executable_fixture(directory, body)
 
-    def _run_cli(self, runtime, executable, trial, timeout_seconds=2):
+    def _run_cli(self, runtime, executable, trial, timeout_seconds=2, task=None):
         environment = os.environ.copy()
         environment.update({
             "EXPECTED_CONFIG": str((trial / "runtime-config").resolve()),
@@ -1293,7 +1294,7 @@ class RunAgentTests(unittest.TestCase):
         return subprocess.run(
             [
                 sys.executable, str(self.script), runtime,
-                "--task", str(self.task), "--output", str(trial),
+                "--task", str(task or self.task), "--output", str(trial),
                 "--executable", str(executable),
                 "--timeout-seconds", str(timeout_seconds),
             ],
@@ -1337,6 +1338,7 @@ class RunAgentTests(unittest.TestCase):
                 self.assertTrue((trial / "agent.stdout.log").is_file())
                 self.assertTrue((trial / "agent.stderr.log").is_file())
                 self.assertTrue((trial / "runtime-config").is_dir())
+                self.assertFalse((trial / "candidate/task.json").exists())
                 self.assertEqual(usage["requests"], 1)
                 self.assertIsNone(usage["unavailable_reason"])
                 self._assert_trial_does_not_expose_hidden_oracle(trial)
@@ -1414,6 +1416,79 @@ class RunAgentTests(unittest.TestCase):
             self.assertIn("output path already exists", completed.stderr)
             self.assertEqual(marker.read_text(), "existing")
             self.assertFalse((trial / "agent-result.json").exists())
+
+    def test_public_symlink_is_rejected_before_candidate_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task = root / "task"
+            public = task / "public"
+            hidden = task / "hidden"
+            public.mkdir(parents=True)
+            hidden.mkdir()
+            oracle = hidden / "hil-oracle.json"
+            oracle.write_text("hidden oracle evidence", encoding="utf-8")
+            (public / "leaked-oracle").symlink_to(oracle)
+            (task / "task.json").write_text(json.dumps({
+                "public_dir": "public",
+                "budgets": {"wall_time_seconds": 1, "repair_iterations": 1},
+            }), encoding="utf-8")
+            trial = root / "trial"
+
+            completed = self._run_cli(
+                "codex", root / "missing", trial, task=task,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "infrastructure_error")
+            self.assertIn("symlink", result["error"])
+            self.assertFalse((trial / "candidate").exists())
+            self.assertNotIn("hidden oracle evidence", (trial / "agent-result.json").read_text())
+
+    def test_prompt_uses_the_task_repair_iteration_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task = root / "task"
+            import shutil
+            shutil.copytree(self.task / "public", task / "public")
+            (task / "task.json").write_text(json.dumps({
+                "public_dir": "public",
+                "budgets": {"wall_time_seconds": 2, "repair_iterations": 2},
+            }), encoding="utf-8")
+            executable = self._fake_runtime(
+                root / "runtime", "opencode", repair_iterations=2,
+            )
+            trial = root / "trial"
+
+            completed = self._run_cli("opencode", executable, trial, task=task)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads((trial / "agent-result.json").read_text())
+            self.assertEqual(result["status"], "completed")
+            self.assertFalse((trial / "candidate/task.json").exists())
+
+    def test_invalid_trial_budgets_are_rejected_before_candidate_copy(self):
+        cases = (
+            ({"wall_time_seconds": 1, "repair_iterations": 0}, "repair_iterations"),
+            ({"wall_time_seconds": float("nan"), "repair_iterations": 1}, "wall_time_seconds"),
+        )
+        for budgets, expected_error in cases:
+            with self.subTest(budgets=budgets), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                task = root / "task"
+                (task / "public").mkdir(parents=True)
+                (task / "task.json").write_text(json.dumps({
+                    "public_dir": "public", "budgets": budgets,
+                }), encoding="utf-8")
+                trial = root / "trial"
+
+                completed = self._run_cli("codex", root / "missing", trial, task=task)
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads((trial / "agent-result.json").read_text())
+                self.assertEqual(result["status"], "infrastructure_error")
+                self.assertIn(expected_error, result["error"])
+                self.assertFalse((trial / "candidate").exists())
 
 
 if __name__ == "__main__":
