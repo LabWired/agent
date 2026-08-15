@@ -119,9 +119,10 @@ def _has_hil_usage_schema(path: Path) -> bool:
     rates = source.get("rates_usd_per_million")
     if not isinstance(tokens, dict) or not isinstance(rates, dict):
         return False
-    values = [source.get("requests")]
-    values.extend(tokens.get(field) for field in ("fresh_input", "cached_input", "output"))
-    values.extend(rates.get(field) for field in ("fresh_input", "cached_input", "output"))
+    required = ("fresh_input", "cached_input", "output")
+    if "requests" not in source or any(field not in tokens or field not in rates for field in required):
+        return False
+    values = [source["requests"], *tokens.values(), *rates.values()]
     return all(_number(value) is not None for value in values)
 
 

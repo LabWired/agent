@@ -384,8 +384,8 @@ class RuntimeMatrixTests(unittest.TestCase):
     script = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "run_matrix.py"
     task = REPOSITORY_ROOT / "benchmarks" / "twin2silicon" / "tasks" / "esp32s3-gpio-hil-001"
 
-    def _fake_agent(self, directory):
-        body = textwrap.dedent("""
+    def _fake_agent(self, directory, usage_schema="normalized"):
+        body = textwrap.dedent(f"""
             import argparse
             import json
             from pathlib import Path
@@ -402,12 +402,12 @@ class RuntimeMatrixTests(unittest.TestCase):
             task = Path(args.task)
             output.mkdir(parents=True)
             shutil.copytree(task / "public", output / "candidate")
-            status = {"opencode": "completed", "codex": "failed", "claude": "completed"}[args.runtime]
-            (output / "agent-result.json").write_text(json.dumps({
+            status = {{"opencode": "completed", "codex": "failed", "claude": "completed"}}[args.runtime]
+            (output / "agent-result.json").write_text(json.dumps({{
                 "schema_version": "1.0", "runtime": args.runtime,
                 "status": status, "returncode": 0 if status == "completed" else 9,
-            }))
-            (output / "usage.json").write_text(json.dumps({
+            }}))
+            usage = {{
                 "requests": 1 if args.runtime != "codex" else None,
                 "fresh_input": 10 if args.runtime != "codex" else None,
                 "cached_input": 0 if args.runtime != "codex" else None,
@@ -415,7 +415,18 @@ class RuntimeMatrixTests(unittest.TestCase):
                 "output": 5 if args.runtime != "codex" else None,
                 "estimated_cost_usd": None,
                 "unavailable_reason": "runtime did not expose usage" if args.runtime == "codex" else None,
-            }))
+            }}
+            if {usage_schema!r} == "hil-valid":
+                usage.update({{
+                    "tokens": {{"fresh_input": 10, "cached_input": 0, "output": 5}},
+                    "rates_usd_per_million": {{"fresh_input": 1, "cached_input": 1, "output": 1}},
+                }})
+            elif {usage_schema!r} == "hil-extra-invalid":
+                usage.update({{
+                    "tokens": {{"fresh_input": 10, "cached_input": 0, "output": 5, "reasoning": None}},
+                    "rates_usd_per_million": {{"fresh_input": 1, "cached_input": 1, "output": 1}},
+                }})
+            (output / "usage.json").write_text(json.dumps(usage))
             (output / "agent-invocation.json").write_text(json.dumps(vars(args), sort_keys=True))
         """)
         return executable_fixture(directory, body)
@@ -504,6 +515,27 @@ class RuntimeMatrixTests(unittest.TestCase):
             self.assertEqual([row["hil_status"] for row in rows], ["not_run", "not_run"])
             self.assertTrue(all(row["hil_run"] is None for row in rows))
             self.assertFalse(any((root / "matrix" / "trials").glob("*/hil")))
+
+    def test_matrix_forwards_only_usage_that_the_hil_cost_schema_accepts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hil = self._fake_hil(root / "hil")
+            for schema, expected_usage_json in (
+                ("hil-valid", True),
+                ("hil-extra-invalid", False),
+            ):
+                with self.subTest(schema=schema):
+                    output = root / schema
+                    completed = self._run_cli(
+                        output, self._fake_agent(root / f"{schema}-agent", schema), hil,
+                        "--runtime", "opencode",
+                    )
+
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    invocation = json.loads(
+                        (output / "trials" / "opencode" / "hil" / "hil-invocation.json").read_text()
+                    )
+                    self.assertEqual(invocation["usage_json"] is not None, expected_usage_json)
 
     def test_matrix_rejects_existing_output_and_invalid_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
