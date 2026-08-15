@@ -50,10 +50,12 @@ assert cfg.get("model") == "labwired/labwired-default", cfg.get("model")
 skills = (cfg.get("permission") or {}).get("skill") or {}
 for required in ("golden-path", "bringup", "prove", "observe", "desk-hw"):
     assert skills.get(required) == "allow", (required, skills)
-# Agent description must point at golden-path / prove (oracle dispose)
+# The hosted system prompt must carry the critical context gate; the model may
+# not shortcut-load only the skill summary under pressure.
 desc = ((cfg.get("agent") or {}).get("build") or {}).get("description") or ""
 assert cfg.get("default_agent") == "build", cfg.get("default_agent")
-assert "golden-path" in desc.lower() or "prove" in desc.lower(), desc
+assert "develop" in desc.lower(), desc
+assert "empty_context" in desc and "pack.board" in desc and "pack.mcu" in desc, desc
 assert "model_verified" in desc or "labwired_verify" in desc or "never invent" in desc.lower(), desc
 print("ok   hosted config schema")
 PY

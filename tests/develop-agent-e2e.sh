@@ -50,6 +50,36 @@ extract_events() {
   python3 "$ROOT/tests/develop-agent-jsonl.py" "$1" "$2"
 }
 
+run_agent() {
+  local project="$1" prompt="$2" raw="$3" stderr_file="$4"
+  local timeout_seconds="${LABWIRED_DEVELOP_SCENARIO_TIMEOUT_SECONDS:-900}"
+  python3 - "$project" "$AGENT" "$MODEL" "$prompt" "$raw" "$stderr_file" "$timeout_seconds" <<'PY'
+import os, subprocess, sys
+project, agent, model, prompt, stdout_path, stderr_path, timeout_text = sys.argv[1:]
+try:
+    timeout = int(timeout_text)
+    if timeout < 1:
+        raise ValueError
+except ValueError:
+    print("invalid LABWIRED_DEVELOP_SCENARIO_TIMEOUT_SECONDS", file=sys.stderr)
+    raise SystemExit(2)
+with open(stdout_path, "wb") as stdout, open(stderr_path, "wb") as stderr:
+    try:
+        completed = subprocess.run(
+            [agent, "agent", "run", "--model", model, "--format", "json", prompt],
+            cwd=project,
+            env={**os.environ, "LABWIRED_CERTIFICATION_JSON_ONLY": "1"},
+            stdout=stdout,
+            stderr=stderr,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"agent scenario timed out after {timeout}s", file=stderr)
+        raise SystemExit(124)
+raise SystemExit(completed.returncode)
+PY
+}
+
 prepare_project() {
   local scenario="$1" project="$2"
   mkdir -p "$project"
@@ -95,7 +125,7 @@ PY
     events="$work/$scenario.events.jsonl"
     echo "INFO real-agent scenario=$scenario model=$MODEL" >&2
     set +e
-    (cd "$project" && LABWIRED_CERTIFICATION_JSON_ONLY=1 "$AGENT" agent run --model "$MODEL" --format json "$prompt") >"$raw" 2>"$stderr_file"
+    run_agent "$project" "$prompt" "$raw" "$stderr_file"
     agent_status=$?
     set -e
     python3 "$ROOT/tests/develop-agent-jsonl.py" sanitize-stderr "$stderr_file" "$work/$scenario.stderr.sanitized"

@@ -1,0 +1,6 @@
+{"type":"tool_use","part":{"id":"r1","tool":"labwired_context","state":{"status":"completed","input":{"goal":"blink"},"output":"{\"ok\":false,\"mode\":\"empty\",\"design_context_ok\":false}"}}}
+{"type":"tool_use","part":{"id":"r2","tool":"labwired_describe","state":{"status":"completed","input":{"id":"esp32-c3-supermini"},"output":"{\"board\":\"esp32-c3-supermini\",\"chip\":\"esp32c3\"}"}}}
+{"type":"tool_use","part":{"id":"r3","tool":"labwired_context","state":{"status":"completed","input":{"pack":{"board":"esp32-c3-supermini","mcu":"esp32c3"}},"output":"{\"ok\":true,\"design_context_ok\":true,\"board\":\"esp32-c3-supermini\",\"mcu\":\"esp32c3\"}"}}}
+{"type":"tool_use","part":{"id":"r4","tool":"labwired_compile","state":{"status":"completed","input":{},"output":"{\"ok\":true,\"runnable\":true,\"flash_image_refs\":[{\"offset\":0,\"ref\":\"sha256:firmware\"}]}"}}}
+{"type":"tool_use","part":{"id":"r5","tool":"labwired_verify","state":{"status":"completed","input":{},"output":"{\"ok\":true,\"status\":\"model_verified\",\"proven\":true,\"stop_reason\":\"assertions_passed\",\"oracle_results\":[{\"passed\":true,\"detail\":\"serial contains alive\"}]}"}}}
+{"type":"text","part":{"id":"r6","text":"{\"claim\":\"model_verified\"}"}}

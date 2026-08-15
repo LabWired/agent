@@ -34,6 +34,15 @@ if grep -qiE 'load.*golden-path.*first' "$ROOT/skills/using-superpowers/SKILL.md
 else
   echo "ok   using-superpowers no golden-path-first mandate"
 fi
+if grep -qiE 'load.*golden-path.*first|golden-path[[:space:]`*]+first' "$ROOT/config/AGENTS.md"; then
+  echo "FAIL AGENTS still mandates golden-path first"
+  fail=1
+elif grep -qiE 'develop.*first|first.*develop' "$ROOT/config/AGENTS.md"; then
+  echo "ok   AGENTS develop-first routing"
+else
+  echo "FAIL AGENTS missing develop-first routing"
+  fail=1
+fi
 
 # Legacy must be gone
 for s in verify-firmware part-knowledge board-bringup compose-observability \
@@ -119,6 +128,13 @@ for cfg in "$ROOT/config/opencode.json" "$ROOT/config/opencode.hosted.json" \
     echo "ok   $(basename "$cfg") allowlist"
   else
     echo "FAIL $(basename "$cfg") allowlist"
+    fail=1
+  fi
+  if grep -qiE 'START with skill develop|develop.*first|first.*develop' "$cfg" \
+    && ! grep -qiE 'START with skill golden-path|load.*golden-path.*first|golden-path[[:space:]`*]+first' "$cfg"; then
+    echo "ok   $(basename "$cfg") develop-first routing"
+  else
+    echo "FAIL $(basename "$cfg") develop-first routing"
     fail=1
   fi
 done

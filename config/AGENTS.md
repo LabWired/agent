@@ -128,12 +128,14 @@ Never invent a sim result. Never call debugger success `model_verified`.
 
 ## Default loop (firmware sessions — always)
 
-**For any firmware / board / blink / prove task, load `golden-path` first.**  
+**For any firmware / board / blink / prove task, load `develop` first.**
 Do not lead with Superpowers (TDD/plans) alone — domain packs own the loop.
+If `labwired_context` returns `empty_context`, list/describe the board and re-call
+it with `pack.board` and `pack.mcu`; never compile while context is false.
 
 ```text
-golden-path                    (entry; delegates firmware work to develop)
-  → develop                    (inspect → ground → edit → compile → twin-check → repair)
+develop                        (inspect → ground → edit → compile → twin-check → repair)
+  → golden-path                (optional first-session guidance)
   → bringup / import-circuit   (knowledge MCP: list/describe/part/datasheet)
   → prove     (labwired_verify → model_verified; three total attempts)
   → observe   (optional; labwired compose …)
@@ -163,7 +165,7 @@ Old micro-skill names (verify-firmware, part-knowledge, …) are **removed**.
 ### Superpowers (process — prepacked, secondary for firmware)
 
 Engineering process skills ship in the kit (`using-superpowers`, TDD, plans, …).  
-**On firmware tasks: `golden-path` first; Superpowers second.**  
+**On firmware tasks: `develop` first; Superpowers second.**
 They **do not** mint `model_verified` and **do not** replace knowledge MCP.
 
 **Knowledge (one path):** `bringup` + MCP  

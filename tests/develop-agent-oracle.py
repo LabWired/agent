@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 CONTEXT_TOOLS = {"labwired_context"}
-GROUNDING_TOOLS = {"labwired_part", "labwired_datasheet", "labwired_search", "labwired_sdk", "labwired_svd", "labwired_schematic", "labwired_netlist", "labwired_project"}
+GROUNDING_TOOLS = {"labwired_part", "labwired_datasheet", "labwired_search", "labwired_describe", "labwired_sdk", "labwired_svd", "labwired_schematic", "labwired_netlist", "labwired_project"}
 COMPILE_TOOLS = {"labwired_compile", "labwired_build"}
 VERIFY_TOOLS = {"labwired_verify", "labwired_test"}
 RUN_TOOLS = {"labwired_run", "labwired_simulate", "labwired_twin_run"}
@@ -171,6 +171,27 @@ def domain_outcome(event: dict) -> bool | None:
     return True if wrapper is True and affirmative else None
 
 
+def grounding_outcome(event: dict) -> bool | None:
+    """Accept canonical knowledge records that have no redundant ``ok`` flag.
+
+    Hosted ``labwired_describe`` returns the described board/component object
+    directly. A completed canonical call plus its typed catalog identifier is
+    affirmative domain evidence; errors still fail through ``domain_outcome``.
+    """
+    domain = domain_outcome(event)
+    if domain is not None:
+        return domain
+    if outcome(event) is not True or tool_name(event).lower() != "labwired_describe":
+        return None
+    for result in structured_results(event):
+        if any(
+            isinstance(result.get(key), str) and re.fullmatch(r"[A-Za-z0-9._-]+", result[key])
+            for key in ("board", "type")
+        ):
+            return True
+    return None
+
+
 def typed_record(result: dict, key: str, expected_type: str) -> dict | None:
     record = result.get(key)
     if not isinstance(record, dict) or record.get("type") != expected_type:
@@ -187,12 +208,27 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
     if domain is not True:
         return None
     for result in structured_results(event):
-        if phase == "context" and any(isinstance(result.get(key), str) and result[key].strip() for key in ("project", "workspace", "context")):
-            return True
+        if phase == "context":
+            if any(isinstance(result.get(key), str) and result[key].strip() for key in ("project", "workspace", "context")):
+                return True
+            if result.get("design_context_ok") is True and all(
+                isinstance(result.get(key), str) and result[key].strip()
+                for key in ("board", "mcu")
+            ):
+                return True
         if phase == "compile":
             artifact = typed_record(result, "artifact", "firmware")
             firmware_ref = result.get("firmware_ref")
             if isinstance(firmware_ref, str) and firmware_ref.strip():
+                return True
+            image_refs = result.get("flash_image_refs")
+            if result.get("runnable") is True and isinstance(image_refs, list) and image_refs and all(
+                isinstance(image, dict)
+                and isinstance(image.get("ref"), str)
+                and image["ref"].startswith("sha256:")
+                and len(image["ref"]) > len("sha256:")
+                for image in image_refs
+            ):
                 return True
             if artifact and str(artifact.get("path", artifact.get("ref", ""))).lower().endswith((".elf", ".bin", ".hex", ".uf2")):
                 return True
@@ -200,6 +236,15 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
             if isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip():
                 return True
             if typed_record(result, "evidence", "verify"):
+                return True
+            clauses = result.get("oracle_results")
+            if (
+                result.get("proven") is True
+                and result.get("stop_reason") == "assertions_passed"
+                and isinstance(clauses, list)
+                and clauses
+                and all(isinstance(clause, dict) and clause.get("passed") is True for clause in clauses)
+            ):
                 return True
         if phase == "run":
             if isinstance(result.get("run_id"), str) and result["run_id"].strip() and isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip():
@@ -241,6 +286,14 @@ def citations(event: dict) -> list[str]:
             text = sanitize_citation(match)
             if text not in found:
                 found.append(text[:512])
+    if tool_name(event).lower() == "labwired_describe":
+        for result in structured_results(event):
+            for key, prefix in (("board", "catalog:board:"), ("type", "catalog:component:")):
+                value = result.get(key)
+                if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._-]+", value):
+                    citation = prefix + value
+                    if citation not in found:
+                        found.append(citation)
     return found
 
 
@@ -301,8 +354,9 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if not tools:
         raise Rejected("structured tool events required; prose/self-report is not evidence")
 
-    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and phase_outcome(e, "context") is True]
-    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and domain_outcome(e) is True and citations(e)]
+    context_calls = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and authoritative_event(e)]
+    context = [(i, e, n) for i, e, n in context_calls if phase_outcome(e, "context") is True]
+    grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and grounding_outcome(e) is True and citations(e)]
     compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and phase_outcome(e, "compile") is not None]
     verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and phase_outcome(e, "verify") is not None]
     runs = [(i, e, n) for i, e, n in tools if n.lower() in RUN_TOOLS and phase_outcome(e, "run") is not None]
@@ -310,7 +364,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     edits = [(i, e, n) for i, e, n in tools if n.lower() in EDIT_TOOLS and phase_outcome(e, "edit") is True]
     report = final_event(events)
 
-    if not context:
+    if not context_calls or not context:
         raise Rejected("missing context tool event")
     if not grounding:
         raise Rejected("missing grounding source citation from part/datasheet/search or project/SDK/SVD/schematic/netlist")
@@ -324,16 +378,19 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         raise Rejected("missing successful verify event or ordered run+inspect evidence")
 
     compile_index = next(i for i, e, _ in compiles if phase_outcome(e, "compile") is True)
+    if not any(i < compile_index for i, _, _ in context):
+        raise Rejected("successful refreshed context must precede compile")
+    context_index = context_calls[0][0]
     if successful_verify or unsupported_ceiling:
         verify_index = successful_verify[0][0] if successful_verify else next(i for i, e, _ in verifies if phase_outcome(e, "verify") is False)
-        indices = [context[0][0], grounding[0][0], compile_index, verify_index, events.index(report)]
+        indices = [context_index, grounding[0][0], compile_index, verify_index, events.index(report)]
         if indices != sorted(indices) or len(set(indices)) != len(indices):
             raise Rejected("ordered evidence must be context -> grounding -> compile -> verify -> report")
         order = ["context", "grounding", "compile", "verify", "report"]
     else:
         run_index = successful_run[0][0]
         inspect_index = next((i for i, e, _ in successful_inspect if i > run_index), successful_inspect[0][0])
-        indices = [context[0][0], grounding[0][0], compile_index, run_index, inspect_index, events.index(report)]
+        indices = [context_index, grounding[0][0], compile_index, run_index, inspect_index, events.index(report)]
         if indices != sorted(indices) or len(set(indices)) != len(indices):
             raise Rejected("ordered run+inspect evidence must be context -> grounding -> compile -> run -> inspect -> report")
         order = ["context", "grounding", "compile", "run", "inspect", "report"]

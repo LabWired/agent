@@ -16,7 +16,7 @@ Follow this loop: inspect or scaffold → ground → edit → compile → twin c
 
 Rules:
 
-- Call `labwired_context` first and prefer `labwired_part`, `labwired_datasheet`, or `labwired_search` for hardware facts. If those knowledge tools are unavailable, grounded existing project files, SDK headers, SVD files, and schematics or netlists are valid fallback sources; cite the source used. Label missing-source deductions as inferred or as a gap, and never invent pins, peripherals, addresses, clocks, timing, or registers.
+- Call `labwired_context` first. On `empty_context`, use `labwired_list` + `labwired_describe`, then call `labwired_context` again with `pack.board` and `pack.mcu` from that returned catalog board before compiling; for an external circuit, pass the pack returned by `labwired_import`. This second/refreshed `labwired_context` is mandatory and must succeed with `ok: true` and `design_context_ok: true` before any compile. If refreshed context has `ok: false` or `design_context_ok: false`, do not compile. Cite described boards as exact `catalog:board:<returned board>` sources (and components as `catalog:component:<returned type>`). Prefer `labwired_part`, `labwired_datasheet`, or `labwired_search` for other hardware facts. If those knowledge tools are unavailable, grounded existing project files, SDK headers, SVD files, and schematics or netlists are valid fallback sources; cite the source used. Label missing-source deductions as inferred or as a gap, and never invent pins, peripherals, addresses, clocks, timing, or registers.
 - Preserve an existing project's structure. For greenfield work, create the smallest conventional project that satisfies the request.
 - Compile with `labwired_compile` or the project's existing compile command.
 - Prefer a reviewed, checked-in safe `.labwired/hardware.json` hardware profile
@@ -24,6 +24,7 @@ Rules:
   physical plan digest; the operator must review the exact identities, wiring,
   artifact, and actions.
 - After a successful compile, convert every observable requested behavior into `labwired_verify`, or use `labwired_run` plus `labwired_inspect`. Make coverage gaps explicit, and never say tested when no check ran.
+- Serial evidence proves only serial behavior; it does not prove a GPIO or LED changed. GPIO/LED behavior requires a passing GPIO oracle clause or modeled GPIO evidence from `labwired_inspect`.
 - Allow at most three total edit-and-test attempts, including the initial attempt. Use failures to make focused repairs.
 - Only `labwired_verify` can mint `model_verified`; only `desk-hw` may report `hardware_observed`.
 - Keep it simple: reuse existing tools and add no new orchestrator.

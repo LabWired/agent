@@ -3,11 +3,27 @@
   LabWired Agent launcher (Windows)
   Installed under $LABWIRED_HOME\agent\bin; invoked as `labwired agent`.
 #>
+[CmdletBinding(PositionalBinding = $false)]
 param(
+  [AllowEmptyString()]
+  [string]$Out,
   [Parameter(ValueFromRemainingArguments = $true)]
   [AllowEmptyString()]
   [string[]]$Rest
 )
+
+# PowerShell reserves the `-OutBuffer`/`-OutVariable` common-parameter prefixes,
+# so a literal `--out` is otherwise rejected as ambiguous before this launcher
+# can forward it. Capture the exact public flag and put it back into argv.
+if ($PSBoundParameters.ContainsKey('Out')) {
+  $forwarded = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($item in @($Rest)) { $forwarded.Add($item) }
+  $insertAt = $forwarded.IndexOf('--confirm')
+  if ($insertAt -lt 0) { $insertAt = $forwarded.Count }
+  $forwarded.Insert($insertAt, '--out')
+  $forwarded.Insert($insertAt + 1, $Out)
+  $Rest = $forwarded.ToArray()
+}
 
 $ErrorActionPreference = "Stop"
 

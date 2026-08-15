@@ -4,15 +4,17 @@ $ErrorActionPreference='Stop';$temp=Join-Path ([IO.Path]::GetTempPath()) ('labwi
 Copy-Item (Join-Path $Root 'bin\labwired-agent.ps1') (Join-Path $agent 'bin\labwired-agent.ps1');$log=Join-Path $temp 'args.json';$env:LABWIRED_HOME=$temp;$env:LABWIRED_TEST_HW_LOG=$log;$fakeProbe=Join-Path $temp 'probe-rs.exe';Set-Content $fakeProbe '' -Encoding ASCII;$env:LABWIRED_PROBE_RS=$fakeProbe
 Set-Content (Join-Path $agent 'scripts\hardware-runner.mjs') '// fake runner path' -Encoding ASCII
 $engine=(Get-Process -Id $PID).Path
-function Run-Real([string]$helper,[string[]]$argv){$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;return @{Code=$LASTEXITCODE;Out=($out-join "`n")}}
+function Run-Real([string]$helper,[string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& $engine -NoProfile -File (Join-Path $Root ('lib\'+$helper)) @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n")}}
 $workspace=Join-Path $temp 'real-work';New-Item -ItemType Directory -Path $workspace|Out-Null;Set-Content (Join-Path $workspace 'platformio.ini') '[env:release]' -Encoding ASCII
 $artifact=Join-Path $temp 'firmware.bin';[IO.File]::WriteAllBytes($artifact,[Text.Encoding]::ASCII.GetBytes('exact-bin'));$sha=(Get-FileHash $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
-$pio=Join-Path $temp 'pio.cmd';$uploadLog=Join-Path $temp 'upload.log';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog
+$pio=Join-Path $temp 'pio.ps1';$uploadLog=Join-Path $temp 'upload.log';$deviceJson=Join-Path $temp 'devices.json';$env:LABWIRED_TEST_UPLOAD_LOG=$uploadLog;$env:LABWIRED_TEST_DEVICE_FILE=$deviceJson
 Set-Content $pio @'
-@echo off
-if "%1 %2"=="device list" echo %LABWIRED_TEST_DEVICE_JSON%& exit /b 0
-echo %*>>"%LABWIRED_TEST_UPLOAD_LOG%"
-exit /b 0
+if($args.Count -ge 2 -and $args[0] -eq 'device' -and $args[1] -eq 'list'){
+  Write-Output (Get-Content -LiteralPath $env:LABWIRED_TEST_DEVICE_FILE -Raw)
+  exit 0
+}
+[IO.File]::AppendAllText($env:LABWIRED_TEST_UPLOAD_LOG,($args -join ' ')+[Environment]::NewLine)
+exit 0
 '@ -Encoding ASCII
 $flashArgs=@('-Provider','platformio','-Artifact',$artifact,'-ExpectedSha256',$sha,'-Chip','esp32c3','-Port','COM7','-Environment','release','-Workspace',$workspace,'-Pio',$pio)
 foreach($case in @(
@@ -20,8 +22,8 @@ foreach($case in @(
   @{Probe='probe-1';Json='[{"port":"COM7","description":"adapter SERIAL=xprobe-1"}]'},
   @{Probe='probe.+[1]';Json='[{"port":"COM7","hwid":"USB SER=probeZZ1"}]'},
   @{Probe='probe-1';Json='[{"port":"COM7","serialNumber":"probe-1"},{"port":"COM7","serialNumber":"probe-1"}]'}
-)){$env:LABWIRED_TEST_DEVICE_JSON=$case.Json;$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe',$case.Probe));if($r.Code -eq 0){throw 'real flash helper accepted an inexact or duplicate identity'};if(Test-Path $uploadLog){throw 'real flash helper uploaded before exact identity validation'}}
-$env:LABWIRED_TEST_DEVICE_JSON='[{"port":"COM7","serialNumber":"probe-1"}]'
+)){Set-Content -LiteralPath $deviceJson -Value $case.Json -Encoding ASCII;$r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe',$case.Probe));if($r.Code -eq 0){throw 'real flash helper accepted an inexact or duplicate identity'};if(Test-Path $uploadLog){throw 'real flash helper uploaded before exact identity validation'}}
+Set-Content -LiteralPath $deviceJson -Value '[{"port":"COM7","serialNumber":"probe-1"}]' -Encoding ASCII
 $stageDir=Join-Path $workspace '.pio\build\release';New-Item -ItemType Directory -Path $stageDir -Force|Out-Null;$stage=Join-Path $stageDir 'firmware.bin';$original=[byte[]](0,255,1,254,2,253);[IO.File]::WriteAllBytes($stage,$original)
 $r=Run-Real 'probe-flash.ps1' ($flashArgs+@('-Probe','probe-1'));if($r.Code -ne 0){throw ('real flash success failed: '+$r.Out)}
 if((Get-Content $uploadLog -Raw).Trim() -cne 'run -e release -t nobuild -t upload --upload-port COM7'){throw 'real flash used unexpected PlatformIO argv'}
@@ -46,13 +48,13 @@ $PSBoundParameters|ConvertTo-Json -Compress|Set-Content $env:LABWIRED_TEST_HW_LO
 if($env:LABWIRED_TEST_HW_FAIL){exit 9};Write-Output 'mock-ok';exit 0
 '@
 foreach($name in @('probe-flash.ps1','serial-capture.ps1','rtt-capture.ps1')){Set-Content (Join-Path $agent ('lib\'+$name)) $fake -Encoding ASCII}
-function Run([string[]]$argv){$out=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $agent 'bin\labwired-agent.ps1') @argv 2>&1;return @{Code=$LASTEXITCODE;Out=($out-join "`n");Args=(Get-Content $log -Raw)}}
+function Run([string[]]$argv){$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$out=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $agent 'bin\labwired-agent.ps1') @argv 2>&1;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference};return @{Code=$code;Out=($out-join "`n");Args=(Get-Content $log -Raw)}}
 try{
  $r=Run @('serial-capture','COM 7','115200','ready value','3');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'COM 7') -or ($r.Args -notmatch 'ready value')){throw 'serial-capture route failed'}
  $r=Run @('probe','rtt-capture','--chip','chip one','--probe','probe two','--elf','C:\firm ware.elf','--marker','ready','--timeout','4');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'probe two')){throw 'RTT route failed'}
  $r=Run @('probe','flash','C:\firm ware.bin','--provider','platformio','--chip','chip one','--probe','serial two','--port','COM 7','--expected-sha256',('a'*64),'--environment','release env','--workspace','C:\work space');if(($r.Code -ne 0) -or ($r.Out -notmatch 'mock-ok') -or ($r.Args -notmatch 'serial two') -or ($r.Args -notmatch 'COM 7')){throw 'flash route failed'}
  $nodeDir=Join-Path $temp 'fake-node';New-Item -ItemType Directory -Path $nodeDir|Out-Null;$fakeNode=Join-Path $nodeDir 'node.exe'
- Add-Type -TypeDefinition @'
+ $fakeNodeSource=@'
 using System;
 using System.IO;
 public static class FakeNode {
@@ -64,12 +66,19 @@ public static class FakeNode {
   Environment.ExitCode=code;
  }
 }
-'@ -OutputAssembly $fakeNode -OutputType ConsoleApplication
+'@
+ $fakeNodeSourcePath=Join-Path $nodeDir 'fake-node.cs';Set-Content $fakeNodeSourcePath $fakeNodeSource -Encoding ASCII
+ $cscCandidates=@((Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),(Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'))
+ $csc=$cscCandidates|Where-Object{Test-Path -LiteralPath $_ -PathType Leaf}|Select-Object -First 1
+ if(-not $csc){throw 'C# compiler fixture dependency unavailable'}
+ & $csc /nologo /target:exe "/out:$fakeNode" $fakeNodeSourcePath
+ if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $fakeNode -PathType Leaf)){throw 'fake Node fixture compilation failed'}
  $oldPath=$env:PATH;$env:PATH=$nodeDir+';'+$oldPath;$env:LABWIRED_FAKE_NODE_ARGS=Join-Path $temp 'node-args.txt';$env:LABWIRED_FAKE_NODE_EXIT='7'
- $r=Run @('hardware','run','--profile','C:\profile one.json','--out','C:\evidence one','--confirm',('a'*64));if($r.Code -ne 7 -or $r.Out -notmatch '"fake":true'){throw 'native hardware dispatcher did not preserve output/exit'}
+ $r=Run @('hardware','run','--profile','C:\profile one.json','--out','C:\evidence one','--confirm',('a'*64));if($r.Code -ne 7 -or $r.Out -notmatch '"fake":true'){throw ('native hardware dispatcher did not preserve output/exit: code='+$r.Code+' output='+$r.Out)}
  $nodeArgs=Get-Content $env:LABWIRED_FAKE_NODE_ARGS;if($nodeArgs.Count -ne 8 -or $nodeArgs[1] -cne 'run' -or $nodeArgs[3] -cne 'C:\profile one.json' -or $nodeArgs[5] -cne 'C:\evidence one'){throw 'native hardware dispatcher changed argv'}
  Remove-Item $env:LABWIRED_FAKE_NODE_ARGS -Force;$env:LABWIRED_OLD_NODE='1';$r=Run @('hardware','plan','--profile','x','--out','y');if($r.Code -ne 2 -or $r.Out -notmatch 'Node.js 18\+'){throw 'native hardware dispatcher accepted old Node'};if(Test-Path $env:LABWIRED_FAKE_NODE_ARGS){throw 'old Node executed hardware runner'}
  $env:PATH=$oldPath;Remove-Item Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue
  $env:LABWIRED_TEST_HW_FAIL='1';$r=Run @('serial-capture','COM7','115200','ready','1');if($r.Code -ne 9){throw 'native failure exit was not preserved'}
  Write-Host 'ok   windows-hardware-contract PASS'
-}finally{if($oldPath){$env:PATH=$oldPath};Remove-Item Env:LABWIRED_TEST_HW_FAIL,Env:LABWIRED_TEST_HW_LOG,Env:LABWIRED_PROBE_RS,Env:LABWIRED_TEST_DEVICE_JSON,Env:LABWIRED_TEST_UPLOAD_LOG,Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue;Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
+}finally{if($oldPath){$env:PATH=$oldPath};Remove-Item Env:LABWIRED_TEST_HW_FAIL,Env:LABWIRED_TEST_HW_LOG,Env:LABWIRED_PROBE_RS,Env:LABWIRED_TEST_DEVICE_FILE,Env:LABWIRED_TEST_UPLOAD_LOG,Env:LABWIRED_OLD_NODE,Env:LABWIRED_FAKE_NODE_ARGS,Env:LABWIRED_FAKE_NODE_EXIT -ErrorAction SilentlyContinue;Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue}
+exit 0
