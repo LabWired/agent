@@ -237,6 +237,15 @@ def phase_outcome(event: dict, phase: str) -> bool | None:
                 return True
             if typed_record(result, "evidence", "verify"):
                 return True
+            clauses = result.get("oracle_results")
+            if (
+                result.get("proven") is True
+                and result.get("stop_reason") == "assertions_passed"
+                and isinstance(clauses, list)
+                and clauses
+                and all(isinstance(clause, dict) and clause.get("passed") is True for clause in clauses)
+            ):
+                return True
         if phase == "run":
             if isinstance(result.get("run_id"), str) and result["run_id"].strip() and isinstance(result.get("evidence_ref"), str) and result["evidence_ref"].strip():
                 return True
@@ -345,7 +354,8 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     if not tools:
         raise Rejected("structured tool events required; prose/self-report is not evidence")
 
-    context = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and phase_outcome(e, "context") is True]
+    context_calls = [(i, e, n) for i, e, n in tools if n.lower() in CONTEXT_TOOLS and authoritative_event(e)]
+    context = [(i, e, n) for i, e, n in context_calls if phase_outcome(e, "context") is True]
     grounding = [(i, e, n) for i, e, n in tools if n.lower() in GROUNDING_TOOLS and grounding_outcome(e) is True and citations(e)]
     compiles = [(i, e, n) for i, e, n in tools if n.lower() in COMPILE_TOOLS and phase_outcome(e, "compile") is not None]
     verifies = [(i, e, n) for i, e, n in tools if n.lower() in VERIFY_TOOLS and phase_outcome(e, "verify") is not None]
@@ -354,7 +364,7 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
     edits = [(i, e, n) for i, e, n in tools if n.lower() in EDIT_TOOLS and phase_outcome(e, "edit") is True]
     report = final_event(events)
 
-    if not context:
+    if not context_calls or not context:
         raise Rejected("missing context tool event")
     if not grounding:
         raise Rejected("missing grounding source citation from part/datasheet/search or project/SDK/SVD/schematic/netlist")
@@ -368,16 +378,19 @@ def validate(events: list[dict], scenario: str | None = None) -> dict:
         raise Rejected("missing successful verify event or ordered run+inspect evidence")
 
     compile_index = next(i for i, e, _ in compiles if phase_outcome(e, "compile") is True)
+    if not any(i < compile_index for i, _, _ in context):
+        raise Rejected("successful refreshed context must precede compile")
+    context_index = context_calls[0][0]
     if successful_verify or unsupported_ceiling:
         verify_index = successful_verify[0][0] if successful_verify else next(i for i, e, _ in verifies if phase_outcome(e, "verify") is False)
-        indices = [context[0][0], grounding[0][0], compile_index, verify_index, events.index(report)]
+        indices = [context_index, grounding[0][0], compile_index, verify_index, events.index(report)]
         if indices != sorted(indices) or len(set(indices)) != len(indices):
             raise Rejected("ordered evidence must be context -> grounding -> compile -> verify -> report")
         order = ["context", "grounding", "compile", "verify", "report"]
     else:
         run_index = successful_run[0][0]
         inspect_index = next((i for i, e, _ in successful_inspect if i > run_index), successful_inspect[0][0])
-        indices = [context[0][0], grounding[0][0], compile_index, run_index, inspect_index, events.index(report)]
+        indices = [context_index, grounding[0][0], compile_index, run_index, inspect_index, events.index(report)]
         if indices != sorted(indices) or len(set(indices)) != len(indices):
             raise Rejected("ordered run+inspect evidence must be context -> grounding -> compile -> run -> inspect -> report")
         order = ["context", "grounding", "compile", "run", "inspect", "report"]

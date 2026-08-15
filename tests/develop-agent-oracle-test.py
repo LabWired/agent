@@ -30,6 +30,9 @@ opencode_bundle = json.loads(opencode.stdout)
 assert opencode_bundle["final_claim"] == "model_verified"
 assert opencode_bundle["source_citations"] == ["catalog:board:esp32-c3-supermini"]
 
+refreshed = run("empty-refresh-valid.jsonl")
+assert refreshed.returncode == 0, refreshed.stderr
+
 scenario_ok = subprocess.run(
     [sys.executable, str(ORACLE), "validate", str(FIX / "valid-hardware-manifest.jsonl"), "greenfield-esp32c3"],
     text=True, capture_output=True,
@@ -66,7 +69,7 @@ for forbidden in ("user", "password", "jwt", "ey.secret", "harmless=value", "#pr
     assert forbidden not in leaks.stdout, forbidden
 
 for fixture, reason in {
-    "missing-order.jsonl": "ordered evidence",
+    "missing-order.jsonl": "refreshed context",
     "missing-source.jsonl": "source citation",
     "prose-only.jsonl": "structured tool",
     "too-many-attempts.jsonl": "attempt",
