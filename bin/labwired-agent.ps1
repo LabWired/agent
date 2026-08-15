@@ -4,10 +4,17 @@
   Installed under $LABWIRED_HOME\agent\bin; invoked as `labwired agent`.
 #>
 param(
+  [AllowEmptyString()]
+  [string]$Out,
   [Parameter(ValueFromRemainingArguments = $true)]
   [AllowEmptyString()]
   [string[]]$Rest
 )
+
+# PowerShell reserves the `-OutBuffer`/`-OutVariable` common-parameter prefixes,
+# so a literal `--out` is otherwise rejected as ambiguous before this launcher
+# can forward it. Capture the exact public flag and put it back into argv.
+if ($null -ne $Out) { $Rest += @('--out', $Out) }
 
 $ErrorActionPreference = "Stop"
 
