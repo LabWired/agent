@@ -3,6 +3,7 @@
   LabWired Agent launcher (Windows)
   Installed under $LABWIRED_HOME\agent\bin; invoked as `labwired agent`.
 #>
+[CmdletBinding(PositionalBinding = $false)]
 param(
   [AllowEmptyString()]
   [string]$Out,
