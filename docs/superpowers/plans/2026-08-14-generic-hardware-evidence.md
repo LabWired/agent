@@ -57,7 +57,7 @@ console.log('test-runtime-contract: PASS');
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node extensions/labwired-vscode/scripts/test-runtime-contract.mjs`  
+Run: `node extensions/labwired-vscode/scripts/test-runtime-contract.mjs`
 Expected: FAIL because the test script and Mocha dependencies still exist.
 
 - [ ] **Step 3: Convert the test API**
@@ -73,7 +73,7 @@ Replace `suite(` with `describe(` and retain existing assertions. In `tsconfig.j
 
 - [ ] **Step 4: Remove dependencies deterministically**
 
-Run: `npm uninstall --save-dev mocha @types/mocha` from `extensions/labwired-vscode`.  
+Run: `npm uninstall --save-dev mocha @types/mocha` from `extensions/labwired-vscode`.
 Expected: package and lock files no longer contain either dependency or `serialize-javascript`.
 
 - [ ] **Step 5: Verify GREEN and audit**
@@ -120,7 +120,7 @@ assert.deepEqual(canonicalProfile(profile), expectedRedactedObject);
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-profile.test.mjs`  
+Run: `node --test tests/hardware-profile.test.mjs`
 Expected: FAIL with module-not-found for `lib/hardware/profile.mjs`.
 
 - [ ] **Step 3: Implement strict parsing**
@@ -143,7 +143,7 @@ Use explicit key sets at every object level. Return a deeply frozen normalized o
 
 - [ ] **Step 4: Verify GREEN**
 
-Run: `node --test tests/hardware-profile.test.mjs`  
+Run: `node --test tests/hardware-profile.test.mjs`
 Expected: all valid, mutation, secret, traversal, duplicate-ID, and provider tests pass.
 
 - [ ] **Step 5: Commit**
@@ -172,7 +172,7 @@ const result = await runLaunch(descriptor, { timeoutMs, signal, onDelta, redact 
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-process.test.mjs`  
+Run: `node --test tests/hardware-process.test.mjs`
 Expected: FAIL because the module does not exist.
 
 - [ ] **Step 3: Implement launch descriptors and runner**
@@ -181,7 +181,7 @@ Export `resolveLaunch`, `runLaunch`, and `terminateProcessTree`. Use `spawn(comm
 
 - [ ] **Step 4: Verify GREEN on the host and Windows contract fixtures**
 
-Run: `node --test tests/hardware-process.test.mjs`  
+Run: `node --test tests/hardware-process.test.mjs`
 Expected: all process, timeout, cancellation, redaction, and Windows descriptor cases pass.
 
 - [ ] **Step 5: Commit**
@@ -210,7 +210,7 @@ assert.equal(summary.result, 'FAIL');
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-evidence.test.mjs`  
+Run: `node --test tests/hardware-evidence.test.mjs`
 Expected: FAIL because the module does not exist.
 
 - [ ] **Step 3: Implement evidence writer and lattice**
@@ -219,7 +219,7 @@ Export `createEvidenceBundle`, `sha256File`, `redactDeep`, and `levelSatisfies`.
 
 - [ ] **Step 4: Verify GREEN**
 
-Run: `node --test tests/hardware-evidence.test.mjs`  
+Run: `node --test tests/hardware-evidence.test.mjs`
 Expected: fail-first, atomicity, redaction, hash, and claim-boundary cases pass.
 
 - [ ] **Step 5: Commit**
@@ -241,7 +241,7 @@ Test exclusive target/probe/port acquisition, competing-process refusal, safe st
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-locks.test.mjs`  
+Run: `node --test tests/hardware-locks.test.mjs`
 Expected: FAIL because the module does not exist.
 
 - [ ] **Step 3: Implement lock manager**
@@ -257,7 +257,7 @@ Hash identity strings into filenames, create with exclusive mode, record PID/sta
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `node --test tests/hardware-locks.test.mjs`  
+Run: `node --test tests/hardware-locks.test.mjs`
 Expected: all lock lifecycle cases pass.
 
 ```bash
@@ -278,7 +278,7 @@ Inject fake executables to assert exact launch descriptors for PlatformIO, Make,
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-build-twin.test.mjs`  
+Run: `node --test tests/hardware-build-twin.test.mjs`
 Expected: FAIL because adapter registry is absent.
 
 - [ ] **Step 3: Implement the registry**
@@ -287,7 +287,7 @@ Export `createTrustedAdapters(dependencies)` returning adapter objects with `pre
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `node --test tests/hardware-build-twin.test.mjs`  
+Run: `node --test tests/hardware-build-twin.test.mjs`
 Expected: all build descriptors, artifacts, hashes, twin exact/surrogate, and unsupported cases pass.
 
 ```bash
@@ -307,7 +307,7 @@ Prove PlatformIO and probe-rs flash call the existing LabWired CLI rather than r
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-observations.test.mjs`  
+Run: `node --test tests/hardware-observations.test.mjs`
 Expected: FAIL because physical adapters are not registered.
 
 - [ ] **Step 3: Implement physical adapters**
@@ -316,7 +316,7 @@ Flash adapters emit descriptors for `labwired-agent probe flash ...`. Serial and
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `node --test tests/hardware-observations.test.mjs`  
+Run: `node --test tests/hardware-observations.test.mjs`
 Expected: flash delegation, independent evidence, nonce correlation, negative fakes, and redaction pass.
 
 ```bash
@@ -336,7 +336,7 @@ Test read-only plan generation; canonical SHA-256 digest stability; wrong/missin
 
 - [ ] **Step 2: Verify RED**
 
-Run: `node --test tests/hardware-runner.test.mjs`  
+Run: `node --test tests/hardware-runner.test.mjs`
 Expected: FAIL because the runner does not exist.
 
 - [ ] **Step 3: Implement orchestration**
@@ -352,7 +352,7 @@ Plan validates and preflights without mutation. Run regenerates the plan, compar
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `node --test tests/hardware-runner.test.mjs`  
+Run: `node --test tests/hardware-runner.test.mjs`
 Expected: all sequencing, confirmation, continuation, cancellation, and finalization cases pass.
 
 ```bash
@@ -375,7 +375,7 @@ Assert `hardware plan --profile P --out D` exits zero and prints a digest; `hard
 
 - [ ] **Step 2: Verify RED**
 
-Run: `bash tests/hardware-cli.sh && bash tests/tools-manifest.sh`  
+Run: `bash tests/hardware-cli.sh && bash tests/tools-manifest.sh`
 Expected: FAIL because the command and manifest rows do not exist.
 
 - [ ] **Step 3: Implement thin transports**
@@ -394,7 +394,7 @@ and `hardware_run` restricted to Act/Debug with the confirmation parameter.
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `bash tests/hardware-cli.sh && bash tests/tools-manifest.sh && bash tests/rpc-contract.sh`  
+Run: `bash tests/hardware-cli.sh && bash tests/tools-manifest.sh && bash tests/rpc-contract.sh`
 Expected: transport parity and mode gates pass.
 
 ```bash
@@ -416,7 +416,7 @@ Provide fake legacy `LABWIRED_HW_*` values and assert both scripts generate equi
 
 - [ ] **Step 2: Verify RED**
 
-Run: `bash tests/hardware-legacy-compat.sh`  
+Run: `bash tests/hardware-legacy-compat.sh`
 Expected: FAIL because both scripts still orchestrate independently.
 
 - [ ] **Step 3: Replace orchestration with profile translation**
@@ -425,7 +425,7 @@ Keep the existing environment names, generate a temporary JSON profile with Pyth
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-Run: `bash tests/hardware-legacy-compat.sh tests/dispatcher.sh tests/rpc-promote.sh`  
+Run: `bash tests/hardware-legacy-compat.sh tests/dispatcher.sh tests/rpc-promote.sh`
 Expected: compatibility, dispatcher, and existing promote behavior pass.
 
 ```bash
@@ -448,7 +448,7 @@ Require the acceptance script to consume behavior evidence, reject serial-only L
 
 - [ ] **Step 2: Verify RED**
 
-Run: `bash tests/hardware-release-contract.sh`  
+Run: `bash tests/hardware-release-contract.sh`
 Expected: FAIL because the acceptance script still hard-codes two skips.
 
 - [ ] **Step 3: Replace hard-coded skip scenarios**
@@ -504,7 +504,7 @@ Extend public-package checks to require every `lib/hardware/*.mjs` file, the run
 
 - [ ] **Step 2: Verify RED**
 
-Run: `bash scripts/check-public-package.sh && npm test`  
+Run: `bash scripts/check-public-package.sh && npm test`
 Expected: public package or matrix fails until new files/tests/docs are registered.
 
 - [ ] **Step 3: Update package and documentation**
