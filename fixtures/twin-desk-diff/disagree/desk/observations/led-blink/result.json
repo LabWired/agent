@@ -1,0 +1,19 @@
+{
+  "behaviorId": "led-blink",
+  "provider": "logic-csv",
+  "level": "failed",
+  "rawEvidenceRefs": [
+    "observations/led-blink.desk.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "logic capture recorded 0 edges on the LED channel"
+  },
+  "rawEvidence": [
+    {
+      "path": "observations/led-blink.desk.capture.log",
+      "sha256": "17458f72c2e195e11fdad6d1e0a4420ed2229c383a97eb00192fca1c3be1c141",
+      "size": 89
+    }
+  ],
+  "requiredLevel": "hardware_observed"
+}

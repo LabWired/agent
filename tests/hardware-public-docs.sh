@@ -42,6 +42,16 @@ require_text docs/USAGE.md 'Ordinary.*BLOCKED' 'ordinary blocked exit behavior i
 require_text docs/USAGE.md 'results.*exit `3`' 'ordinary blocked/fail exit code is undocumented'
 require_text scripts/hardware-runner.mjs "return parsed\?\.command === 'run'.*\? 2.*: 3" 'documented exit meanings are not tied to runner constants'
 
+require_text docs/USAGE.md 'hardware diff --artifact' 'twin-vs-desk differential command is undocumented'
+for verdict in agree disagree desk-unavailable twin-unavailable invalid; do
+  require_text docs/USAGE.md "$verdict" "differential verdict ${verdict} is undocumented"
+  require_text lib/hardware/differential.mjs "$verdict" "differential verdict ${verdict} is not a runner constant"
+done
+require_text docs/USAGE.md 'never.*silent pass|silent pass' 'differential absent-desk honesty is undocumented'
+require_text scripts/hardware-runner.mjs 'if \(requestedDiff\) return 2;' 'a failed diff can still borrow the disagree exit code'
+require_text skills/desk-hw/SKILL.md 'hardware diff' 'desk-hw omits the twin-vs-desk differential'
+require_text skills/desk-hw/SKILL.md 'disagreement' 'desk-hw does not publish twin-vs-desk disagreement'
+
 require_text docs/TESTING.md 'hardware-release-contract' 'release hardware lane is undocumented'
 require_text docs/TESTING.md 'windows-hardware-contract' 'Windows hardware lane is undocumented'
 require_text docs/TESTING.md 'probe-exact-flash' 'exact flash lane is undocumented'

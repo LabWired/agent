@@ -44,6 +44,8 @@ extensions/labwired-vscode/share/tools.json
 fixtures/**/.pio/
 fixtures/**/evidence/
 fixtures/coverage/smoke/
+# Recorded twin-vs-desk differential fixtures (stand-in artifacts, tracked on purpose)
+!fixtures/twin-desk-diff/*.bin
 workspaces/**/.pio/
 workspaces/**/evidence/
 share/smoke/.dead-token

@@ -133,3 +133,37 @@ results and execution or evidence `FAIL` results exit `3`.
 Planning never creates the evidence directory or builds, flashes, or opens an
 instrument. Runs lock the explicit target, probe, port, and analyzer identities
 so two sessions cannot control the same lab resource.
+
+## Differential: the same firmware on the twin and on a desk board
+
+One firmware artifact, two independent targets. Run the twin lane and the
+physical lane as ordinary `hardware run` invocations against their own profiles,
+then compare the two authenticated evidence bundles:
+
+```bash
+labwired agent hardware diff --artifact build/firmware.bin \
+  --twin-evidence .labwired/evidence-twin --twin-receipt <64-character-twin-receipt> \
+  --desk-evidence .labwired/evidence-desk --desk-receipt <64-character-desk-receipt> \
+  --out .labwired/twin-desk-diff.json
+```
+
+Each `--*-receipt` is the out-of-bundle `manifestSha256` that `hardware run`
+returned for that bundle. A bundle supplied without its receipt is never
+accepted as evidence for its side.
+
+`hardware diff` emits one structured JSON verdict and binds it to exit codes:
+
+| Verdict | Exit | Meaning |
+|---|---|---|
+| `agree` | `0` | Both targets decided the same behaviors the same way. |
+| `disagree` | `3` | The twin and the board decided a shared behavior differently. This is a first-class published result, not an error. |
+| `desk-unavailable` | `4` | No desk bundle, or the desk bundle recorded no physical evidence (for example no probe was detected). Never a silent pass. |
+| `twin-unavailable` | `5` | No twin bundle, or the twin bundle decided nothing. |
+| `invalid` | `2` | The comparison was refused: unequal artifact digests, a twin bundle claiming `hardware_observed`, no shared behavior, or a CLI usage error. |
+
+Each side publishes only its own grade. The twin side can reach
+`model_verified` (from `model_observed` or `surrogate_model_observed`); the desk
+side can reach `hardware_observed`. `hardware diff` has no code path that copies
+a level or a pass from one side to the other, so a hardware green is never
+upgraded to a twin green or the reverse. Both sides must be bound to the same
+artifact digest; a mismatch is `invalid`, never agreement.

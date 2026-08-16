@@ -1,0 +1,28 @@
+{
+  "behaviorId": "heartbeat",
+  "provider": "serial",
+  "level": "model_observed",
+  "artifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "targetIdentity": {
+    "id": "desk-c3",
+    "chip": "esp32c3"
+  },
+  "startedAt": "2026-08-16T16:11:24.288Z",
+  "endedAt": "2026-08-16T16:11:28.288Z",
+  "toolVersion": "labwired-sim recorded fixture",
+  "rawEvidenceRefs": [
+    "observations/heartbeat.twin.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "twin observed heartbeat"
+  },
+  "nativeArtifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "rawEvidence": [
+    {
+      "path": "observations/heartbeat.twin.capture.log",
+      "sha256": "075b5e80a20b12fb8149f6d12d5fbbaa93ce2860f143dda0cb806d2f958de887",
+      "size": 48
+    }
+  ],
+  "requiredLevel": "model_observed"
+}

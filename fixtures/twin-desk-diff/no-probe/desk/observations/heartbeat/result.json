@@ -1,0 +1,19 @@
+{
+  "behaviorId": "heartbeat",
+  "provider": "serial",
+  "level": "blocked",
+  "rawEvidenceRefs": [
+    "observations/heartbeat.desk.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "no probe detected; exact flash was not proven"
+  },
+  "rawEvidence": [
+    {
+      "path": "observations/heartbeat.desk.capture.log",
+      "sha256": "592f6c590a7b160cf4d37496c7742bea4984867e87ab32ffdad4c425d7086b62",
+      "size": 86
+    }
+  ],
+  "requiredLevel": "hardware_observed"
+}

@@ -1,0 +1,11 @@
+{
+  "result": "FAIL",
+  "reasons": [
+    {
+      "behaviorId": "led-blink",
+      "requiredLevel": "hardware_observed",
+      "actualLevel": "failed",
+      "reason": "required hardware_observed; recorded failed"
+    }
+  ]
+}

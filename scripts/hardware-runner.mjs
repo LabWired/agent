@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { statSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { runDifferential } from '../lib/hardware/differential.mjs';
 import { executeHardwareRun, planHardwareRun } from '../lib/hardware/runner.mjs';
 import { resolveLaunch, runLaunch } from '../lib/hardware/process.mjs';
 import { containsInlineCredential } from '../lib/hardware/profile.mjs';
@@ -17,9 +19,44 @@ function fail(message, usage = false) {
   throw error;
 }
 
+const DIFF_USAGE = 'usage: hardware diff --artifact FILE --twin-evidence DIR --twin-receipt SHA256 '
+  + '[--desk-evidence DIR --desk-receipt SHA256] [--out FILE]';
+
+export function parseDifferentialArguments(rest) {
+  const allowed = new Set(['--artifact', '--twin-evidence', '--twin-receipt', '--desk-evidence', '--desk-receipt', '--out']);
+  const values = {};
+  for (let index = 0; index < rest.length; index += 2) {
+    const flag = rest[index];
+    if (!allowed.has(flag) || index + 1 >= rest.length || rest[index + 1].startsWith('--')) fail(`unsupported or incomplete hardware option ${flag ?? ''}`, true);
+    if (values[flag] !== undefined) fail(`duplicate hardware option ${flag}`, true);
+    values[flag] = rest[index + 1];
+  }
+  if (!values['--artifact']) fail(`--artifact is required; ${DIFF_USAGE}`, true);
+  if (Object.values(values).some((value) => containsInlineCredential(value))) {
+    fail('hardware arguments must not contain credential-shaped values', true);
+  }
+  for (const flag of ['--twin-receipt', '--desk-receipt']) {
+    if (values[flag] !== undefined && !SHA256.test(values[flag])) {
+      fail(`${flag} must be the exact lowercase evidence receipt digest`, true);
+    }
+  }
+  // A bundle without its out-of-bundle receipt cannot be authenticated, so it is
+  // never silently accepted as evidence for its side.
+  if (values['--twin-evidence'] && !values['--twin-receipt']) fail('--twin-evidence requires --twin-receipt', true);
+  if (values['--desk-evidence'] && !values['--desk-receipt']) fail('--desk-evidence requires --desk-receipt', true);
+  return Object.freeze({
+    command: 'diff',
+    artifactPath: values['--artifact'],
+    twin: Object.freeze({ evidenceDir: values['--twin-evidence'], receipt: values['--twin-receipt'] }),
+    desk: Object.freeze({ evidenceDir: values['--desk-evidence'], receipt: values['--desk-receipt'] }),
+    outPath: values['--out'],
+  });
+}
+
 export function parseHardwareArguments(argv) {
   const [command, ...rest] = argv;
-  if (!['plan', 'run'].includes(command)) fail('usage: hardware plan|run --profile FILE --out DIR [--confirm DIGEST]', true);
+  if (command === 'diff') return parseDifferentialArguments(rest);
+  if (!['plan', 'run'].includes(command)) fail('usage: hardware plan|run --profile FILE --out DIR [--confirm DIGEST]\n       hardware diff --artifact FILE --twin-evidence DIR --twin-receipt SHA256 [--desk-evidence DIR --desk-receipt SHA256]', true);
   const allowed = new Set(command === 'plan' ? ['--profile', '--out'] : ['--profile', '--out', '--confirm']);
   const values = {};
   for (let index = 0; index < rest.length; index += 2) {
@@ -205,6 +242,9 @@ export async function resolveHardwareIdentities(profile, options = {}) {
 
 export async function main(argv = process.argv.slice(2)) {
   let parsed;
+  // The requested verb is known before parsing, so a diff invocation that fails
+  // to parse still reports as a diff and still avoids the "disagree" exit code.
+  const requestedDiff = argv[0] === 'diff';
   try {
     if (Number(process.versions.node.split('.')[0]) < 18) fail('Node.js 18+ is required for hardware commands', true);
     parsed = parseHardwareArguments(argv);
@@ -213,6 +253,13 @@ export async function main(argv = process.argv.slice(2)) {
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
     const dependencies = { resolveHardwareIdentities };
     try {
+      if (parsed.command === 'diff') {
+        const diff = await runDifferential(parsed);
+        const payload = `${JSON.stringify({ command: 'hardware diff', ...diff })}\n`;
+        process.stdout.write(payload);
+        if (parsed.outPath) await writeFile(parsed.outPath, payload);
+        return diff.exitCode;
+      }
       if (parsed.command === 'plan') {
         const result = await planHardwareRun({ ...parsed, dependencies, signal: abort.signal });
         process.stdout.write(`${JSON.stringify({ command: 'hardware plan', ...result })}\n`);
@@ -228,7 +275,15 @@ export async function main(argv = process.argv.slice(2)) {
     const message = String(error?.message ?? error);
     const confirmation = /confirmation digest/i.test(message);
     const blocked = confirmation || /^BLOCKED:|exactly one unique detected identity|ambiguous .* identity/i.test(message);
-    process.stdout.write(`${JSON.stringify({ command: `hardware ${parsed?.command ?? 'invalid'}`, result: blocked ? 'BLOCKED' : 'FAIL', error: message })}\n`);
+    process.stdout.write(`${JSON.stringify({
+      command: `hardware ${parsed?.command ?? 'invalid'}`,
+      result: blocked ? 'BLOCKED' : 'FAIL',
+      ...(requestedDiff ? { command: 'hardware diff', verdict: 'invalid' } : {}),
+      error: message,
+    })}\n`);
+    // Exit 3 means "disagree" for diff, so a broken diff invocation must never
+    // borrow it. Every diff failure is invalid (2).
+    if (requestedDiff) return 2;
     return parsed?.command === 'run' && confirmation ? 2 : (error?.usage ? 2 : 3);
   }
 }

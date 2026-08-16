@@ -93,6 +93,22 @@ hardware_status:   <from authenticated physical receipt>
 evidence_receipt:  <external receipt path and hash>
 ```
 
+## E. Differential: same firmware, twin and desk
+
+When both lanes ran the same artifact, compare their authenticated bundles:
+
+```bash
+labwired agent hardware diff --artifact <exact-artifact> \
+  --twin-evidence <twin-bundle> --twin-receipt <twin-receipt> \
+  --desk-evidence <desk-bundle> --desk-receipt <desk-receipt>
+```
+
+Exit `0` agree, `3` disagree, `4` desk-unavailable, `5` twin-unavailable,
+`2` invalid. A disagreement is a first-class result to publish, never an error
+to smooth over. Each side keeps its own grade: the diff never upgrades a
+hardware green to a twin green or the reverse, and a missing probe yields
+`desk-unavailable`, never a pass.
+
 ## USB-CDC notes
 
 ESP32/RP2040 may re-enumerate after reset; re-resolve port. Baud must match firmware.

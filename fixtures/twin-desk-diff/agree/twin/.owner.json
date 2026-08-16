@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "owner": "62bb0ca3-5b92-440d-bf02-323553bac607",
+  "createdAt": "2026-08-16T16:11:24.299Z",
+  "targetIdentity": {
+    "id": "desk-c3",
+    "chip": "esp32c3"
+  },
+  "behaviors": [
+    {
+      "id": "heartbeat",
+      "provider": "serial",
+      "requiredLevel": "model_observed"
+    },
+    {
+      "id": "led-blink",
+      "provider": "logic-csv",
+      "requiredLevel": "model_observed"
+    }
+  ],
+  "stages": [
+    {
+      "id": "build",
+      "provider": "platformio"
+    },
+    {
+      "id": "twin",
+      "provider": "labwired-sim"
+    }
+  ]
+}

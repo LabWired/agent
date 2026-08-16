@@ -1,0 +1,28 @@
+{
+  "behaviorId": "led-blink",
+  "provider": "logic-csv",
+  "level": "hardware_observed",
+  "artifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "targetIdentity": {
+    "id": "desk-c3",
+    "chip": "esp32c3"
+  },
+  "startedAt": "2026-08-16T16:11:24.288Z",
+  "endedAt": "2026-08-16T16:11:28.288Z",
+  "toolVersion": "probe-rs recorded fixture",
+  "rawEvidenceRefs": [
+    "observations/led-blink.desk.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "desk observed led-blink"
+  },
+  "flashedArtifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "rawEvidence": [
+    {
+      "path": "observations/led-blink.desk.capture.log",
+      "sha256": "5b3cacc1d608a94df1f8c95d3393e8e8c7c4f2a341da0048f2e1bdc1fbbe8fcf",
+      "size": 51
+    }
+  ],
+  "requiredLevel": "hardware_observed"
+}
