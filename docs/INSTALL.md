@@ -81,7 +81,8 @@ agent host that understands the format can load it.
 
 ### Skills
 
-With the Vercel skills CLI (supports 40+ agents):
+With the Vercel skills CLI (supports 40+ agents; needs Node.js 22.20 or
+later):
 
 ```bash
 npx skills add LabWired/agent
@@ -94,8 +95,11 @@ that also copies `customize-labwired-agent`, which you can skip.
 configuration and is not useful to other hosts.
 
 The `observe` and `desk-hw` packs additionally need the LabWired Agent CLI
-installed (`labwired agent …` on PATH). The other packs and the MCP tools
-work without it.
+installed (`labwired agent …` on PATH). Every pack's guidance loads in any
+host, but firmware tool calls need either the hosted MCP endpoint (after
+`labwired agent login`) or the `labwired` CLI on PATH (local MCP, see
+below). The develop workflow's first tool call, `labwired_context`, is
+served only by the hosted endpoint.
 
 ### Instructions
 
@@ -108,23 +112,13 @@ are defined in `config/AGENTS.md` and [docs/VERIFY.md](VERIFY.md).
 
 ### MCP server
 
-Firmware tooling (`labwired_compile`, `labwired_verify`, knowledge tools) is
-served over MCP. Add the server to your host's MCP configuration:
+Firmware tooling is served over MCP, in two variants.
 
-```json
-{
-  "mcpServers": {
-    "labwired": {
-      "command": "npx",
-      "args": ["-y", "@labwired/mcp"]
-    }
-  }
-}
-```
-
-For the hosted variant (authenticated tools, twin verification), first run
-`labwired agent login` with the LabWired Agent installed, then point your host
-at the hosted endpoint instead:
+**Hosted (full tool surface).** Compile, twin verification, and the
+knowledge tools (`labwired_context`, `labwired_part`, `labwired_datasheet`,
+`labwired_import`) are served only by the hosted endpoint. Install the
+LabWired Agent, run `labwired agent login`, then point your host at the
+hosted endpoint:
 
 ```json
 {
@@ -142,6 +136,24 @@ and opencode uses its own top-level `mcp` key with the same URL. The token is
 read from the session file at `~/.labwired/session/cloud.json` after
 `labwired agent login`. It expires after about an hour, and a foreign host
 cannot refresh it; re-run the LabWired Agent to renew.
+
+**Local (artifact tools only).** This variant serves the artifact tools
+(`labwired_search`, `labwired_list`, `labwired_describe`,
+`labwired_validate`, `labwired_export`, `labwired_run`, `labwired_inspect`,
+`labwired_verify`, `labwired_fuzz`, `labwired_ingest_svd`,
+`labwired_validate_device`). It shells out to the `labwired` CLI, so the
+LabWired CLI must be on PATH. It does not serve compile or knowledge tools.
+
+```json
+{
+  "mcpServers": {
+    "labwired": {
+      "command": "npx",
+      "args": ["-y", "@labwired/mcp"]
+    }
+  }
+}
+```
 
 Hosts without MCP support can still use the skills and instructions, but no
 firmware tool calls are possible there.
