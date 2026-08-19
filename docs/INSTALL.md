@@ -89,9 +89,8 @@ npx skills add LabWired/agent
 
 Or copy the `skills/` directory into your host's skills directory by hand.
 
-`customize-labwired-agent` is the only pack not installed by universal paths;
-it documents the LabWired Agent's own runtime configuration and means nothing
-to other hosts.
+`customize-labwired-agent` documents the LabWired Agent's own runtime
+configuration and is not useful to other hosts.
 
 ### Instructions
 
@@ -126,13 +125,18 @@ at the hosted endpoint instead:
 {
   "mcpServers": {
     "labwired": {
-      "type": "remote",
       "url": "https://api.labwired.com/mcp?toolNames=unprefixed",
       "headers": { "Authorization": "Bearer <token from labwired agent login>" }
     }
   }
 }
 ```
+
+Hosts differ in envelope: Claude Code expects `"type": "http"` on the entry,
+and opencode uses its own top-level `mcp` key with the same URL. The token is
+read from the session file at `~/.labwired/session/cloud.json` after
+`labwired agent login`. It expires after about an hour, and a foreign host
+cannot refresh it; re-run the LabWired Agent to renew.
 
 Hosts without MCP support can still use the skills and instructions, but no
 firmware tool calls are possible there.
