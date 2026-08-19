@@ -73,3 +73,66 @@ unknown files in the LabWired directory.
   `PATH`. Add that directory manually if the command is still unavailable.
 - Run `labwired agent doctor` and follow the first reported error.
 - Run the install command again to repair or refresh the Agent.
+
+## Use with other agents
+
+The LabWired harness is a standard Agent Skills pack (SKILL.md format). Any
+agent host that understands the format can load it.
+
+### Skills
+
+With the Vercel skills CLI (supports 40+ agents):
+
+```bash
+npx skills add LabWired/agent
+```
+
+Or copy the `skills/` directory into your host's skills directory by hand.
+
+`customize-labwired-agent` is the only pack not installed by universal paths;
+it documents the LabWired Agent's own runtime configuration and means nothing
+to other hosts.
+
+### Instructions
+
+`config/AGENTS.md` is host-agnostic. Use it as your host's instruction file
+(AGENTS.md, CLAUDE.md, or equivalent), or merge its claim-vocabulary section
+into your existing one: twin verification comes only from `labwired_verify`,
+desk hardware claims only from physical hardware with independently captured
+evidence, and a build is never a behavior proof. The exact evidence statuses
+are defined in `config/AGENTS.md` and [docs/VERIFY.md](VERIFY.md).
+
+### MCP server
+
+Firmware tooling (`labwired_compile`, `labwired_verify`, knowledge tools) is
+served over MCP. Add the server to your host's MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "labwired": {
+      "command": "npx",
+      "args": ["-y", "@labwired/mcp"]
+    }
+  }
+}
+```
+
+For the hosted variant (authenticated tools, twin verification), first run
+`labwired agent login` with the LabWired Agent installed, then point your host
+at the hosted endpoint instead:
+
+```json
+{
+  "mcpServers": {
+    "labwired": {
+      "type": "remote",
+      "url": "https://api.labwired.com/mcp?toolNames=unprefixed",
+      "headers": { "Authorization": "Bearer <token from labwired agent login>" }
+    }
+  }
+}
+```
+
+Hosts without MCP support can still use the skills and instructions, but no
+firmware tool calls are possible there.
