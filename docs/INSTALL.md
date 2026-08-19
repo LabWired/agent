@@ -87,10 +87,15 @@ With the Vercel skills CLI (supports 40+ agents):
 npx skills add LabWired/agent
 ```
 
-Or copy the `skills/` directory into your host's skills directory by hand.
+Or copy the `skills/` directory into your host's skills directory by hand;
+that also copies `customize-labwired-agent`, which you can skip.
 
 `customize-labwired-agent` documents the LabWired Agent's own runtime
 configuration and is not useful to other hosts.
+
+The `observe` and `desk-hw` packs additionally need the LabWired Agent CLI
+installed (`labwired agent …` on PATH). The other packs and the MCP tools
+work without it.
 
 ### Instructions
 
