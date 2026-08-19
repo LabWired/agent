@@ -74,7 +74,7 @@ with open(stdout_path, "wb") as stdout, open(stderr_path, "wb") as stderr:
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        print(f"agent scenario timed out after {timeout}s", file=stderr)
+        stderr.write(f"agent scenario timed out after {timeout}s\n".encode())
         raise SystemExit(124)
 raise SystemExit(completed.returncode)
 PY
