@@ -265,13 +265,13 @@ else
     bad "golden-path pack"
   fi
 fi
-if run_stage "golden-path-default" "$OUT/golden-path-default.txt" grep -qi \
-  'golden-path first\|load \`golden-path\` first\|START with skill golden-path' \
+if run_stage "develop-default" "$OUT/develop-default.txt" grep -qi \
+  'develop first\|load \`develop\` first\|START with skill develop' \
   "$ROOT/config/AGENTS.md" "$ROOT/config/opencode.hosted.json"; then
-  pass "AGENTS/opencode default golden-path first"
+  pass "AGENTS/opencode default develop first"
 else
   if [[ "$stage_timed_out" -eq 0 ]]; then
-    bad "missing golden-path-first default in AGENTS/opencode"
+    bad "missing develop-first default in AGENTS/opencode"
   fi
 fi
 echo "note: full NL chat prove is interactive; automated prove = live-gate1 + assert-status" \
