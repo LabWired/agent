@@ -80,13 +80,14 @@ source "$ROOT/tests/lib/pack-classification.sh"
 
 for s in "${UNIVERSAL_PACKS[@]}"; do
   f="$ROOT/skills/$s/SKILL.md"
+  [[ -f "$f" ]] || { bad "universal $s missing SKILL.md"; continue; }
   frontmatter="$(awk '/^---$/{c++; next} c==1' "$f")"
-  if grep -q '^compatibility:' <<<"$frontmatter"; then
+  if grep -qiE '^[[:space:]]*compatibility[[:space:]]*:' <<<"$frontmatter"; then
     bad "universal $s has host-locked frontmatter (compatibility:)"
   else
     pass "universal $s frontmatter standard"
   fi
-  if grep -rn 'permission\.skill\|default_agent\|tui\.json\|OPENCODE_CONFIG_DIR\|\.config/labwired-agent' \
+  if grep -rniE 'permission\.skill|default_agent|tui\.json|OPENCODE_CONFIG_DIR|\.config/labwired-agent' \
       "$ROOT/skills/$s/" >/dev/null 2>&1; then
     bad "universal $s references opencode-only mechanisms"
   else

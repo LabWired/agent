@@ -30,6 +30,7 @@ done
 # 2. Every copied SKILL.md has a frontmatter block with name + description.
 for s in "${UNIVERSAL_PACKS[@]}"; do
   f="$TMP/$s/SKILL.md"
+  [[ -f "$f" ]] || { bad "portable $s missing SKILL.md"; continue; }
   frontmatter="$(awk '/^---$/{c++; next} c==1' "$f")"
   if grep -q '^name:' <<<"$frontmatter" && grep -q '^description:' <<<"$frontmatter"; then
     pass "portable $s frontmatter name+description"

@@ -28,6 +28,15 @@ for d in "$ROOT"/skills/*/; do
   esac
 done
 
+for p in "${UNIVERSAL_PACKS[@]}"; do
+  for q in "${OPENCODE_ONLY_PACKS[@]}"; do
+    if [[ "$p" == "$q" ]]; then
+      echo "FAIL pack in both lists: $p"
+      fail=1
+    fi
+  done
+done
+
 need_skill() {
   local s="$1"
   if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then
