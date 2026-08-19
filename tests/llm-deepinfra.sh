@@ -52,7 +52,7 @@ import json
 print(json.dumps({
   "model": """$MODEL""",
   "temperature": 0.1,
-  "max_tokens": 128,
+  "max_tokens": 2048,
   "messages": [
     {"role": "system", "content": "You are a firmware engineer. Reply in one short sentence."},
     {"role": "user", "content": "What does model_verified mean if an oracle must dispose, not an LLM? Answer in under 30 words."}
