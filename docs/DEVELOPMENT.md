@@ -33,6 +33,11 @@ This test uses a temporary install prefix. It may download tools.
 
 ## Run a live twin test
 
+The gate scripts (`scripts/live-gate1.sh`, `scripts/import-multi-smoke.sh`,
+`scripts/ship-gate.sh`) run from a source checkout of the repository, not
+from the installed npm package. They need `tests/` and `fixtures/`, which
+the package does not ship.
+
 ```bash
 bash scripts/live-gate1.sh
 ```

@@ -172,6 +172,8 @@ They **do not** mint `model_verified` and **do not** replace knowledge MCP.
 `list` / `describe` → **`labwired_part`** → **`labwired_datasheet`**. Never invent.  
 Contract: `docs/KNOWLEDGE.md`.
 
+Internal docs (specs, plans, product docs, QA reports) live in the private `LabWired/agent-internal` repository, not in this repository.
+
 ## Tool allowlist
 
 ### MCP tools (agent may call)

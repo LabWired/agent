@@ -74,12 +74,33 @@ deepinfra_base="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])
 [[ "$deepinfra_base" == "https://api.deepinfra.com/v1" ]] \
   && pass "DeepInfra OpenCode base URL" || bad "DeepInfra OpenCode base URL: $deepinfra_base"
 
+# Universality gate: universal packs must stay host-neutral (SKILL.md standard).
+# shellcheck source=lib/pack-classification.sh
+source "$ROOT/tests/lib/pack-classification.sh"
+
+for s in "${UNIVERSAL_PACKS[@]}"; do
+  f="$ROOT/skills/$s/SKILL.md"
+  [[ -f "$f" ]] || { bad "universal $s missing SKILL.md"; continue; }
+  frontmatter="$(awk '/^---$/{c++; next} c==1' "$f")"
+  if grep -qiE '^[[:space:]]*compatibility[[:space:]]*:' <<<"$frontmatter"; then
+    bad "universal $s has host-locked frontmatter (compatibility:)"
+  else
+    pass "universal $s frontmatter standard"
+  fi
+  if grep -rniE 'permission\.skill|default_agent|tui\.json|OPENCODE_CONFIG_DIR|\.config/labwired-agent' \
+      "$ROOT/skills/$s/" >/dev/null 2>&1; then
+    bad "universal $s references opencode-only mechanisms"
+  else
+    pass "universal $s host-neutral body"
+  fi
+done
+
 n=$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
 # 7 domain packs + customize-labwired-agent + 14 superpowers = 22
 # golden-path is the entry router; develop is the firmware workflow it delegates
 # to. Both ship — see config/AGENTS.md "Default loop".
 if [[ "$n" -eq 22 ]]; then
-  pass "skill dir count $n (6 packs + customize + 14 superpowers)"
+  pass "skill dir count $n (7 packs + customize + 14 superpowers)"
 else
   bad "skill dir count $n expected 22"
 fi

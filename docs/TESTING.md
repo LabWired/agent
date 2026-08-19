@@ -38,6 +38,9 @@ npx --yes node@18.0.0 tests/hardware-runner.test.mjs
 - `run-bounded.sh` checks the bounded-run helper itself.
 - Skill tests check the installed skill set and instructions
   (`skills-inventory.sh`, `skills-verify-all.sh`, `develop-skill.sh`).
+  `skills-verify-all.sh` also gates pack universality (no host-locked
+  frontmatter or opencode-only references in universal packs), and
+  `harness-portable.sh` simulates a foreign install of the universal pack.
 - Develop lanes check the `develop` workflow: `develop-acceptance-smoke.sh`
   (npm `test:develop:acceptance`) and the grounded hosted-agent certification
   `develop-agent-e2e.sh` (npm `test:develop:agent`; `test:develop:release`

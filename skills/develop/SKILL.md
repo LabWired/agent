@@ -3,7 +3,6 @@ name: develop
 description: >-
   Default firmware workflow for greenfield and existing projects: inspect, ground hardware facts, edit, compile, check on the twin, repair, and report.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "workflow"
   labwired: "true"

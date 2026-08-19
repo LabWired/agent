@@ -4,7 +4,6 @@ description: >-
   Ingest customer circuit sources (PDF schematic, KiCad, netlist, BOM, image,
   diagram.json) into a catalog-honest LabWired twin diagram. Never invent pins.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "workflow"
   labwired: "true"
