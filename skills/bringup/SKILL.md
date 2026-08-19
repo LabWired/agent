@@ -5,7 +5,6 @@ description: >-
   (list/describe/part, then datasheet tool for grounded text). Never invent
   pinouts or I2C addresses.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "workflow"
   labwired: "true"
