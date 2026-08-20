@@ -115,3 +115,29 @@ They cannot represent arbitrary twin steps, fix serial capture at 115200 baud,
 and preserve prebuilt artifacts as imported rather than compiled. Migrate any
 workflow needing other providers, observations, baud rates, or behavior-level
 claims to the checked-in generic profile.
+
+## Comparing the twin against a desk board
+
+`hardware diff` takes one firmware artifact and two authenticated evidence
+bundles — one from the twin, one from a physical board — and publishes whether
+they agree. A disagreement is a first-class result, not an error.
+
+The two sides use disjoint grades and neither is ever converted into the other:
+
+- The twin side reaches `model_verified`, from `model_observed` or
+  `surrogate_model_observed`. It can never record `hardware_observed`; a twin
+  bundle that claims it is rejected as `invalid`.
+- The desk side reaches `hardware_observed`, which requires exact flash plus
+  independent evidence for the configured behavior. A desk record carrying a
+  model grade is inconclusive desk evidence, never a desk pass.
+- `compiled` on the twin side is inconclusive, not behavior evidence.
+
+Each side is summarized from its own bundle alone, so there is no expression
+that can upgrade a hardware green to a twin green or the reverse. Both bundles
+must bind to the same artifact digest; a mismatch is refused rather than
+smoothed into agreement, and `agree` requires at least one behavior that both
+sides actually decided.
+
+Verdicts bind to exit codes: `agree` 0, `invalid` 2, `disagree` 3,
+`desk-unavailable` 4, `twin-unavailable` 5. A failed invocation exits 2, so it
+can never be mistaken for a disagreement.

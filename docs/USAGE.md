@@ -159,11 +159,12 @@ accepted as evidence for its side.
 | `disagree` | `3` | The twin and the board decided a shared behavior differently. This is a first-class published result, not an error. |
 | `desk-unavailable` | `4` | No desk bundle, or the desk bundle recorded no physical evidence (for example no probe was detected). Never a silent pass. |
 | `twin-unavailable` | `5` | No twin bundle, or the twin bundle decided nothing. |
-| `invalid` | `2` | The comparison was refused: unequal artifact digests, a twin bundle claiming `hardware_observed`, no shared behavior, or a CLI usage error. |
+| `invalid` | `2` | The comparison was refused: unequal artifact digests, a twin bundle claiming a physical-evidence grade, no shared behavior, or a CLI usage error. |
 
-Each side publishes only its own grade. The twin side can reach
-`model_verified` (from `model_observed` or `surrogate_model_observed`); the desk
-side can reach `hardware_observed`. `hardware diff` has no code path that copies
-a level or a pass from one side to the other, so a hardware green is never
-upgraded to a twin green or the reverse. Both sides must be bound to the same
-artifact digest; a mismatch is `invalid`, never agreement.
+Each side publishes only its own grade, and the grades are disjoint: a model
+grade is reachable only from a twin run, a physical-evidence grade only from a
+board. `hardware diff` has no code path that copies a level or a pass from one
+side to the other, so a hardware green is never upgraded to a twin green or the
+reverse. Both sides must be bound to the same artifact digest; a mismatch is
+`invalid`, never agreement. The grade names themselves, and what each one
+requires, are defined in [VERIFY.md](VERIFY.md).
