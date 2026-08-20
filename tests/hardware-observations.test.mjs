@@ -188,7 +188,20 @@ test('serial and RTT delegate to existing capture commands and cannot share capa
   const serial = { id: 'heartbeat', provider: 'serial', contains: 'alive', timeoutSeconds: 7, requiredLevel: 'hardware_observed' };
   const rtt = { id: 'trace', provider: 'rtt', contains: 'ready', timeoutSeconds: 8, requiredLevel: 'hardware_observed' };
   const serialReady = await adapters.observation.serial.preflight(p, serial);
-  assert.deepEqual(adapters.observation.serial.plan(p, serial, serialReady).args, ['serial-capture', '/dev/ttyACM0', '115200', 'alive', '7']);
+  // A physical profile boots the target from inside the capture, after the port
+  // is open — otherwise a banner printed once at boot is emitted to nobody and
+  // read back as "marker was not observed".
+  assert.deepEqual(adapters.observation.serial.plan(p, serial, serialReady).args, [
+    'serial-capture', '/dev/ttyACM0', '115200', 'alive', '7',
+    '--reset-chip', 'esp32c3', '--reset-probe', 'probe-123',
+  ]);
+  // No flash stage means nothing of ours put firmware there, so nothing of ours
+  // resets it either: the flags must be absent, not merely harmless.
+  const observeOnly = { ...p, flash: undefined };
+  const observeOnlyReady = await adapters.observation.serial.preflight(observeOnly, serial);
+  assert.deepEqual(adapters.observation.serial.plan(observeOnly, serial, observeOnlyReady).args, [
+    'serial-capture', '/dev/ttyACM0', '115200', 'alive', '7',
+  ]);
   const rttReady = await adapters.observation.rtt.preflight(p, rtt);
   assert.deepEqual(adapters.observation.rtt.plan(p, rtt, rttReady).args, ['probe', 'rtt-capture', '--chip', 'esp32c3', '--probe', 'probe-123', '--elf', p.build.artifact, '--marker', 'ready', '--timeout', '8']);
   assert.throws(() => adapters.observation.rtt.plan(p, rtt, serialReady), /capability/);

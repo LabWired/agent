@@ -19,6 +19,19 @@ labwired_serial_capture() {
   local baud="${2:-}"
   local marker="${3:-}"
   local timeout="${4:-}"
+  shift 4 2>/dev/null || true
+  # Optional: boot the target AFTER the port is open. A banner printed once at
+  # startup is invisible otherwise — the flash stage resets, the board prints,
+  # and only then does this capture open the port. Not an arbitrary command:
+  # the only thing we will run is `probe-rs reset` for an explicit chip+probe.
+  local reset_chip="" reset_probe=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reset-chip) reset_chip="${2:-}"; shift 2 ;;
+      --reset-probe) reset_probe="${2:-}"; shift 2 ;;
+      *) echo "serial-capture: unknown option $1" >&2; return 2 ;;
+    esac
+  done
 
   if [[ -z "$port" || -z "$baud" || -z "$marker" || -z "$timeout" ]]; then
     echo "usage: labwired_serial_capture <port> <baud> <marker> <timeout_seconds>" >&2
@@ -36,6 +49,22 @@ labwired_serial_capture() {
   fi
 
   # Export for python child (avoid fragile shell quoting of marker)
+  if [[ -n "$reset_chip" || -n "$reset_probe" ]]; then
+    [[ -n "$reset_chip" && -n "$reset_probe" ]] \
+      || { echo "serial-capture: --reset-chip and --reset-probe are required together" >&2; return 2; }
+    local sc_prs=""
+    if declare -F labwired_resolve_probe_rs >/dev/null 2>&1; then
+      sc_prs="$(labwired_resolve_probe_rs 2>/dev/null || true)"
+    fi
+    [[ -n "$sc_prs" ]] || sc_prs="$(command -v probe-rs 2>/dev/null || true)"
+    [[ -n "$sc_prs" ]] || { echo "serial-capture: probe-rs not found for --reset-chip" >&2; return 2; }
+    export LABWIRED_SC_RESET_EXE="$sc_prs"
+    export LABWIRED_SC_RESET_CHIP="$reset_chip"
+    export LABWIRED_SC_RESET_PROBE="$reset_probe"
+  else
+    unset LABWIRED_SC_RESET_EXE LABWIRED_SC_RESET_CHIP LABWIRED_SC_RESET_PROBE
+  fi
+
   export LABWIRED_SC_PORT="$port"
   export LABWIRED_SC_BAUD="$baud"
   export LABWIRED_SC_MARKER="$marker"
@@ -202,6 +231,25 @@ def _is_char_device(path: str) -> bool:
 
 
 stream, is_tty, closer = open_stream(port, baud)
+
+# The port is open and flushed before the target is started, so a banner emitted
+# once at boot lands in this buffer instead of being printed to nobody.
+reset_exe = os.environ.get("LABWIRED_SC_RESET_EXE")
+reset_error = None
+if reset_exe:
+    import subprocess
+    try:
+        completed = subprocess.run(
+            [reset_exe, "reset",
+             "--chip", os.environ["LABWIRED_SC_RESET_CHIP"],
+             "--probe", os.environ["LABWIRED_SC_RESET_PROBE"]],
+            capture_output=True, timeout=max(5.0, timeout_s),
+        )
+        if completed.returncode != 0:
+            reset_error = (completed.stderr or b"").decode("utf-8", "replace").strip()[:200] or "reset failed"
+    except Exception as error:  # never let a start failure masquerade as silence
+        reset_error = f"{type(error).__name__}: {error}"[:200]
+
 buf = bytearray()
 matched = False
 excerpt = ""
@@ -284,6 +332,13 @@ result = {
     "status": "hardware_observed" if matched else "failed",
     "fixture": (not is_tty) or bool(os.environ.get("LABWIRED_SERIAL_FIXTURE")),
 }
+# A target we failed to start must never be reported as a target that said
+# nothing: zero bytes then reads as broken firmware rather than a broken launch.
+if reset_exe:
+    result["started_target"] = reset_error is None
+    if reset_error is not None:
+        result["start_error"] = reset_error
+        result["status"] = "blocked"
 
 print(json.dumps(result, separators=(",", ":")))
 sys.exit(0 if matched else 1)
