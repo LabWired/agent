@@ -20,6 +20,10 @@ $workspacePath=(Resolve-Path -LiteralPath $Workspace).Path
 if($Provider -eq 'probe-rs'){
   if([IO.Path]::GetExtension($artifactPath) -ine '.elf'){Fail 'probe-rs requires ELF'}
   & $ProbeRs download --chip $Chip --probe $Probe --binary-format elf $artifactPath
+  # `download` leaves the core HALTED — same defect as lib/probe.sh. Without the
+  # reset the board holds the exact bytes and runs none of them, so every
+  # observation reads a silent port and reports a false negative.
+  if ($LASTEXITCODE -eq 0) { & $ProbeRs reset --chip $Chip --probe $Probe }
   if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
 } else {
   if([IO.Path]::GetExtension($artifactPath) -ine '.bin'){Fail 'PlatformIO requires BIN'}
