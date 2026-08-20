@@ -1,0 +1,7 @@
+{
+  "bundle": "contaminated/twin",
+  "side": "twin",
+  "artifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "manifestSha256": "fd5ebe8fec4af5cb8f487fbe8a3f49a074ea9d27758896e516e7ad9a9f4ec992",
+  "result": "PASS"
+}

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "owner": "29ce09f1-3ffb-4c9b-b9c4-626b5823fd24",
+  "createdAt": "2026-08-16T16:11:24.398Z",
+  "targetIdentity": {
+    "id": "desk-c3",
+    "chip": "esp32c3"
+  },
+  "behaviors": [
+    {
+      "id": "heartbeat",
+      "provider": "serial",
+      "requiredLevel": "hardware_observed"
+    },
+    {
+      "id": "led-blink",
+      "provider": "logic-csv",
+      "requiredLevel": "hardware_observed"
+    }
+  ],
+  "stages": [
+    {
+      "id": "build",
+      "provider": "platformio"
+    },
+    {
+      "id": "flash",
+      "provider": "probe-rs"
+    }
+  ]
+}

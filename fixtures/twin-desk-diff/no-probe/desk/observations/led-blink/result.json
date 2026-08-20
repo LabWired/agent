@@ -1,0 +1,19 @@
+{
+  "behaviorId": "led-blink",
+  "provider": "logic-csv",
+  "level": "blocked",
+  "rawEvidenceRefs": [
+    "observations/led-blink.desk.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "no probe detected; exact flash was not proven"
+  },
+  "rawEvidence": [
+    {
+      "path": "observations/led-blink.desk.capture.log",
+      "sha256": "0a362b02e8b438c60db11855061c3580dc4e39ec5d98272d5c312c8ae3f8e572",
+      "size": 86
+    }
+  ],
+  "requiredLevel": "hardware_observed"
+}

@@ -1,0 +1,7 @@
+{
+  "bundle": "no-probe/desk",
+  "side": "desk",
+  "artifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "manifestSha256": "e1d5f529d3589d53312bbce7769bcc1dae8e5acde2bb5c477d41b89efde1cac5",
+  "result": "FAIL"
+}

@@ -916,6 +916,10 @@ Usage:
   labwired agent compose …          Assemble plot elements (uart | capture)
   labwired agent hardware plan --profile FILE --out DIR
   labwired agent hardware run --profile FILE --out DIR --confirm DIGEST
+  labwired agent hardware diff --artifact FILE --twin-evidence DIR --twin-receipt SHA256
+                         [--desk-evidence DIR --desk-receipt SHA256] [--out FILE]
+                           Same firmware, twin vs desk board; exit 0 agree, 3 disagree,
+                           4 desk-unavailable, 5 twin-unavailable, 2 invalid
   labwired agent install-deps       Install sim + probe-rs into prefix
   labwired agent package …          Portable prefix: info | path | env | uninstall
   labwired agent version            Version

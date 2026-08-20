@@ -1,0 +1,17 @@
+{
+  "result": "FAIL",
+  "reasons": [
+    {
+      "behaviorId": "heartbeat",
+      "requiredLevel": "hardware_observed",
+      "actualLevel": "blocked",
+      "reason": "required hardware_observed; recorded blocked"
+    },
+    {
+      "behaviorId": "led-blink",
+      "requiredLevel": "hardware_observed",
+      "actualLevel": "blocked",
+      "reason": "required hardware_observed; recorded blocked"
+    }
+  ]
+}

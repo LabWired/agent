@@ -1,0 +1,28 @@
+{
+  "behaviorId": "heartbeat",
+  "provider": "serial",
+  "level": "hardware_observed",
+  "artifactSha256": "52b17846bd3904e4b944589dc7dfbb70eda00f9d35da82e8747db9148bf77f78",
+  "targetIdentity": {
+    "id": "desk-c3",
+    "chip": "esp32c3"
+  },
+  "startedAt": "2026-08-16T16:11:24.288Z",
+  "endedAt": "2026-08-16T16:11:28.288Z",
+  "toolVersion": "probe-rs recorded fixture",
+  "rawEvidenceRefs": [
+    "observations/heartbeat.desk.capture.log"
+  ],
+  "diagnostics": {
+    "detail": "desk observed heartbeat"
+  },
+  "flashedArtifactSha256": "52b17846bd3904e4b944589dc7dfbb70eda00f9d35da82e8747db9148bf77f78",
+  "rawEvidence": [
+    {
+      "path": "observations/heartbeat.desk.capture.log",
+      "sha256": "5aba5981cb190ef4cd9d90f657261630d61d8845bcbc6885b24a4703c45f4bc6",
+      "size": 51
+    }
+  ],
+  "requiredLevel": "hardware_observed"
+}

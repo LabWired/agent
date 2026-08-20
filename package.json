@@ -161,7 +161,7 @@
     "test:develop:agent": "bash tests/develop-agent-e2e.sh",
     "test:develop:release": "LABWIRED_ACCEPTANCE_REQUIRE_COMPLETE=1 bash tests/develop-agent-e2e.sh",
     "test:dispatcher": "bash tests/dispatcher.sh",
-    "test:node18-min": "node tests/hardware-cli-node.test.mjs && node tests/hardware-runner.test.mjs",
+    "test:node18-min": "node tests/hardware-cli-node.test.mjs && node tests/hardware-runner.test.mjs && node tests/hardware-differential.test.mjs",
     "test:agent-lifecycle": "bash tests/agent-lifecycle.sh",
     "test:tool-names": "bash tests/public-tool-names.sh",
     "test:public-install-safety": "bash tests/public-install-safety.sh",

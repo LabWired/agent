@@ -1,0 +1,5 @@
+{
+  "stageId": "build",
+  "provider": "platformio",
+  "level": "not-run"
+}

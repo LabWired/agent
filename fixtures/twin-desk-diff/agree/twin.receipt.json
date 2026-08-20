@@ -1,0 +1,7 @@
+{
+  "bundle": "agree/twin",
+  "side": "twin",
+  "artifactSha256": "1bd0221812559331be433e5b1e002945ebba25b6503b1fafc85adc4cd1555fcf",
+  "manifestSha256": "5a66eead2d11fd4fa2fca5352dbdbe8560753b7e5e4b291cd54fd17486da8191",
+  "result": "PASS"
+}
