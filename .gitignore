@@ -49,3 +49,7 @@ fixtures/coverage/smoke/
 workspaces/**/.pio/
 workspaces/**/evidence/
 share/smoke/.dead-token
+
+# Internal docs live in the private LabWired/agent-internal repo
+docs/product/
+docs/superpowers/
