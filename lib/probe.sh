@@ -356,6 +356,13 @@ if(matches.length!==1) process.exit(1);' "$port" "$probe_sel" || { echo "labwire
       local prs
       prs="$(labwired_resolve_probe_rs)" || { echo "labwired probe flash: probe-rs not found" >&2; return 2; }
       "$prs" download --chip "$chip" --probe "$probe_sel" --binary-format elf "$elf" || return $?
+      # `download` leaves the core HALTED. Without this the board holds the exact
+      # bytes we just wrote and executes none of them, so every observation that
+      # follows reads a silent port and reports "marker was not observed" — a
+      # false negative that looks exactly like firmware that does not work.
+      # Verified on a NUCLEO-H563ZI 2026-08-20: serial-capture read 0 bytes after
+      # download and matched immediately after an explicit reset.
+      "$prs" reset --chip "$chip" --probe "$probe_sel" || return $?
       ;;
     *) echo "labwired probe flash: unsupported explicit provider $provider" >&2; return 2 ;;
   esac
