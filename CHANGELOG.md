@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Skill packs are host-universal: standard SKILL.md frontmatter (the
+  `compatibility: opencode` field is removed from universal packs;
+  `customize-labwired-agent` remains opencode-only).
+- New `harness-portable` lane simulates a foreign install and a universality
+  gate in `skills-verify-all` prevents host lock-in regressions.
+- Docs: "Use with other agents" (skills CLI + AGENTS.md + MCP snippet).
+
 ## 0.3.11 — 2026-08-12 — Tighten release paths
 
 - Doctor only reports **signed in** after live hosted probe succeeds (no false green).

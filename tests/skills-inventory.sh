@@ -4,6 +4,39 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fail=0
 
+# shellcheck source=lib/pack-classification.sh
+source "$ROOT/tests/lib/pack-classification.sh"
+
+# Pack classification must partition the shipped skills exactly.
+for s in "${UNIVERSAL_PACKS[@]}" "${OPENCODE_ONLY_PACKS[@]}"; do
+  if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then
+    echo "ok   classified $s"
+  else
+    echo "FAIL classified pack missing: $s"
+    fail=1
+  fi
+done
+for d in "$ROOT"/skills/*/; do
+  s="$(basename "$d")"
+  found=0
+  for p in "${UNIVERSAL_PACKS[@]}"; do [[ "$p" == "$s" ]] && found=1 && break; done
+  for p in "${OPENCODE_ONLY_PACKS[@]}"; do [[ "$p" == "$s" ]] && found=2 && break; done
+  case "$found" in
+    1) echo "ok   universal $s" ;;
+    2) echo "ok   opencode-only $s" ;;
+    0) echo "FAIL unclassified skill dir: $s"; fail=1 ;;
+  esac
+done
+
+for p in "${UNIVERSAL_PACKS[@]}"; do
+  for q in "${OPENCODE_ONLY_PACKS[@]}"; do
+    if [[ "$p" == "$q" ]]; then
+      echo "FAIL pack in both lists: $p"
+      fail=1
+    fi
+  done
+done
+
 need_skill() {
   local s="$1"
   if [[ -f "$ROOT/skills/$s/SKILL.md" ]]; then

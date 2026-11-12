@@ -5,7 +5,6 @@ description: >-
   One job: ask → recipe → compose → present. Never invent series; never claim
   twin or desk green from a plot.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "1"
   labwired: "true"

@@ -4,7 +4,6 @@ description: >-
   Plan and execute confirmed physical hardware runs with explicit identities,
   safe wiring, exact flash, and behavior-specific evidence. Prefer twin prove first.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "workflow"
   labwired: "true"

@@ -37,6 +37,7 @@ installations and data stay in place.
 - [Embedder parity](docs/EMBEDDER_PARITY.md)
 - [Security](docs/SECURITY.md)
 - [Self-host / airgap](docs/SELF_HOST.md)
+- [Use with other agents](docs/INSTALL.md#use-with-other-agents)
 
 
 ## Skills (domain packs)

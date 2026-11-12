@@ -4,7 +4,6 @@ description: >-
   First-session guide that delegates firmware development to develop, with
   optional circuit import, requested plots, and physical-board evidence.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "1"
   labwired: "true"

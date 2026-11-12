@@ -5,7 +5,6 @@ description: >-
   process skills (TDD, plans, debug method) AND LabWired domain packs. LabWired
   claim rules and MCP tools always win over generic process advice.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "process"
   labwired: "true"

@@ -5,7 +5,6 @@ description: >-
   evidence report. model_verified ONLY from labwired_verify. On red fail-first
   then repair; never soft-pass or invent green.
 license: MIT
-compatibility: opencode
 metadata:
   gate: "1"
   labwired: "true"

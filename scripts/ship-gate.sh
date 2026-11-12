@@ -265,9 +265,11 @@ else
     bad "golden-path pack"
   fi
 fi
-if run_stage "develop-default" "$OUT/develop-default.txt" grep -qi \
-  'develop first\|load \`develop\` first\|START with skill develop' \
-  "$ROOT/config/AGENTS.md" "$ROOT/config/opencode.hosted.json"; then
+if run_stage "develop-default" "$OUT/develop-default.txt" bash -c '
+  for f in "$@"; do
+    grep -qi '"'"'develop first\|load \`develop\` first\|START with skill develop'"'"' "$f" || exit 1
+  done
+' _ "$ROOT/config/AGENTS.md" "$ROOT/config/opencode.hosted.json"; then
   pass "AGENTS/opencode default develop first"
 else
   if [[ "$stage_timed_out" -eq 0 ]]; then
